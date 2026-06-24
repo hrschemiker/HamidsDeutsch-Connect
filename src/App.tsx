@@ -53,7 +53,13 @@ function App() {
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
   const subscriptions = useSubscriptions()
-  const serverNodes = useServerNodes()
+  const serverNodes = useServerNodes(
+  subscriptions.subscriptions.map(
+    (subscription) =>
+      subscription.id,
+  ),
+  subscriptions.loading,
+)
   const selectedServer =
   useSelectedServer()
 

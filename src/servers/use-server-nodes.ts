@@ -1,4 +1,9 @@
-import { useCallback, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 
 export type SafeServerNode = {
   id: string
@@ -20,7 +25,13 @@ type ServerNodesState = {
   checkedAt: string | null
 }
 
-export function useServerNodes() {
+const LAST_SUBSCRIPTION_STORAGE_KEY =
+  'hamidsdeutsch-connect.last-server-subscription'
+
+export function useServerNodes(
+  availableSubscriptionIds: string[],
+  subscriptionsLoading: boolean,
+) {
   const [state, setState] =
     useState<ServerNodesState>({
       loading: false,
@@ -30,12 +41,16 @@ export function useServerNodes() {
       checkedAt: null,
     })
 
+  const automaticLoadAttempted =
+    useRef(false)
+
   const loadFromSubscription =
     useCallback(
       async (subscriptionId: string) => {
         setState((currentState) => ({
           ...currentState,
           loading: true,
+          subscriptionId,
           error: null,
         }))
 
@@ -60,6 +75,11 @@ export function useServerNodes() {
               error: result.error,
             }
           }
+
+          window.localStorage.setItem(
+            LAST_SUBSCRIPTION_STORAGE_KEY,
+            subscriptionId,
+          )
 
           setState({
             loading: false,
@@ -96,6 +116,39 @@ export function useServerNodes() {
       },
       [],
     )
+
+  useEffect(() => {
+    if (
+      subscriptionsLoading ||
+      automaticLoadAttempted.current ||
+      availableSubscriptionIds.length === 0
+    ) {
+      return
+    }
+
+    automaticLoadAttempted.current = true
+
+    const storedSubscriptionId =
+      window.localStorage.getItem(
+        LAST_SUBSCRIPTION_STORAGE_KEY,
+      )
+
+    const targetSubscriptionId =
+      storedSubscriptionId &&
+      availableSubscriptionIds.includes(
+        storedSubscriptionId,
+      )
+        ? storedSubscriptionId
+        : availableSubscriptionIds[0]
+
+    void loadFromSubscription(
+      targetSubscriptionId,
+    )
+  }, [
+    availableSubscriptionIds,
+    loadFromSubscription,
+    subscriptionsLoading,
+  ])
 
   return {
     loading: state.loading,
