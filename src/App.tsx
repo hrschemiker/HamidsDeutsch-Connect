@@ -20,6 +20,7 @@ import { useIpVerification } from './network/use-ip-verification'
 import { useWindowsPrivilege } from './system/use-windows-privilege'
 import { useWindowsElevation } from './system/use-windows-elevation'
 import { useRescueSettings } from './rescue/use-rescue-settings'
+import { useConnectionSettings } from './settings/use-connection-settings'
 import './App.css'
 
 type PageId =
@@ -125,6 +126,7 @@ function App() {
   const windowsPrivilege = useWindowsPrivilege()
   const windowsElevation = useWindowsElevation()
   const rescueSettings = useRescueSettings()
+  const connectionSettings = useConnectionSettings()
 
   const connectionVerified =
     engineProcess.status.connectionMode === 'tun'
@@ -262,9 +264,36 @@ function App() {
     const baselineIp =
       localVerification.directIp
 
-    if (
+    const wantsTun =
+      connectionSettings.settings.mode !==
+      'system-proxy'
+
+    const requiresTun =
+      connectionSettings.settings.mode ===
+      'tun'
+
+    const canUseTun =
       windowsPrivilege.status.supported &&
       windowsPrivilege.status.isAdministrator
+
+    if (
+      requiresTun &&
+      !canUseTun
+    ) {
+      await engineProcess.stop()
+      ipVerification.reset()
+
+      return {
+        success: false as const,
+        fatal: true as const,
+        error:
+          'حالت «فقط TUN» انتخاب شده، اما برنامه با دسترسی Administrator اجرا نشده است.',
+      }
+    }
+
+    if (
+      wantsTun &&
+      canUseTun
     ) {
       const tunCheck =
         await window.hamidsDeutsch
@@ -318,6 +347,21 @@ function App() {
           }
 
           await engineProcess.stop()
+        }
+      }
+
+      if (
+        requiresTun ||
+        !connectionSettings.settings.allowFallback
+      ) {
+        await engineProcess.stop()
+        ipVerification.reset()
+
+        return {
+          success: false as const,
+          fatal: false as const,
+          error:
+            'راه‌اندازی یا تأیید TUN ناموفق بود و fallback غیرفعال است.',
         }
       }
 
@@ -1008,7 +1052,33 @@ function App() {
           )}
           {activePage === 'statistics' && <StatisticsPage />}
           {activePage === 'logs' && <LogsPage />}
-          {activePage === 'settings' && <SettingsPage />}
+          {activePage === 'settings' && (
+            <SettingsPage
+              settings={
+                connectionSettings.settings
+              }
+              onUpdate={
+                connectionSettings.update
+              }
+              onReset={
+                connectionSettings.reset
+              }
+              directDomainCount={
+                directDomains.domains.length
+              }
+              administratorAvailable={
+                windowsPrivilege.status.isAdministrator
+              }
+              connected={
+                connectionVerified
+              }
+              onOpenDirectSites={() =>
+                setActivePage(
+                  'direct-sites',
+                )
+              }
+            />
+          )}
         </main>
       </section>
     </div>
@@ -3406,58 +3476,208 @@ function LogsPage() {
   )
 }
 
-function SettingsPage() {
+function SettingsPage({
+  settings,
+  onUpdate,
+  onReset,
+  directDomainCount,
+  administratorAvailable,
+  connected,
+  onOpenDirectSites,
+}: {
+  settings: {
+    mode:
+      | 'auto'
+      | 'tun'
+      | 'system-proxy'
+    allowFallback: boolean
+  }
+  onUpdate: (
+    patch: Partial<{
+      mode:
+        | 'auto'
+        | 'tun'
+        | 'system-proxy'
+      allowFallback: boolean
+    }>,
+  ) => void
+  onReset: () => void
+  directDomainCount: number
+  administratorAvailable: boolean
+  connected: boolean
+  onOpenDirectSites: () => void
+}) {
   return (
     <div className="page-stack">
       <section className="panel-card">
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
-              عمومی
+              Connection Routing
             </span>
-            <h3>تنظیمات برنامه</h3>
+            <h3>
+              روش اتصال
+            </h3>
           </div>
+
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={onReset}
+          >
+            بازنشانی
+          </button>
         </div>
 
-        <SettingRow
-          title="بارگذاری خودکار سرورها"
-          description="هنگام اجرای برنامه، آخرین اشتراک به‌روز و سرورها بارگذاری شوند."
-          checked
-        />
+        {connected && (
+          <div className="inline-notice">
+            تغییرات این بخش از اتصال بعدی اعمال
+            می‌شوند.
+          </div>
+        )}
+
+        <label className="settings-select-field">
+          <span>
+            حالت ترجیحی اتصال
+          </span>
+
+          <select
+            value={
+              settings.mode
+            }
+            onChange={(event) =>
+              onUpdate({
+                mode:
+                  event.target
+                    .value as
+                    | 'auto'
+                    | 'tun'
+                    | 'system-proxy',
+              })
+            }
+          >
+            <option value="auto">
+              خودکار — TUN با fallback
+            </option>
+            <option value="tun">
+              فقط TUN
+            </option>
+            <option value="system-proxy">
+              فقط System Proxy
+            </option>
+          </select>
+        </label>
 
         <SettingRow
-          title="انتخاب سریع‌ترین سرور"
-          description="پس از سنجش تأخیر، سریع‌ترین سرور برای اتصال سریع پیشنهاد شود."
-          checked
+          title="Fallback به System Proxy"
+          description="اگر TUN ناموفق بود، اتصال همان سرور با System Proxy ادامه پیدا کند."
+          checked={
+            settings.allowFallback
+          }
+          disabled={
+            settings.mode ===
+              'system-proxy' ||
+            settings.mode ===
+              'tun'
+          }
+          onChange={(checked) =>
+            onUpdate({
+              allowFallback:
+                checked,
+            })
+          }
         />
 
-        <SettingRow
-          title="حالت TUN"
-          description="تمام ترافیک سازگار سیستم از تونل عبور کند."
-          checked
-        />
+        <div className="connection-mode-summary">
+          <span>
+            Administrator
+          </span>
+          <strong>
+            {administratorAvailable
+              ? 'فعال'
+              : 'غیرفعال'}
+          </strong>
 
-        <SettingRow
-          title="بررسی تغییر IP"
-          description="اتصال فقط پس از تغییر واقعی IP موفق شناخته شود."
-          checked
-        />
+          <span>
+            حالت انتخابی
+          </span>
+          <strong>
+            {settings.mode ===
+            'auto'
+              ? 'خودکار'
+              : settings.mode ===
+                  'tun'
+                ? 'فقط TUN'
+                : 'فقط System Proxy'}
+          </strong>
+        </div>
       </section>
 
       <section className="panel-card">
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
-              ظاهر
+              Split Tunneling
             </span>
-            <h3>نمای برنامه</h3>
+            <h3>
+              سایت‌های مستقیم
+            </h3>
+          </div>
+
+          <span className="count-badge">
+            {directDomainCount} دامنه
+          </span>
+        </div>
+
+        <p className="panel-description">
+          دامنه‌های این فهرست از خروجی مستقیم
+          اینترنت باز می‌شوند و وارد تونل
+          نمی‌شوند. این قانون هم در TUN و هم در
+          System Proxy اعمال می‌شود.
+        </p>
+
+        <button
+          className="primary-button compact-primary"
+          type="button"
+          onClick={
+            onOpenDirectSites
+          }
+        >
+          مدیریت سایت‌های مستقیم
+        </button>
+      </section>
+
+      <section className="panel-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">
+              Safety
+            </span>
+            <h3>
+              کنترل‌های ثابت
+            </h3>
           </div>
         </div>
 
         <SettingRow
-          title="حالت تیره"
-          description="رابط تیره HamidsDeutsch Connect"
+          title="بررسی تغییر واقعی IP"
+          description="اتصال تنها پس از عبور واقعی ترافیک و تغییر IP موفق اعلام شود."
           checked
+          disabled
+        />
+
+        <SettingRow
+          title="بازیابی Proxy ویندوز"
+          description="هنگام قطع یا خروج، تنظیمات قبلی Proxy ویندوز بازیابی شود."
+          checked
+          disabled
+        />
+
+        <SettingRow
+          title="پایش سلامت اتصال"
+          description="اتصال به‌صورت دوره‌ای بررسی و در صورت خرابی بازیابی شود."
+          checked
+          disabled
         />
       </section>
     </div>
@@ -3468,13 +3688,25 @@ function SettingRow({
   title,
   description,
   checked = false,
+  disabled = false,
+  onChange,
 }: {
   title: string
   description: string
   checked?: boolean
+  disabled?: boolean
+  onChange?: (
+    checked: boolean,
+  ) => void
 }) {
   return (
-    <div className="setting-row">
+    <div
+      className={
+        disabled
+          ? 'setting-row setting-row-disabled'
+          : 'setting-row'
+      }
+    >
       <div>
         <strong>{title}</strong>
         <span>{description}</span>
@@ -3482,8 +3714,14 @@ function SettingRow({
 
       <label className="switch">
         <input
-          defaultChecked={checked}
+          checked={checked}
+          disabled={disabled}
           type="checkbox"
+          onChange={(event) =>
+            onChange?.(
+              event.target.checked,
+            )
+          }
         />
         <span className="switch-track" />
       </label>
