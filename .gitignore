@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Network engine binaries
+resources/sing-box/*.exe
+resources/sing-box/*.dll
