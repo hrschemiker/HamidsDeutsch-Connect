@@ -9,6 +9,26 @@ type EngineInfo = {
   error: string | null
 }
 
+type EngineProcessStatus = {
+  running: boolean
+  ready: boolean
+  pid: number | null
+  startedAt: string | null
+  stoppedAt: string | null
+  localHost: string
+  localPort: number
+  lastExitCode: number | null
+  lastSignal: string | null
+  lastError: string | null
+  logTail: string
+}
+
+type EngineProcessResult =
+  EngineProcessStatus & {
+    success: boolean
+    error: string | null
+  }
+
 type SubscriptionSummary = {
   id: string
   name: string
@@ -133,7 +153,17 @@ declare global {
       platform: string
 
       engine: {
-        getInfo: () => Promise<EngineInfo>
+        getInfo: () =>
+          Promise<EngineInfo>
+
+        startLocalProxy: () =>
+          Promise<EngineProcessResult>
+
+        stopLocalProxy: () =>
+          Promise<EngineProcessResult>
+
+        getProcessStatus: () =>
+          Promise<EngineProcessStatus>
       }
 
       subscriptions: {
@@ -142,30 +172,45 @@ declare global {
         >
 
         add: (
-          input: AddSubscriptionInput,
-        ) => Promise<AddSubscriptionResult>
+          input:
+            AddSubscriptionInput,
+        ) => Promise<
+          AddSubscriptionResult
+        >
 
         remove: (
           subscriptionId: string,
-        ) => Promise<RemoveSubscriptionResult>
+        ) => Promise<
+          RemoveSubscriptionResult
+        >
 
         inspect: (
           subscriptionId: string,
-        ) => Promise<SubscriptionInspectionResult>
+        ) => Promise<
+          SubscriptionInspectionResult
+        >
 
         loadNodes: (
           subscriptionId: string,
-        ) => Promise<LoadSubscriptionNodesResult>
+        ) => Promise<
+          LoadSubscriptionNodesResult
+        >
       }
 
       servers: {
         testLatency: (
-          servers: ServerLatencyInput[],
-        ) => Promise<ServerLatencyResult>
+          servers:
+            ServerLatencyInput[],
+        ) => Promise<
+          ServerLatencyResult
+        >
 
         checkConfig: (
-          input: CheckServerConfigInput,
-        ) => Promise<CheckServerConfigResult>
+          input:
+            CheckServerConfigInput,
+        ) => Promise<
+          CheckServerConfigResult
+        >
       }
     }
   }

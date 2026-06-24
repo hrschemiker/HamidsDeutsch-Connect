@@ -34,6 +34,13 @@ const {
   createAndCheckConfig,
 } = require('./sing-box-config-service.cjs')
 
+const {
+  startLocalProxy,
+  stopLocalProxy,
+  getProcessStatus,
+  disposeProcessManager,
+} = require('./sing-box-process-manager.cjs')
+
 const execFileAsync =
   promisify(execFile)
 
@@ -41,6 +48,7 @@ const isDevelopment =
   !app.isPackaged
 
 let mainWindow = null
+let isQuitting = false
 
 console.log(
   '[Electron] Main process started',
@@ -157,11 +165,95 @@ async function getEngineInfo() {
   }
 }
 
+function createProcessErrorResult(
+  error,
+) {
+  return {
+    success: false,
+    ...getProcessStatus(),
+    error:
+      error instanceof Error
+        ? error.message
+        : 'عملیات sing-box ناموفق بود.',
+  }
+}
+
 function registerIpcHandlers() {
   ipcMain.handle(
     'engine:get-info',
     async () => {
       return getEngineInfo()
+    },
+  )
+
+  ipcMain.handle(
+    'engine:start-local-proxy',
+    async () => {
+      try {
+        const result =
+          await startLocalProxy({
+            enginePath:
+              getEnginePath(),
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+          })
+
+        console.log(
+          '[Engine] Local proxy start:',
+          result.success,
+          result.ready,
+        )
+
+        return result
+      } catch (error) {
+        console.error(
+          '[Engine] Local proxy start failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return createProcessErrorResult(
+          error,
+        )
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'engine:stop-local-proxy',
+    async () => {
+      try {
+        const result =
+          await stopLocalProxy()
+
+        console.log(
+          '[Engine] Local proxy stop:',
+          result.success,
+        )
+
+        return result
+      } catch (error) {
+        console.error(
+          '[Engine] Local proxy stop failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return createProcessErrorResult(
+          error,
+        )
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'engine:get-process-status',
+    async () => {
+      return getProcessStatus()
     },
   )
 
@@ -634,6 +726,31 @@ app.whenReady().then(() => {
     },
   )
 })
+
+app.on(
+  'before-quit',
+  (event) => {
+    if (isQuitting) {
+      return
+    }
+
+    const status =
+      getProcessStatus()
+
+    if (!status.running) {
+      isQuitting = true
+      return
+    }
+
+    event.preventDefault()
+    isQuitting = true
+
+    void disposeProcessManager()
+      .finally(() => {
+        app.quit()
+      })
+  },
+)
 
 app.on(
   'window-all-closed',

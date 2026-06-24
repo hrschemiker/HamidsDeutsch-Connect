@@ -6,13 +6,30 @@ const {
 contextBridge.exposeInMainWorld(
   'hamidsDeutsch',
   {
-    appName: 'HamidsDeutsch Connect',
-    platform: process.platform,
+    appName:
+      'HamidsDeutsch Connect',
+    platform:
+      process.platform,
 
     engine: {
       getInfo: () =>
         ipcRenderer.invoke(
           'engine:get-info',
+        ),
+
+      startLocalProxy: () =>
+        ipcRenderer.invoke(
+          'engine:start-local-proxy',
+        ),
+
+      stopLocalProxy: () =>
+        ipcRenderer.invoke(
+          'engine:stop-local-proxy',
+        ),
+
+      getProcessStatus: () =>
+        ipcRenderer.invoke(
+          'engine:get-process-status',
         ),
     },
 
@@ -28,19 +45,25 @@ contextBridge.exposeInMainWorld(
           input,
         ),
 
-      remove: (subscriptionId) =>
+      remove: (
+        subscriptionId,
+      ) =>
         ipcRenderer.invoke(
           'subscriptions:remove',
           subscriptionId,
         ),
 
-      inspect: (subscriptionId) =>
+      inspect: (
+        subscriptionId,
+      ) =>
         ipcRenderer.invoke(
           'subscriptions:inspect',
           subscriptionId,
         ),
 
-      loadNodes: (subscriptionId) =>
+      loadNodes: (
+        subscriptionId,
+      ) =>
         ipcRenderer.invoke(
           'subscriptions:load-nodes',
           subscriptionId,
