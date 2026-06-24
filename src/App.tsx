@@ -1,6 +1,10 @@
-import { useState, type KeyboardEvent } from 'react'
+import {
+  useState,
+  type KeyboardEvent,
+} from 'react'
 import { useDirectDomains } from './domain/use-direct-domains'
 import { useEngineInfo } from './engine/use-engine-info'
+import { useSubscriptions } from './subscriptions/use-subscriptions'
 import './App.css'
 
 type PageId =
@@ -46,6 +50,7 @@ function App() {
   const [isConnected, setIsConnected] = useState(false)
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
+  const subscriptions = useSubscriptions()
 
   function toggleConnection() {
     setIsConnected((currentValue) => !currentValue)
@@ -152,8 +157,18 @@ function App() {
           )}
 
           {activePage === 'subscriptions' && (
-            <SubscriptionsPage />
-          )}
+  <SubscriptionsPage
+    loading={subscriptions.loading}
+    subscriptions={subscriptions.subscriptions}
+    loadError={subscriptions.error}
+    onAddSubscription={
+      subscriptions.addSubscription
+    }
+    onRemoveSubscription={
+      subscriptions.removeSubscription
+    }
+  />
+)}
 
           {activePage === 'direct-sites' && (
             <DirectSitesPage
@@ -467,18 +482,188 @@ function EmptyPage({
   )
 }
 
-function SubscriptionsPage() {
+type SubscriptionItem = {
+  id: string
+  name: string
+  host: string
+  createdAt: string
+  updatedAt: string
+}
+
+type SubscriptionsPageProps = {
+  loading: boolean
+  subscriptions: SubscriptionItem[]
+  loadError: string | null
+
+  onAddSubscription: (
+    name: string,
+    url: string,
+  ) => Promise<
+    | {
+        success: true
+        error: null
+      }
+    | {
+        success: false
+        error: string
+      }
+  >
+
+  onRemoveSubscription: (
+    subscriptionId: string,
+  ) => Promise<
+    | {
+        success: true
+        error: null
+      }
+    | {
+        success: false
+        error: string
+      }
+  >
+}
+
+function SubscriptionsPage({
+  loading,
+  subscriptions,
+  loadError,
+  onAddSubscription,
+  onRemoveSubscription,
+}: SubscriptionsPageProps) {
+  const [nameInput, setNameInput] =
+    useState('')
+
+  const [urlInput, setUrlInput] =
+    useState('')
+
+  const [submitting, setSubmitting] =
+    useState(false)
+
+  const [removingId, setRemovingId] =
+    useState<string | null>(null)
+
+  const [message, setMessage] =
+    useState<{
+      type: 'success' | 'error'
+      text: string
+    } | null>(null)
+
+  async function handleAddSubscription() {
+    if (submitting) {
+      return
+    }
+
+    setSubmitting(true)
+    setMessage(null)
+
+    const result =
+      await onAddSubscription(
+        nameInput,
+        urlInput,
+      )
+
+    setSubmitting(false)
+
+    if (!result.success) {
+      setMessage({
+        type: 'error',
+        text: result.error,
+      })
+
+      return
+    }
+
+    setNameInput('')
+    setUrlInput('')
+
+    setMessage({
+      type: 'success',
+      text: 'اشتراک با موفقیت و به‌صورت امن ذخیره شد.',
+    })
+  }
+
+  async function handleRemoveSubscription(
+    subscriptionId: string,
+  ) {
+    if (removingId) {
+      return
+    }
+
+    setRemovingId(subscriptionId)
+    setMessage(null)
+
+    const result =
+      await onRemoveSubscription(
+        subscriptionId,
+      )
+
+    setRemovingId(null)
+
+    if (!result.success) {
+      setMessage({
+        type: 'error',
+        text: result.error,
+      })
+
+      return
+    }
+
+    setMessage({
+      type: 'success',
+      text: 'اشتراک حذف شد.',
+    })
+  }
+
+  function handleUrlKeyDown(
+    event: KeyboardEvent<HTMLInputElement>,
+  ) {
+    if (event.key === 'Enter') {
+      void handleAddSubscription()
+    }
+  }
+
   return (
     <div className="page-stack">
       <section className="panel-card">
         <div className="panel-heading">
           <div>
-            <span className="panel-kicker">منبع کانفیگ</span>
-            <h3>افزودن اشتراک</h3>
+            <span className="panel-kicker">
+              منبع کانفیگ
+            </span>
+
+            <h3>افزودن اشتراک امن</h3>
           </div>
+
+          <span className="count-badge">
+            {subscriptions.length} اشتراک
+          </span>
         </div>
 
-        <label className="field-label" htmlFor="subscription-url">
+        <label
+          className="field-label"
+          htmlFor="subscription-name"
+        >
+          نام دلخواه
+        </label>
+
+        <input
+          id="subscription-name"
+          className="text-input"
+          placeholder="مثلاً اشتراک شخصی من"
+          type="text"
+          value={nameInput}
+          onChange={(event) => {
+            setNameInput(
+              event.target.value,
+            )
+            setMessage(null)
+          }}
+        />
+
+        <label
+          className="field-label subscription-url-label"
+          htmlFor="subscription-url"
+        >
           آدرس اشتراک
         </label>
 
@@ -488,25 +673,140 @@ function SubscriptionsPage() {
             className="text-input"
             dir="ltr"
             placeholder="https://example.com/subscription"
-            type="url"
+            type="password"
+            value={urlInput}
+            onChange={(event) => {
+              setUrlInput(
+                event.target.value,
+              )
+              setMessage(null)
+            }}
+            onKeyDown={handleUrlKeyDown}
+            autoComplete="off"
+            spellCheck={false}
           />
 
-          <button className="primary-button" type="button">
-            افزودن
+          <button
+            className="primary-button"
+            type="button"
+            disabled={submitting}
+            onClick={() => {
+              void handleAddSubscription()
+            }}
+          >
+            {submitting
+              ? 'در حال ذخیره...'
+              : 'افزودن'}
           </button>
         </div>
 
         <p className="field-help">
-          آدرس‌ها فعلاً ذخیره نمی‌شوند. این بخش در مرحله مدیریت
-          اشتراک‌ها فعال خواهد شد.
+          لینک اشتراک در فایل داده برنامه به‌صورت
+          رمزگذاری‌شده ذخیره می‌شود. اصل لینک پس از
+          ذخیره در این صفحه نمایش داده نخواهد شد.
         </p>
+
+        {message && (
+          <div
+            className={
+              message.type === 'success'
+                ? 'form-message form-message-success'
+                : 'form-message form-message-error'
+            }
+          >
+            {message.text}
+          </div>
+        )}
+
+        {loadError && (
+          <div className="form-message form-message-error">
+            {loadError}
+          </div>
+        )}
       </section>
 
-      <EmptyPage
-        icon="↧"
-        title="اشتراکی ثبت نشده است"
-        description="پس از ساخت مدیر کانفیگ، اشتراک‌های شخصی و منابع آماده در این قسمت نمایش داده می‌شوند."
-      />
+      <section className="panel-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">
+              اشتراک‌های ذخیره‌شده
+            </span>
+
+            <h3>منابع کانفیگ</h3>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="subscription-loading">
+            در حال خواندن اشتراک‌ها...
+          </div>
+        ) : subscriptions.length > 0 ? (
+          <div className="subscription-list">
+            {subscriptions.map(
+              (subscription) => (
+                <article
+                  className="subscription-item"
+                  key={subscription.id}
+                >
+                  <div className="subscription-icon">
+                    ↧
+                  </div>
+
+                  <div className="subscription-main">
+                    <strong>
+                      {subscription.name}
+                    </strong>
+
+                    <span dir="ltr">
+                      {subscription.host}
+                    </span>
+
+                    <small>
+                      لینک ذخیره‌شده و مخفی است
+                    </small>
+                  </div>
+
+                  <div className="subscription-actions">
+                    <span className="secure-badge">
+                      امن
+                    </span>
+
+                    <button
+                      className="remove-domain-button"
+                      type="button"
+                      disabled={
+                        removingId ===
+                        subscription.id
+                      }
+                      onClick={() => {
+                        void handleRemoveSubscription(
+                          subscription.id,
+                        )
+                      }}
+                    >
+                      {removingId ===
+                      subscription.id
+                        ? 'در حال حذف...'
+                        : 'حذف'}
+                    </button>
+                  </div>
+                </article>
+              ),
+            )}
+          </div>
+        ) : (
+          <div className="empty-domain-list">
+            <span>↧</span>
+            <strong>
+              اشتراکی ثبت نشده است
+            </strong>
+
+            <p>
+              لینک شخصی خودت را از فرم بالا اضافه کن.
+            </p>
+          </div>
+        )}
+      </section>
     </div>
   )
 }
