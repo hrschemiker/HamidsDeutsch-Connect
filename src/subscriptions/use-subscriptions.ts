@@ -18,6 +18,18 @@ type SubscriptionState = {
   error: string | null
 }
 
+export type SubscriptionInspectionResult = {
+  success: boolean
+  checkedAt: string
+  httpStatus: number | null
+  httpStatusText: string | null
+  contentType: string | null
+  responseSize: number | null
+  format: string
+  configCount: number
+  error: string | null
+}
+
 export function useSubscriptions() {
   const [state, setState] =
     useState<SubscriptionState>({
@@ -143,12 +155,41 @@ export function useSubscriptions() {
     [refresh],
   )
 
-  return {
+    const inspectSubscription = useCallback(
+    async (
+      subscriptionId: string,
+    ): Promise<SubscriptionInspectionResult> => {
+      try {
+        return await window.hamidsDeutsch
+          .subscriptions
+          .inspect(subscriptionId)
+      } catch (error) {
+        return {
+          success: false,
+          checkedAt: new Date().toISOString(),
+          httpStatus: null,
+          httpStatusText: null,
+          contentType: null,
+          responseSize: null,
+          format: 'renderer-error',
+          configCount: 0,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'بررسی اشتراک با خطا مواجه شد.',
+        }
+      }
+    },
+    [],
+  )
+
+    return {
     loading: state.loading,
     subscriptions: state.subscriptions,
     error: state.error,
     refresh,
     addSubscription,
     removeSubscription,
+    inspectSubscription,
   }
 }

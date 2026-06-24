@@ -33,6 +33,12 @@ contextBridge.exposeInMainWorld(
           'subscriptions:remove',
           subscriptionId,
         ),
+
+      inspect: (subscriptionId) =>
+        ipcRenderer.invoke(
+          'subscriptions:inspect',
+          subscriptionId,
+        ),
     },
   },
 )

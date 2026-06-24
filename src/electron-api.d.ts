@@ -44,6 +44,18 @@ type RemoveSubscriptionResult =
       error: string
     }
 
+type SubscriptionInspectionResult = {
+  success: boolean
+  checkedAt: string
+  httpStatus: number | null
+  httpStatusText: string | null
+  contentType: string | null
+  responseSize: number | null
+  format: string
+  configCount: number
+  error: string | null
+}
+
 declare global {
   interface Window {
     hamidsDeutsch: {
@@ -66,6 +78,10 @@ declare global {
         remove: (
           subscriptionId: string,
         ) => Promise<RemoveSubscriptionResult>
+
+        inspect: (
+          subscriptionId: string,
+        ) => Promise<SubscriptionInspectionResult>
       }
     }
   }

@@ -365,9 +365,41 @@ function getSubscriptionDataPath() {
   return getDataFilePath()
 }
 
+async function getSubscriptionUrl(
+  subscriptionId,
+) {
+  if (
+    typeof subscriptionId !== 'string' ||
+    !subscriptionId.trim()
+  ) {
+    throw new Error(
+      'شناسه اشتراک معتبر نیست.',
+    )
+  }
+
+  const store = await readStore()
+
+  const subscription =
+    store.subscriptions.find(
+      (item) =>
+        item.id === subscriptionId,
+    )
+
+  if (!subscription) {
+    throw new Error(
+      'اشتراک موردنظر پیدا نشد.',
+    )
+  }
+
+  return decryptUrl(
+    subscription.encryptedUrl,
+  )
+}
+
 module.exports = {
   addSubscription,
   getSubscriptionDataPath,
+  getSubscriptionUrl,
   listSubscriptions,
   removeSubscription,
 }

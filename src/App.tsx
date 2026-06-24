@@ -167,6 +167,9 @@ function App() {
     onRemoveSubscription={
       subscriptions.removeSubscription
     }
+    onInspectSubscription={
+  subscriptions.inspectSubscription
+}
   />
 )}
 
@@ -490,6 +493,18 @@ type SubscriptionItem = {
   updatedAt: string
 }
 
+type SubscriptionInspection = {
+  success: boolean
+  checkedAt: string
+  httpStatus: number | null
+  httpStatusText: string | null
+  contentType: string | null
+  responseSize: number | null
+  format: string
+  configCount: number
+  error: string | null
+}
+
 type SubscriptionsPageProps = {
   loading: boolean
   subscriptions: SubscriptionItem[]
@@ -521,6 +536,11 @@ type SubscriptionsPageProps = {
         error: string
       }
   >
+
+  onInspectSubscription: (
+    subscriptionId: string,
+  ) => Promise<SubscriptionInspection>
+
 }
 
 function SubscriptionsPage({
@@ -529,6 +549,7 @@ function SubscriptionsPage({
   loadError,
   onAddSubscription,
   onRemoveSubscription,
+  onInspectSubscription,
 }: SubscriptionsPageProps) {
   const [nameInput, setNameInput] =
     useState('')
@@ -541,6 +562,19 @@ function SubscriptionsPage({
 
   const [removingId, setRemovingId] =
     useState<string | null>(null)
+
+    const [inspectingId, setInspectingId] =
+    useState<string | null>(null)
+
+  const [
+    inspectionResults,
+    setInspectionResults,
+  ] = useState<
+    Record<
+      string,
+      SubscriptionInspection
+    >
+  >({})
 
   const [message, setMessage] =
     useState<{
@@ -611,6 +645,48 @@ function SubscriptionsPage({
     setMessage({
       type: 'success',
       text: 'اشتراک حذف شد.',
+    })
+  }
+
+    async function handleInspectSubscription(
+    subscriptionId: string,
+  ) {
+    if (inspectingId) {
+      return
+    }
+
+    setInspectingId(subscriptionId)
+    setMessage(null)
+
+    const result =
+      await onInspectSubscription(
+        subscriptionId,
+      )
+
+    setInspectionResults(
+      (currentResults) => ({
+        ...currentResults,
+        [subscriptionId]: result,
+      }),
+    )
+
+    setInspectingId(null)
+
+    if (!result.success) {
+      setMessage({
+        type: 'error',
+        text:
+          result.error ??
+          'بررسی اشتراک ناموفق بود.',
+      })
+
+      return
+    }
+
+    setMessage({
+      type: 'success',
+      text:
+        'اشتراک با موفقیت دریافت و تحلیل شد.',
     })
   }
 
@@ -772,6 +848,23 @@ function SubscriptionsPage({
                     </span>
 
                     <button
+  className="inspect-subscription-button"
+  type="button"
+  disabled={
+    inspectingId === subscription.id
+  }
+  onClick={() => {
+    void handleInspectSubscription(
+      subscription.id,
+    )
+  }}
+>
+  {inspectingId === subscription.id
+    ? 'در حال بررسی...'
+    : 'بررسی اشتراک'}
+</button>
+
+                    <button
                       className="remove-domain-button"
                       type="button"
                       disabled={
@@ -790,6 +883,19 @@ function SubscriptionsPage({
                         : 'حذف'}
                     </button>
                   </div>
+
+
+                  {inspectionResults[
+  subscription.id
+] && (
+  <SubscriptionInspectionPanel
+    inspection={
+      inspectionResults[
+        subscription.id
+      ]
+    }
+  />
+)}
                 </article>
               ),
             )}
@@ -826,6 +932,162 @@ type DirectSitesPageProps = {
       }
   onRemoveDomain: (domain: string) => void
   onResetDomains: () => void
+}
+
+function SubscriptionInspectionPanel({
+  inspection,
+}: {
+  inspection: SubscriptionInspection
+}) {
+  return (
+    <div
+      className={
+        inspection.success
+          ? 'subscription-inspection subscription-inspection-success'
+          : 'subscription-inspection subscription-inspection-error'
+      }
+    >
+      <div className="inspection-heading">
+        <strong>
+          {inspection.success
+            ? 'نتیجه بررسی موفق'
+            : 'بررسی ناموفق'}
+        </strong>
+
+        <span>
+          {formatInspectionDate(
+            inspection.checkedAt,
+          )}
+        </span>
+      </div>
+
+      <div className="inspection-grid">
+        <InspectionValue
+          label="وضعیت HTTP"
+          value={
+            inspection.httpStatus
+              ? String(
+                  inspection.httpStatus,
+                )
+              : '—'
+          }
+        />
+
+        <InspectionValue
+          label="نوع محتوا"
+          value={formatSubscriptionFormat(
+            inspection.format,
+          )}
+        />
+
+        <InspectionValue
+          label="تعداد کانفیگ"
+          value={String(
+            inspection.configCount,
+          )}
+        />
+
+        <InspectionValue
+          label="حجم پاسخ"
+          value={formatByteSize(
+            inspection.responseSize,
+          )}
+        />
+      </div>
+
+      {inspection.contentType && (
+        <p
+          className="inspection-content-type"
+          dir="ltr"
+        >
+          {inspection.contentType}
+        </p>
+      )}
+
+      {inspection.error && (
+        <p className="inspection-error-message">
+          {inspection.error}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function InspectionValue({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="inspection-value">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
+function formatByteSize(
+  bytes: number | null,
+) {
+  if (bytes === null) {
+    return '—'
+  }
+
+  if (bytes < 1024) {
+    return `${bytes} بایت`
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(
+      bytes / 1024
+    ).toFixed(1)} کیلوبایت`
+  }
+
+  return `${(
+    bytes /
+    (1024 * 1024)
+  ).toFixed(2)} مگابایت`
+}
+
+function formatSubscriptionFormat(
+  format: string,
+) {
+  const labels: Record<string, string> = {
+    'uri-list': 'فهرست لینک‌ها',
+    'base64-uri-list':
+      'فهرست Base64',
+    json: 'JSON',
+    'base64-json': 'JSON رمزگذاری‌شده',
+    'base64-unknown':
+      'Base64 ناشناخته',
+    unknown: 'ناشناخته',
+    empty: 'خالی',
+    timeout: 'پایان زمان',
+    'http-error': 'خطای HTTP',
+    'network-error': 'خطای شبکه',
+    'internal-error': 'خطای داخلی',
+    'renderer-error': 'خطای رابط',
+  }
+
+  return labels[format] ?? format
+}
+
+function formatInspectionDate(
+  isoDate: string,
+) {
+  try {
+    return new Intl.DateTimeFormat(
+      'fa-IR',
+      {
+        hour: '2-digit',
+        minute: '2-digit',
+      },
+    ).format(new Date(isoDate))
+  } catch {
+    return 'همین حالا'
+  }
 }
 
 function DirectSitesPage({

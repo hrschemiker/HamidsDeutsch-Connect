@@ -12,9 +12,14 @@ const { promisify } = require('node:util')
 
 const {
   addSubscription,
+  getSubscriptionUrl,
   listSubscriptions,
   removeSubscription,
 } = require('./subscription-store.cjs')
+
+const {
+  inspectSubscriptionUrl,
+} = require('./subscription-inspector.cjs')
 
 const execFileAsync = promisify(execFile)
 
@@ -190,6 +195,54 @@ function registerIpcHandlers() {
       }
     },
   )
+
+  ipcMain.handle(
+    'subscriptions:inspect',
+    async (_event, subscriptionId) => {
+      try {
+        const subscriptionUrl =
+          await getSubscriptionUrl(
+            subscriptionId,
+          )
+
+        const inspection =
+          await inspectSubscriptionUrl(
+            subscriptionUrl,
+          )
+
+        console.log(
+          '[Subscriptions] Inspection completed:',
+          subscriptionId,
+          inspection.success,
+        )
+
+        return inspection
+      } catch (error) {
+        console.error(
+          '[Subscriptions] Inspection failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return {
+          success: false,
+          checkedAt: new Date().toISOString(),
+          httpStatus: null,
+          httpStatusText: null,
+          contentType: null,
+          responseSize: null,
+          format: 'internal-error',
+          configCount: 0,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'بررسی اشتراک با خطا مواجه شد.',
+        }
+      }
+    },
+  )
+
 }
 
 function createMainWindow() {
