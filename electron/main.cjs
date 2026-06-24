@@ -32,6 +32,7 @@ const {
 
 const {
   createAndCheckConfig,
+  createAndCheckTunConfig,
 } = require('./sing-box-config-service.cjs')
 
 const {
@@ -57,6 +58,10 @@ const {
 const {
   recoverStaleWindowsProxyState,
 } = require('./windows-proxy-state.cjs')
+
+const {
+  getWindowsPrivilegeStatus,
+} = require('./windows-privilege.cjs')
 
 const execFileAsync =
   promisify(execFile)
@@ -200,6 +205,13 @@ function registerIpcHandlers() {
     'engine:get-info',
     async () => {
       return getEngineInfo()
+    },
+  )
+
+  ipcMain.handle(
+    'system:get-privilege-status',
+    async () => {
+      return getWindowsPrivilegeStatus()
     },
   )
 
@@ -776,6 +788,117 @@ function registerIpcHandlers() {
         }
       }
     },
+
+  ipcMain.handle(
+    'servers:check-tun-config',
+    async (_event, input) => {
+      try {
+        const subscriptionId =
+          input?.subscriptionId
+
+        const nodeId =
+          input?.nodeId
+
+        const directDomains =
+          Array.isArray(
+            input?.directDomains,
+          )
+            ? input.directDomains
+            : []
+
+        const subscriptionUrl =
+          await getSubscriptionUrl(
+            subscriptionId,
+          )
+
+        const cachedNodeUri =
+          getSubscriptionNodeUri(
+            subscriptionId,
+            nodeId,
+          )
+
+        if (!cachedNodeUri) {
+          const refreshed =
+            await loadSubscriptionNodeRecords(
+              subscriptionUrl,
+            )
+
+          if (refreshed.success) {
+            replaceSubscriptionNodes(
+              subscriptionId,
+              refreshed.records,
+            )
+          }
+        }
+
+        const nodeUri =
+          getSubscriptionNodeUri(
+            subscriptionId,
+            nodeId,
+          )
+
+        if (!nodeUri) {
+          throw new Error(
+            'سرور انتخاب‌شده دیگر در حافظه امن اشتراک وجود ندارد. فهرست سرورها را یک‌بار تازه‌سازی کن.',
+          )
+        }
+
+        const result =
+          await createAndCheckTunConfig({
+            subscriptionUrl,
+            nodeId,
+            nodeUri,
+            enginePath:
+              getEnginePath(),
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+            directDomains,
+          })
+
+        console.log(
+          '[Servers] TUN config check completed:',
+          nodeId,
+          result.success,
+        )
+
+        return result
+      } catch (error) {
+        console.error(
+          '[Servers] TUN config check failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return {
+          success: false,
+          checkedAt:
+            new Date().toISOString(),
+          mode: 'tun',
+          nodeId:
+            typeof input?.nodeId ===
+            'string'
+              ? input.nodeId
+              : null,
+          protocol: null,
+          server: null,
+          serverPort: null,
+          configPath: null,
+          interfaceName:
+            'HamidsDeutsch',
+          directDomainCount: 0,
+          stdout: '',
+          error:
+            error instanceof Error
+              ? error.message
+              : 'اعتبارسنجی کانفیگ TUN ناموفق بود.',
+        }
+      }
+    },
+  )
+
   )
 }
 

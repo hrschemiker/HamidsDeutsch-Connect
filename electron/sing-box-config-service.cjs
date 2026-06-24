@@ -122,6 +122,108 @@ async function createAndCheckConfig({
   }
 }
 
+async function createAndCheckTunConfig({
+  subscriptionUrl,
+  nodeId,
+  nodeUri,
+  enginePath,
+  userDataPath,
+  directDomains,
+}) {
+  validateRequest({
+    subscriptionUrl,
+    nodeId,
+    enginePath,
+    userDataPath,
+  })
+
+  let resolvedUri =
+    typeof nodeUri === 'string' &&
+    nodeUri.trim()
+      ? nodeUri.trim()
+      : null
+
+  if (!resolvedUri) {
+    const content =
+      await downloadSubscriptionContent(
+        subscriptionUrl,
+      )
+
+    const resolvedNode =
+      resolveNodeById(
+        content,
+        nodeId,
+      )
+
+    if (!resolvedNode) {
+      throw new Error(
+        'سرور انتخاب‌شده در نسخه فعلی اشتراک پیدا نشد.',
+      )
+    }
+
+    resolvedUri =
+      resolvedNode.uri
+  }
+
+  const outbound =
+    buildOutboundFromUri(
+      resolvedUri,
+    )
+
+  const normalizedDirectDomains =
+    normalizeDirectDomains(
+      directDomains,
+    )
+
+  const config =
+    buildTunConfig(
+      outbound,
+      normalizedDirectDomains,
+    )
+
+  const runtimeDirectory = path.join(
+    userDataPath,
+    'HamidsDeutsch-Connect',
+    'runtime',
+  )
+
+  const configPath = path.join(
+    runtimeDirectory,
+    'tun-config.json',
+  )
+
+  await writeConfigAtomically(
+    runtimeDirectory,
+    configPath,
+    config,
+  )
+
+  const checkResult =
+    await checkConfig(
+      enginePath,
+      configPath,
+    )
+
+  return {
+    success: checkResult.success,
+    checkedAt:
+      new Date().toISOString(),
+    mode: 'tun',
+    nodeId,
+    protocol: outbound.type,
+    server: outbound.server,
+    serverPort:
+      outbound.server_port,
+    configPath,
+    interfaceName:
+      'HamidsDeutsch',
+    directDomainCount:
+      normalizedDirectDomains.length,
+    stdout: checkResult.stdout,
+    error: checkResult.error,
+  }
+}
+
 function validateRequest({
   subscriptionUrl,
   nodeId,
@@ -1058,6 +1160,73 @@ function buildConfig(
   }
 }
 
+function buildTunConfig(
+  proxyOutbound,
+  directDomains,
+) {
+  const rules = [
+    {
+      ip_is_private: true,
+      action: 'route',
+      outbound: 'direct',
+    },
+  ]
+
+  if (directDomains.length > 0) {
+    rules.push({
+      domain_suffix:
+        directDomains,
+      action: 'route',
+      outbound: 'direct',
+    })
+  }
+
+  return {
+    log: {
+      level: 'warn',
+      timestamp: true,
+    },
+
+    inbounds: [
+      {
+        type: 'tun',
+        tag: 'tun-in',
+        interface_name:
+          'HamidsDeutsch',
+        address: [
+          '172.19.0.1/30',
+          'fdfe:dcba:9876::1/126',
+        ],
+        mtu: 1500,
+        auto_route: true,
+        strict_route: true,
+        stack: 'mixed',
+      },
+      {
+        type: 'mixed',
+        tag: 'mixed-in',
+        listen: '127.0.0.1',
+        listen_port: 2080,
+        set_system_proxy: false,
+      },
+    ],
+
+    outbounds: [
+      proxyOutbound,
+      {
+        type: 'direct',
+        tag: 'direct',
+      },
+    ],
+
+    route: {
+      rules,
+      final: 'proxy',
+      auto_detect_interface: true,
+    },
+  }
+}
+
 function normalizeDirectDomains(values) {
   if (!Array.isArray(values)) {
     return []
@@ -1611,4 +1780,5 @@ function splitList(value) {
 
 module.exports = {
   createAndCheckConfig,
+  createAndCheckTunConfig,
 }

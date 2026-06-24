@@ -11,6 +11,13 @@ contextBridge.exposeInMainWorld(
     platform:
       process.platform,
 
+    system: {
+      getPrivilegeStatus: () =>
+        ipcRenderer.invoke(
+          'system:get-privilege-status',
+        ),
+    },
+
     engine: {
       getInfo: () =>
         ipcRenderer.invoke(
@@ -100,6 +107,12 @@ contextBridge.exposeInMainWorld(
       checkConfig: (input) =>
         ipcRenderer.invoke(
           'servers:check-config',
+          input,
+        ),
+
+      checkTunConfig: (input) =>
+        ipcRenderer.invoke(
+          'servers:check-tun-config',
           input,
         ),
     },

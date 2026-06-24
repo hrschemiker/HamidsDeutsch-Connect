@@ -159,11 +159,38 @@ type CheckServerConfigResult = {
   error: string | null
 }
 
+type WindowsPrivilegeStatus = {
+  supported: boolean
+  isAdministrator: boolean
+  platform: string
+  error: string | null
+}
+
+type CheckTunConfigResult = {
+  success: boolean
+  checkedAt: string
+  mode: 'tun'
+  nodeId: string | null
+  protocol: string | null
+  server: string | null
+  serverPort: number | null
+  configPath: string | null
+  interfaceName: string
+  directDomainCount: number
+  stdout: string
+  error: string | null
+}
+
 declare global {
   interface Window {
     hamidsDeutsch: {
       appName: string
       platform: string
+
+      system: {
+        getPrivilegeStatus: () =>
+          Promise<WindowsPrivilegeStatus>
+      }
 
       engine: {
         getInfo: () =>
@@ -235,6 +262,13 @@ declare global {
             CheckServerConfigInput,
         ) => Promise<
           CheckServerConfigResult
+        >
+
+        checkTunConfig: (
+          input:
+            CheckServerConfigInput,
+        ) => Promise<
+          CheckTunConfigResult
         >
       }
     }
