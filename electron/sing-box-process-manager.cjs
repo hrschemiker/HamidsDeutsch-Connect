@@ -18,6 +18,11 @@ const {
   restoreWindowsProxyState,
 } = require('./windows-proxy-state.cjs')
 
+const {
+  registerManagedProcess,
+  clearManagedProcess,
+} = require('./engine-runtime-guard.cjs')
+
 const LOCAL_PROXY_HOST =
   '127.0.0.1'
 
@@ -28,6 +33,9 @@ const CHECK_TIMEOUT_MS = 15000
 const MAX_LOG_LENGTH = 16000
 
 let activeProcess = null
+let activeUserDataPath = null
+let activeEnginePath = null
+let activeConfigPath = null
 let processState = createInitialState()
 
 function createInitialState() {
@@ -151,6 +159,12 @@ async function startLocalProxy({
   )
 
   activeProcess = child
+  activeUserDataPath =
+    userDataPath
+  activeEnginePath =
+    enginePath
+  activeConfigPath =
+    configPath
 
   processState.running = true
   processState.pid =
@@ -159,7 +173,22 @@ async function startLocalProxy({
   processState.startedAt =
     new Date().toISOString()
 
-  attachProcessListeners(child)
+  if (processState.pid) {
+    await registerManagedProcess({
+      userDataPath,
+      pid:
+        processState.pid,
+      enginePath,
+      configPath,
+      mode:
+        processState.connectionMode,
+    })
+  }
+
+  attachProcessListeners(
+    child,
+    userDataPath,
+  )
 
   try {
     await waitForLocalProxy(
@@ -275,6 +304,13 @@ async function startTunMode({
   )
 
   activeProcess = child
+  activeUserDataPath =
+    userDataPath
+  activeEnginePath =
+    enginePath
+  activeConfigPath =
+    configPath
+
   processState.running = true
   processState.tunEnabled = true
   processState.connectionMode = 'tun'
@@ -283,7 +319,21 @@ async function startTunMode({
   processState.startedAt =
     new Date().toISOString()
 
-  attachProcessListeners(child)
+  if (processState.pid) {
+    await registerManagedProcess({
+      userDataPath,
+      pid:
+        processState.pid,
+      enginePath,
+      configPath,
+      mode: 'tun',
+    })
+  }
+
+  attachProcessListeners(
+    child,
+    userDataPath,
+  )
 
   try {
     await waitForLocalProxy(
@@ -508,6 +558,20 @@ async function stopLocalProxy({
       null
     processState.pid = null
 
+    if (
+      typeof userDataPath ===
+        'string' &&
+      userDataPath.trim()
+    ) {
+      await clearManagedProcess({
+        userDataPath,
+      })
+    }
+
+    activeUserDataPath = null
+    activeEnginePath = null
+    activeConfigPath = null
+
     if (shouldRestoreWindowsProxy) {
       await restoreWindowsProxyState(
         userDataPath,
@@ -522,9 +586,28 @@ async function stopLocalProxy({
   }
 
   try {
+    const stoppedPid =
+      child.pid ?? null
+
     await stopSpecificProcess(
       child,
     )
+
+    if (
+      typeof userDataPath ===
+        'string' &&
+      userDataPath.trim()
+    ) {
+      await clearManagedProcess({
+        userDataPath,
+        pid:
+          stoppedPid,
+      })
+    }
+
+    activeUserDataPath = null
+    activeEnginePath = null
+    activeConfigPath = null
 
     if (shouldRestoreWindowsProxy) {
       await restoreWindowsProxyState(
@@ -633,7 +716,19 @@ async function disposeProcessManager({
     } catch {
       // خروج برنامه نباید به‌خاطر خطای بازیابی متوقف شود.
     }
+
+    try {
+      await clearManagedProcess({
+        userDataPath,
+      })
+    } catch {
+      // Marker خراب نباید خروج برنامه را متوقف کند.
+    }
   }
+
+  activeUserDataPath = null
+  activeEnginePath = null
+  activeConfigPath = null
 }
 
 function resetForStart(
@@ -654,6 +749,7 @@ function resetForStart(
 
 function attachProcessListeners(
   child,
+  userDataPath,
 ) {
   child.stdout?.on(
     'data',
@@ -689,6 +785,25 @@ function attachProcessListeners(
       ) {
         activeProcess = null
       }
+
+      const exitedPid =
+        child.pid ?? null
+
+      if (
+        typeof userDataPath ===
+          'string' &&
+        userDataPath.trim()
+      ) {
+        void clearManagedProcess({
+          userDataPath,
+          pid:
+            exitedPid,
+        })
+      }
+
+      activeUserDataPath = null
+      activeEnginePath = null
+      activeConfigPath = null
 
       processState.running = false
       processState.ready = false
@@ -1233,6 +1348,52 @@ function validatePath(
   }
 }
 
+async function emergencyDispose() {
+  const userDataPath =
+    activeUserDataPath
+
+  const child =
+    activeProcess
+
+  try {
+    if (child) {
+      await stopSpecificProcess(
+        child,
+      )
+    }
+  } catch {
+    // Crash cleanup best effort.
+  }
+
+  if (
+    typeof userDataPath ===
+      'string' &&
+    userDataPath.trim()
+  ) {
+    try {
+      await restoreWindowsProxyState(
+        userDataPath,
+      )
+    } catch {
+      // Crash cleanup best effort.
+    }
+
+    try {
+      await clearManagedProcess({
+        userDataPath,
+      })
+    } catch {
+      // Crash cleanup best effort.
+    }
+  }
+
+  activeProcess = null
+  activeUserDataPath = null
+  activeEnginePath = null
+  activeConfigPath = null
+}
+
+
 module.exports = {
   startLocalProxy,
   startTunMode,
@@ -1241,4 +1402,5 @@ module.exports = {
   stopLocalProxy,
   getProcessStatus,
   disposeProcessManager,
+  emergencyDispose,
 }

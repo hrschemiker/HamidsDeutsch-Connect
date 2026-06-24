@@ -43,6 +43,7 @@ const {
   stopLocalProxy,
   getProcessStatus,
   disposeProcessManager,
+  emergencyDispose,
 } = require('./sing-box-process-manager.cjs')
 
 const {
@@ -62,6 +63,10 @@ const {
 } = require('./windows-proxy-state.cjs')
 
 const {
+  recoverStaleManagedProcess,
+} = require('./engine-runtime-guard.cjs')
+
+const {
   getWindowsPrivilegeStatus,
 } = require('./windows-privilege.cjs')
 
@@ -77,6 +82,40 @@ const isDevelopment =
 
 let mainWindow = null
 let isQuitting = false
+let fatalCleanupStarted = false
+
+async function handleFatalProcessError(
+  label,
+  error,
+) {
+  console.error(
+    `[Electron] ${label}:`,
+    error instanceof Error
+      ? error.stack ||
+        error.message
+      : error,
+  )
+
+  if (fatalCleanupStarted) {
+    return
+  }
+
+  fatalCleanupStarted = true
+
+  try {
+    await emergencyDispose()
+  } catch {
+    // Fatal cleanup is best effort.
+  }
+
+  clearSubscriptionNodeCache()
+
+  if (app.isReady()) {
+    app.exit(1)
+  } else {
+    process.exitCode = 1
+  }
+}
 
 console.log(
   '[Electron] Main process started',
@@ -1127,6 +1166,20 @@ function createMainWindow() {
         '[Electron] Renderer process stopped:',
         details,
       )
+
+      void disposeProcessManager({
+        userDataPath:
+          app.getPath(
+            'userData',
+          ),
+      }).catch((error) => {
+        console.error(
+          '[Engine] Renderer crash cleanup failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+      })
     },
   )
 
@@ -1203,10 +1256,82 @@ function createMainWindow() {
   )
 }
 
+process.on(
+  'uncaughtException',
+  (error) => {
+    void handleFatalProcessError(
+      'Uncaught exception',
+      error,
+    )
+  },
+)
+
+process.on(
+  'unhandledRejection',
+  (reason) => {
+    void handleFatalProcessError(
+      'Unhandled rejection',
+      reason,
+    )
+  },
+)
+
+for (
+  const signal of
+    ['SIGINT', 'SIGTERM']
+) {
+  process.once(
+    signal,
+    () => {
+      if (fatalCleanupStarted) {
+        return
+      }
+
+      fatalCleanupStarted = true
+
+      void emergencyDispose()
+        .catch(() => {
+          // Signal cleanup is best effort.
+        })
+        .finally(() => {
+          clearSubscriptionNodeCache()
+          app.exit(0)
+        })
+    },
+  )
+}
+
+
 app.whenReady().then(async () => {
   console.log(
     '[Electron] Application is ready',
   )
+
+  try {
+    const engineRecovery =
+      await recoverStaleManagedProcess({
+        userDataPath:
+          app.getPath(
+            'userData',
+          ),
+        expectedEnginePath:
+          getEnginePath(),
+      })
+
+    if (engineRecovery.found) {
+      console.log(
+        '[Engine] Previous managed process recovery:',
+        engineRecovery,
+      )
+    }
+  } catch (error) {
+    console.error(
+      '[Engine] Startup process recovery failed:',
+      error instanceof Error
+        ? error.message
+        : 'Unknown error',
+    )
+  }
 
   try {
     const recovery =
