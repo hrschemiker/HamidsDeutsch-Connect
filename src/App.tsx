@@ -6,6 +6,7 @@ import { useDirectDomains } from './domain/use-direct-domains'
 import { useEngineInfo } from './engine/use-engine-info'
 import { useSubscriptions } from './subscriptions/use-subscriptions'
 import { useServerNodes } from './servers/use-server-nodes'
+import { useSelectedServer } from './servers/use-selected-server'
 import './App.css'
 
 type PageId =
@@ -53,6 +54,8 @@ function App() {
   const engine = useEngineInfo()
   const subscriptions = useSubscriptions()
   const serverNodes = useServerNodes()
+  const selectedServer =
+  useSelectedServer()
 
   function toggleConnection() {
     setIsConnected((currentValue) => !currentValue)
@@ -142,6 +145,9 @@ function App() {
   isConnected={isConnected}
   directDomains={directDomains.domains}
   engineInfo={engine.info}
+  selectedServer={
+  selectedServer.selectedServer
+  }
   onToggleConnection={toggleConnection}
   onOpenDirectSites={() => setActivePage('direct-sites')}
   onOpenRescue={() => setActivePage('rescue')}
@@ -150,13 +156,23 @@ function App() {
 
           {activePage === 'servers' && (
   <ServersPage
-    loading={serverNodes.loading}
-    nodes={serverNodes.nodes}
-    error={serverNodes.error}
-    onOpenSubscriptions={() =>
-      setActivePage('subscriptions')
-    }
-  />
+  loading={serverNodes.loading}
+  nodes={serverNodes.nodes}
+  error={serverNodes.error}
+  selectedServerId={
+    selectedServer.selectedServer?.id ??
+    null
+  }
+  onSelectServer={
+    selectedServer.selectServer
+  }
+  onClearSelectedServer={
+    selectedServer.clearSelectedServer
+  }
+  onOpenSubscriptions={() =>
+    setActivePage('subscriptions')
+  }
+/>
 )}
 
           {activePage === 'subscriptions' && (
@@ -237,6 +253,15 @@ type HomePageProps = {
     architecture: string | null
     error: string | null
   } | null
+  selectedServer: {
+  id: string
+  name: string
+  protocol: string
+  host: string | null
+  port: number | null
+  transport: string | null
+  tls: boolean
+  } | null
 
   onToggleConnection: () => void
   onOpenDirectSites: () => void
@@ -247,6 +272,7 @@ function HomePage({
   isConnected,
   directDomains,
   engineInfo,
+  selectedServer,
   onToggleConnection,
   onOpenDirectSites,
   onOpenRescue,
@@ -337,7 +363,10 @@ function HomePage({
           <span className="statistic-icon">◌</span>
           <div>
             <span className="statistic-label">سرور انتخاب‌شده</span>
-            <strong>انتخاب نشده</strong>
+            <strong>
+              {selectedServer?.name ??
+                'انتخاب نشده'}
+            </strong>
           </div>
         </article>
 
@@ -1010,11 +1039,29 @@ function ServersPage({
   loading,
   nodes,
   error,
+  selectedServerId,
+  onSelectServer,
+  onClearSelectedServer,
   onOpenSubscriptions,
 }: {
   loading: boolean
   nodes: ServerNodeItem[]
   error: string | null
+  selectedServerId: string | null
+
+  onSelectServer: (
+    server: {
+      id: string
+      name: string
+      protocol: string
+      host: string | null
+      port: number | null
+      transport: string | null
+      tls: boolean
+    },
+  ) => void
+
+  onClearSelectedServer: () => void
   onOpenSubscriptions: () => void
 }) {
   if (loading) {
@@ -1088,9 +1135,21 @@ function ServersPage({
             <h3>سرورهای استخراج‌شده</h3>
           </div>
 
-          <span className="count-badge">
-            {validNodes.length} سرور معتبر
-          </span>
+          <div className="servers-heading-actions">
+  <span className="count-badge">
+    {validNodes.length} سرور معتبر
+  </span>
+
+  {selectedServerId && (
+    <button
+      className="text-button"
+      type="button"
+      onClick={onClearSelectedServer}
+    >
+      لغو انتخاب
+    </button>
+  )}
+</div>
         </div>
 
         <p className="field-help">
@@ -1103,13 +1162,19 @@ function ServersPage({
       <section className="server-grid">
         {nodes.map((node) => (
           <article
-            className={
-              node.valid
-                ? 'server-card'
-                : 'server-card server-card-invalid'
-            }
-            key={node.id}
-          >
+  className={[
+    'server-card',
+    !node.valid
+      ? 'server-card-invalid'
+      : '',
+    selectedServerId === node.id
+      ? 'server-card-selected'
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' ')}
+  key={node.id}
+>
             <div className="server-card-header">
               <div className="server-protocol-icon">
                 {formatProtocolShortName(
@@ -1178,6 +1243,30 @@ function ServersPage({
                 }
               />
             </div>
+            <button
+  className={
+    selectedServerId === node.id
+      ? 'select-server-button select-server-button-selected'
+      : 'select-server-button'
+  }
+  type="button"
+  disabled={!node.valid}
+  onClick={() => {
+    onSelectServer({
+      id: node.id,
+      name: node.name,
+      protocol: node.protocol,
+      host: node.host,
+      port: node.port,
+      transport: node.transport,
+      tls: node.tls,
+    })
+  }}
+>
+  {selectedServerId === node.id
+    ? 'سرور انتخاب‌شده'
+    : 'انتخاب این سرور'}
+</button>
           </article>
         ))}
       </section>

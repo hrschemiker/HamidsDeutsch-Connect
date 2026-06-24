@@ -1440,3 +1440,53 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+.servers-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.server-card {
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.server-card-selected {
+  border-color: rgba(54, 179, 126, 0.5);
+  box-shadow:
+    0 0 0 2px rgba(54, 179, 126, 0.08),
+    0 18px 45px rgba(0, 0, 0, 0.18);
+  transform: translateY(-2px);
+}
+
+.select-server-button {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 13px;
+  padding: 7px 11px;
+  border: 1px solid rgba(230, 184, 79, 0.25);
+  border-radius: 9px;
+  background: var(--gold-soft);
+  color: var(--gold);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.select-server-button:hover {
+  border-color: rgba(230, 184, 79, 0.5);
+}
+
+.select-server-button-selected {
+  border-color: rgba(54, 179, 126, 0.35);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.select-server-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
