@@ -54,6 +54,10 @@ const {
   clearSubscriptionNodeCache,
 } = require('./subscription-node-cache.cjs')
 
+const {
+  recoverStaleWindowsProxyState,
+} = require('./windows-proxy-state.cjs')
+
 const execFileAsync =
   promisify(execFile)
 
@@ -318,7 +322,12 @@ function registerIpcHandlers() {
     async () => {
       try {
         const result =
-          await stopLocalProxy()
+          await stopLocalProxy({
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+          })
 
         console.log(
           '[Engine] Local proxy stop:',
@@ -921,10 +930,32 @@ function createMainWindow() {
   )
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   console.log(
     '[Electron] Application is ready',
   )
+
+  try {
+    const recovery =
+      await recoverStaleWindowsProxyState(
+        app.getPath(
+          'userData',
+        ),
+      )
+
+    if (recovery.recovered) {
+      console.log(
+        '[Engine] Previous Windows proxy settings restored on startup',
+      )
+    }
+  } catch (error) {
+    console.error(
+      '[Engine] Startup proxy recovery failed:',
+      error instanceof Error
+        ? error.message
+        : 'Unknown error',
+    )
+  }
 
   registerIpcHandlers()
   createMainWindow()
@@ -947,14 +978,6 @@ app.on(
   'before-quit',
   (event) => {
     if (isQuitting) {
-      return
-    }
-
-    const status =
-      getProcessStatus()
-
-    if (!status.running) {
-      isQuitting = true
       return
     }
 

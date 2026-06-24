@@ -13,6 +13,11 @@ const {
 const execFileAsync =
   promisify(execFile)
 
+const {
+  backupWindowsProxyState,
+  restoreWindowsProxyState,
+} = require('./windows-proxy-state.cjs')
+
 const LOCAL_PROXY_HOST =
   '127.0.0.1'
 
@@ -209,6 +214,10 @@ async function activateSystemProxy({
     )
   }
 
+  await backupWindowsProxyState(
+    userDataPath,
+  )
+
   await setSystemProxyFlag(
     configPath,
     true,
@@ -223,7 +232,9 @@ async function activateSystemProxy({
     activeProcess &&
     processState.running
   ) {
-    await stopLocalProxy()
+    await stopLocalProxy({
+      userDataPath,
+    })
   }
 
   const result =
@@ -240,6 +251,24 @@ async function activateSystemProxy({
       configPath,
       false,
     )
+
+    try {
+      await restoreWindowsProxyState(
+        userDataPath,
+      )
+    } catch (restoreError) {
+      const restoreMessage =
+        restoreError instanceof Error
+          ? restoreError.message
+          : 'بازگردانی تنظیمات Proxy ویندوز ناموفق بود.'
+
+      return {
+        ...result,
+        systemProxyEnabled: false,
+        error:
+          `${result.error ?? 'فعال‌سازی System Proxy ناموفق بود.'} ${restoreMessage}`,
+      }
+    }
 
     return {
       ...result,
@@ -285,6 +314,10 @@ async function deactivateSystemProxy({
     )
   }
 
+  await restoreWindowsProxyState(
+    userDataPath,
+  )
+
   processState.systemProxyEnabled =
     false
 
@@ -302,9 +335,16 @@ async function deactivateSystemProxy({
   })
 }
 
-async function stopLocalProxy() {
+async function stopLocalProxy({
+  userDataPath,
+} = {}) {
   const child =
     activeProcess
+
+  const shouldRestoreWindowsProxy =
+    processState.systemProxyEnabled &&
+    typeof userDataPath === 'string' &&
+    userDataPath.trim()
 
   if (
     !child ||
@@ -315,6 +355,12 @@ async function stopLocalProxy() {
     processState.systemProxyEnabled =
       false
     processState.pid = null
+
+    if (shouldRestoreWindowsProxy) {
+      await restoreWindowsProxyState(
+        userDataPath,
+      )
+    }
 
     return {
       success: true,
@@ -327,6 +373,12 @@ async function stopLocalProxy() {
     await stopSpecificProcess(
       child,
     )
+
+    if (shouldRestoreWindowsProxy) {
+      await restoreWindowsProxyState(
+        userDataPath,
+      )
+    }
 
     processState.systemProxyEnabled =
       false
@@ -387,7 +439,9 @@ async function disposeProcessManager({
   userDataPath,
 } = {}) {
   try {
-    await stopLocalProxy()
+    await stopLocalProxy({
+      userDataPath,
+    })
   } catch {
     // برنامه در هر صورت باید بتواند بسته شود.
   }
@@ -410,6 +464,14 @@ async function disposeProcessManager({
       } catch {
         // پاک‌سازی فایل کانفیگ نباید خروج برنامه را متوقف کند.
       }
+    }
+
+    try {
+      await restoreWindowsProxyState(
+        userDataPath,
+      )
+    } catch {
+      // خروج برنامه نباید به‌خاطر خطای بازیابی متوقف شود.
     }
   }
 }
