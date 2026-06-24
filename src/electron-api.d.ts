@@ -107,6 +107,25 @@ type ServerLatencyResult = {
   error: string | null
 }
 
+type CheckServerConfigInput = {
+  subscriptionId: string
+  nodeId: string
+  directDomains: string[]
+}
+
+type CheckServerConfigResult = {
+  success: boolean
+  checkedAt: string
+  nodeId: string | null
+  protocol: string | null
+  server: string | null
+  serverPort: number | null
+  configPath: string | null
+  directDomainCount: number
+  stdout: string
+  error: string | null
+}
+
 declare global {
   interface Window {
     hamidsDeutsch: {
@@ -143,6 +162,10 @@ declare global {
         testLatency: (
           servers: ServerLatencyInput[],
         ) => Promise<ServerLatencyResult>
+
+        checkConfig: (
+          input: CheckServerConfigInput,
+        ) => Promise<CheckServerConfigResult>
       }
     }
   }

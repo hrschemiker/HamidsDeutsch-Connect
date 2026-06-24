@@ -53,6 +53,12 @@ contextBridge.exposeInMainWorld(
           'servers:test-latency',
           servers,
         ),
+
+      checkConfig: (input) =>
+        ipcRenderer.invoke(
+          'servers:check-config',
+          input,
+        ),
     },
   },
 )

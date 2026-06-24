@@ -7,8 +7,12 @@ const {
 
 const path = require('node:path')
 const fs = require('node:fs')
-const { execFile } = require('node:child_process')
-const { promisify } = require('node:util')
+const {
+  execFile,
+} = require('node:child_process')
+const {
+  promisify,
+} = require('node:util')
 
 const {
   addSubscription,
@@ -26,14 +30,26 @@ const {
   testServerBatch,
 } = require('./server-latency.cjs')
 
-const execFileAsync = promisify(execFile)
+const {
+  createAndCheckConfig,
+} = require('./sing-box-config-service.cjs')
 
-const isDevelopment = !app.isPackaged
+const execFileAsync =
+  promisify(execFile)
+
+const isDevelopment =
+  !app.isPackaged
 
 let mainWindow = null
 
-console.log('[Electron] Main process started')
-console.log('[Electron] Development mode:', isDevelopment)
+console.log(
+  '[Electron] Main process started',
+)
+
+console.log(
+  '[Electron] Development mode:',
+  isDevelopment,
+)
 
 function getEnginePath() {
   if (isDevelopment) {
@@ -54,13 +70,21 @@ function getEnginePath() {
 }
 
 async function getEngineInfo() {
-  const enginePath = getEnginePath()
+  const enginePath =
+    getEnginePath()
 
-  console.log('[Engine] Checking path:', enginePath)
+  console.log(
+    '[Engine] Checking path:',
+    enginePath,
+  )
 
-  const exists = fs.existsSync(enginePath)
+  const exists =
+    fs.existsSync(enginePath)
 
-  console.log('[Engine] File exists:', exists)
+  console.log(
+    '[Engine] File exists:',
+    exists,
+  )
 
   if (!exists) {
     return {
@@ -69,12 +93,16 @@ async function getEngineInfo() {
       path: enginePath,
       version: null,
       architecture: null,
-      error: 'فایل sing-box.exe پیدا نشد.',
+      error:
+        'فایل sing-box.exe پیدا نشد.',
     }
   }
 
   try {
-    const { stdout, stderr } = await execFileAsync(
+    const {
+      stdout,
+      stderr,
+    } = await execFileAsync(
       enginePath,
       ['version'],
       {
@@ -84,23 +112,29 @@ async function getEngineInfo() {
       },
     )
 
-    const output = `${stdout}\n${stderr}`.trim()
+    const output =
+      `${stdout}\n${stderr}`.trim()
 
-    const versionMatch = output.match(
-      /sing-box version\s+([^\s]+)/i,
-    )
+    const versionMatch =
+      output.match(
+        /sing-box version\s+([^\s]+)/i,
+      )
 
-    const environmentMatch = output.match(
-      /Environment:\s+[^\s]+\s+([^\r\n]+)/i,
-    )
+    const environmentMatch =
+      output.match(
+        /Environment:\s+[^\s]+\s+([^\r\n]+)/i,
+      )
 
     return {
       installed: true,
       healthy: true,
       path: enginePath,
-      version: versionMatch?.[1] ?? 'نامشخص',
+      version:
+        versionMatch?.[1] ??
+        'نامشخص',
       architecture:
-        environmentMatch?.[1]?.trim() ?? null,
+        environmentMatch?.[1]
+          ?.trim() ?? null,
       error: null,
     }
   } catch (error) {
@@ -143,7 +177,9 @@ function registerIpcHandlers() {
     async (_event, input) => {
       try {
         const subscription =
-          await addSubscription(input)
+          await addSubscription(
+            input,
+          )
 
         return {
           success: true,
@@ -172,7 +208,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle(
     'subscriptions:remove',
-    async (_event, subscriptionId) => {
+    async (
+      _event,
+      subscriptionId,
+    ) => {
       try {
         await removeSubscription(
           subscriptionId,
@@ -203,7 +242,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle(
     'subscriptions:inspect',
-    async (_event, subscriptionId) => {
+    async (
+      _event,
+      subscriptionId,
+    ) => {
       try {
         const subscriptionUrl =
           await getSubscriptionUrl(
@@ -232,7 +274,8 @@ function registerIpcHandlers() {
 
         return {
           success: false,
-          checkedAt: new Date().toISOString(),
+          checkedAt:
+            new Date().toISOString(),
           httpStatus: null,
           httpStatusText: null,
           contentType: null,
@@ -248,9 +291,12 @@ function registerIpcHandlers() {
     },
   )
 
-    ipcMain.handle(
+  ipcMain.handle(
     'subscriptions:load-nodes',
-    async (_event, subscriptionId) => {
+    async (
+      _event,
+      subscriptionId,
+    ) => {
       try {
         const subscriptionUrl =
           await getSubscriptionUrl(
@@ -291,9 +337,12 @@ function registerIpcHandlers() {
     },
   )
 
-    ipcMain.handle(
+  ipcMain.handle(
     'servers:test-latency',
-    async (_event, servers) => {
+    async (
+      _event,
+      servers,
+    ) => {
       try {
         const result =
           await testServerBatch(
@@ -338,29 +387,110 @@ function registerIpcHandlers() {
     },
   )
 
+  ipcMain.handle(
+    'servers:check-config',
+    async (_event, input) => {
+      try {
+        const subscriptionId =
+          input?.subscriptionId
+
+        const nodeId =
+          input?.nodeId
+
+        const directDomains =
+          Array.isArray(
+            input?.directDomains,
+          )
+            ? input.directDomains
+            : []
+
+        const subscriptionUrl =
+          await getSubscriptionUrl(
+            subscriptionId,
+          )
+
+        const result =
+          await createAndCheckConfig({
+            subscriptionUrl,
+            nodeId,
+            enginePath:
+              getEnginePath(),
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+            directDomains,
+          })
+
+        console.log(
+          '[Servers] Config check completed:',
+          nodeId,
+          result.success,
+        )
+
+        return result
+      } catch (error) {
+        console.error(
+          '[Servers] Config check failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return {
+          success: false,
+          checkedAt:
+            new Date().toISOString(),
+          nodeId:
+            typeof input?.nodeId ===
+            'string'
+              ? input.nodeId
+              : null,
+          protocol: null,
+          server: null,
+          serverPort: null,
+          configPath: null,
+          directDomainCount: 0,
+          stdout: '',
+          error:
+            error instanceof Error
+              ? error.message
+              : 'اعتبارسنجی کانفیگ ناموفق بود.',
+        }
+      }
+    },
+  )
 }
 
 function createMainWindow() {
-  console.log('[Electron] Creating main window...')
+  console.log(
+    '[Electron] Creating main window...',
+  )
 
-  mainWindow = new BrowserWindow({
-    width: 1180,
-    height: 760,
-    minWidth: 960,
-    minHeight: 640,
-    show: true,
-    backgroundColor: '#090b10',
-    title: 'HamidsDeutsch Connect',
-    autoHideMenuBar: true,
+  mainWindow =
+    new BrowserWindow({
+      width: 1180,
+      height: 760,
+      minWidth: 960,
+      minHeight: 640,
+      show: true,
+      backgroundColor:
+        '#090b10',
+      title:
+        'HamidsDeutsch Connect',
+      autoHideMenuBar: true,
 
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      webSecurity: true,
-    },
-  })
+      webPreferences: {
+        preload: path.join(
+          __dirname,
+          'preload.cjs',
+        ),
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        webSecurity: true,
+      },
+    })
 
   mainWindow.webContents.on(
     'did-finish-load',
@@ -382,14 +512,17 @@ function createMainWindow() {
       console.error(
         '[Electron] Page failed to load',
       )
+
       console.error(
         'Error code:',
         errorCode,
       )
+
       console.error(
         'Description:',
         errorDescription,
       )
+
       console.error(
         'URL:',
         validatedURL,
@@ -407,17 +540,24 @@ function createMainWindow() {
     },
   )
 
-  mainWindow.webContents.setWindowOpenHandler(
-    ({ url }) => {
-      if (url.startsWith('https://')) {
-        void shell.openExternal(url)
-      }
+  mainWindow.webContents
+    .setWindowOpenHandler(
+      ({ url }) => {
+        if (
+          url.startsWith(
+            'https://',
+          )
+        ) {
+          void shell.openExternal(
+            url,
+          )
+        }
 
-      return {
-        action: 'deny',
-      }
-    },
-  )
+        return {
+          action: 'deny',
+        }
+      },
+    )
 
   mainWindow.webContents.on(
     'will-navigate',
@@ -427,7 +567,9 @@ function createMainWindow() {
 
       if (
         isDevelopment &&
-        url.startsWith(developmentUrl)
+        url.startsWith(
+          developmentUrl,
+        )
       ) {
         return
       }
@@ -445,43 +587,62 @@ function createMainWindow() {
       'http://localhost:5173',
     )
   } else {
-    const productionFile = path.join(
-      __dirname,
-      '..',
-      'dist',
-      'index.html',
-    )
+    const productionFile =
+      path.join(
+        __dirname,
+        '..',
+        'dist',
+        'index.html',
+      )
 
     console.log(
       '[Electron] Loading:',
       productionFile,
     )
 
-    void mainWindow.loadFile(productionFile)
+    void mainWindow.loadFile(
+      productionFile,
+    )
   }
 
-  mainWindow.on('closed', () => {
-    mainWindow = null
-  })
+  mainWindow.on(
+    'closed',
+    () => {
+      mainWindow = null
+    },
+  )
 }
 
 app.whenReady().then(() => {
-  console.log('[Electron] Application is ready')
+  console.log(
+    '[Electron] Application is ready',
+  )
 
   registerIpcHandlers()
   createMainWindow()
 
-  app.on('activate', () => {
-    if (
-      BrowserWindow.getAllWindows().length === 0
-    ) {
-      createMainWindow()
-    }
-  })
+  app.on(
+    'activate',
+    () => {
+      if (
+        BrowserWindow
+          .getAllWindows()
+          .length === 0
+      ) {
+        createMainWindow()
+      }
+    },
+  )
 })
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
-})
+app.on(
+  'window-all-closed',
+  () => {
+    if (
+      process.platform !==
+      'darwin'
+    ) {
+      app.quit()
+    }
+  },
+)
