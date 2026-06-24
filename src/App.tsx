@@ -18,6 +18,7 @@ import { useServerLatency } from './servers/use-server-latency'
 import { useServerConfigCheck } from './servers/use-server-config-check'
 import { useIpVerification } from './network/use-ip-verification'
 import { useWindowsPrivilege } from './system/use-windows-privilege'
+import { useWindowsElevation } from './system/use-windows-elevation'
 import './App.css'
 
 type PageId =
@@ -115,6 +116,7 @@ function App() {
   const configCheck = useServerConfigCheck()
   const ipVerification = useIpVerification()
   const windowsPrivilege = useWindowsPrivilege()
+  const windowsElevation = useWindowsElevation()
 
   const connectionVerified =
     engineProcess.status.connectionMode === 'tun'
@@ -833,6 +835,18 @@ function App() {
               processStatus={engineProcess.status}
               tunBaselineIp={tunBaselineIp}
               tunCurrentIp={tunCurrentIp}
+              administratorAvailable={
+                windowsPrivilege.status.isAdministrator
+              }
+              elevationRequesting={
+                windowsElevation.requesting
+              }
+              elevationError={
+                windowsElevation.error
+              }
+              onRelaunchAsAdministrator={() => {
+                void windowsElevation.relaunch()
+              }}
               processBusy={
                 engineProcess.busy ||
                 automaticConnectionRunning
@@ -975,6 +989,10 @@ type HomePageProps = {
   } | null
   tunBaselineIp: string | null
   tunCurrentIp: string | null
+  administratorAvailable: boolean
+  elevationRequesting: boolean
+  elevationError: string | null
+  onRelaunchAsAdministrator: () => void
   processStatus: {
     running: boolean
     ready: boolean
@@ -1032,6 +1050,10 @@ function HomePage({
   engineInfo,
   tunBaselineIp,
   tunCurrentIp,
+  administratorAvailable,
+  elevationRequesting,
+  elevationError,
+  onRelaunchAsAdministrator,
   processStatus,
   processBusy,
   processError,
@@ -1089,6 +1111,33 @@ function HomePage({
             ابتدا با TUN برقرار می‌شود؛ در غیر این صورت یا هنگام شکست TUN،
             System Proxy امن به‌عنوان fallback فعال خواهد شد.
           </p>
+
+          {!administratorAvailable && !processStatus.running && (
+            <div className="elevation-panel">
+              <div>
+                <strong>برای TUN دسترسی Administrator لازم است</strong>
+                <span>
+                  بدون آن، برنامه همچنان از System Proxy امن استفاده می‌کند.
+                </span>
+              </div>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={elevationRequesting}
+                onClick={onRelaunchAsAdministrator}
+              >
+                {elevationRequesting
+                  ? 'در حال درخواست دسترسی...'
+                  : 'اجرای مجدد با دسترسی Administrator'}
+              </button>
+            </div>
+          )}
+
+          {elevationError && (
+            <div className="inline-error">
+              {elevationError}
+            </div>
+          )}
 
           <button
             className={

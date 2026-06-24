@@ -2040,3 +2040,46 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+/* Administrator elevation */
+.elevation-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 18px 0 4px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 204, 0, 0.24);
+  background: rgba(255, 204, 0, 0.06);
+}
+
+.elevation-panel > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.elevation-panel strong {
+  font-size: 0.92rem;
+}
+
+.elevation-panel span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.7;
+}
+
+.elevation-panel .secondary-button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 760px) {
+  .elevation-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .elevation-panel .secondary-button {
+    width: 100%;
+  }
+}

@@ -16,6 +16,11 @@ contextBridge.exposeInMainWorld(
         ipcRenderer.invoke(
           'system:get-privilege-status',
         ),
+
+      relaunchAsAdministrator: () =>
+        ipcRenderer.invoke(
+          'system:relaunch-as-administrator',
+        ),
     },
 
     engine: {

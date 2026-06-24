@@ -65,6 +65,10 @@ const {
   getWindowsPrivilegeStatus,
 } = require('./windows-privilege.cjs')
 
+const {
+  relaunchAsAdministrator,
+} = require('./windows-elevation.cjs')
+
 const execFileAsync =
   promisify(execFile)
 
@@ -214,6 +218,61 @@ function registerIpcHandlers() {
     'system:get-privilege-status',
     async () => {
       return getWindowsPrivilegeStatus()
+    },
+  )
+
+  ipcMain.handle(
+    'system:relaunch-as-administrator',
+    async () => {
+      const privilege =
+        await getWindowsPrivilegeStatus()
+
+      if (
+        privilege.supported &&
+        privilege.isAdministrator
+      ) {
+        return {
+          success: true,
+          launched: false,
+          alreadyAdministrator: true,
+          error: null,
+        }
+      }
+
+      try {
+        const result =
+          await relaunchAsAdministrator({
+            isDevelopment,
+            appPath:
+              app.getAppPath(),
+            executablePath:
+              process.execPath,
+          })
+
+        if (
+          result.success &&
+          result.launched
+        ) {
+          setTimeout(() => {
+            app.quit()
+          }, 700)
+        }
+
+        return {
+          ...result,
+          alreadyAdministrator: false,
+        }
+      } catch (error) {
+        return {
+          success: false,
+          launched: false,
+          alreadyAdministrator: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'اجرای مجدد با دسترسی Administrator ناموفق بود.',
+        }
+      }
     },
   )
 

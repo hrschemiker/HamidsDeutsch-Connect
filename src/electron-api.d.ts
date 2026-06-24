@@ -174,6 +174,13 @@ type CheckServerConfigResult = {
   error: string | null
 }
 
+type ElevationResult = {
+  success: boolean
+  launched: boolean
+  alreadyAdministrator: boolean
+  error: string | null
+}
+
 type WindowsPrivilegeStatus = {
   supported: boolean
   isAdministrator: boolean
@@ -205,6 +212,9 @@ declare global {
       system: {
         getPrivilegeStatus: () =>
           Promise<WindowsPrivilegeStatus>
+
+        relaunchAsAdministrator: () =>
+          Promise<ElevationResult>
       }
 
       engine: {
