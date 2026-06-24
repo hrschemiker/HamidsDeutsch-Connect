@@ -21,6 +21,7 @@ import { useWindowsPrivilege } from './system/use-windows-privilege'
 import { useWindowsElevation } from './system/use-windows-elevation'
 import { useRescueSettings } from './rescue/use-rescue-settings'
 import { useConnectionSettings } from './settings/use-connection-settings'
+import { useConnectionDiagnostics } from './diagnostics/use-connection-diagnostics'
 import './App.css'
 
 type PageId =
@@ -127,6 +128,7 @@ function App() {
   const windowsElevation = useWindowsElevation()
   const rescueSettings = useRescueSettings()
   const connectionSettings = useConnectionSettings()
+  const diagnostics = useConnectionDiagnostics()
 
   const connectionVerified =
     engineProcess.status.connectionMode === 'tun'
@@ -342,6 +344,9 @@ function App() {
             return {
               success: true as const,
               fatal: false as const,
+              mode: 'tun' as const,
+              exitIp:
+                currentIp.ip,
               error: null,
             }
           }
@@ -442,8 +447,90 @@ function App() {
     return {
       success: true as const,
       fatal: false as const,
+      mode:
+        'system-proxy' as const,
+      exitIp:
+        finalVerification.proxyIp ??
+        null,
       error: null,
     }
+  }
+
+  function recordAttempt(
+    node: SafeServerNode,
+  ) {
+    diagnostics.addEvent({
+      level: 'info',
+      type:
+        'connection-attempt',
+      message:
+        'آزمایش اتصال واقعی به سرور آغاز شد.',
+      serverName:
+        node.name,
+      subscriptionName:
+        node.subscriptionName,
+      mode: null,
+      latencyMs:
+        latency.results[node.id]
+          ?.latencyMs ??
+        null,
+    })
+  }
+
+  function recordResult(
+    node: SafeServerNode,
+    result:
+      | {
+          success: true
+          mode:
+            | 'tun'
+            | 'system-proxy'
+          exitIp:
+            | string
+            | null
+        }
+      | {
+          success: false
+          error:
+            | string
+            | null
+        },
+  ) {
+    const latencyMs =
+      latency.results[node.id]
+        ?.latencyMs ??
+      null
+
+    if (result.success) {
+      diagnostics.beginSession({
+        serverName:
+          node.name,
+        subscriptionName:
+          node.subscriptionName,
+        mode:
+          result.mode,
+        latencyMs,
+        exitIp:
+          result.exitIp,
+      })
+
+      return
+    }
+
+    diagnostics.addEvent({
+      level: 'error',
+      type:
+        'connection-failure',
+      message:
+        result.error ??
+        'اتصال واقعی برقرار نشد.',
+      serverName:
+        node.name,
+      subscriptionName:
+        node.subscriptionName,
+      mode: null,
+      latencyMs,
+    })
   }
 
   async function prepareAndStart(
@@ -455,8 +542,15 @@ function App() {
       await engineProcess.stop()
     }
 
+    recordAttempt(node)
+
     const result =
       await attemptServerConnection(node)
+
+    recordResult(
+      node,
+      result,
+    )
 
     if (!result.success) {
       setConnectionActionError(
@@ -556,10 +650,17 @@ function App() {
         'هیچ‌کدام از سرورها اتصال واقعی برقرار نکردند.'
 
       for (const node of candidates) {
+        recordAttempt(node)
+
         const result =
           await attemptServerConnection(
             node,
           )
+
+        recordResult(
+          node,
+          result,
+        )
 
         if (result.success) {
           return
@@ -600,6 +701,10 @@ function App() {
     connectionWatchdogBusyRef.current = true
     setConnectionWatchdogMessage(
       'اتصال قطع شد؛ در حال بازیابی خودکار...',
+    )
+
+    diagnostics.endSession(
+      'connection-lost',
     )
 
     try {
@@ -658,6 +763,10 @@ function App() {
       setConnectionActionError(result.error)
       return
     }
+
+    diagnostics.endSession(
+      'manual',
+    )
 
     ipVerification.reset()
     setTunVerified(false)
@@ -1050,8 +1159,31 @@ function App() {
               }
             />
           )}
-          {activePage === 'statistics' && <StatisticsPage />}
-          {activePage === 'logs' && <LogsPage />}
+          {activePage === 'statistics' && (
+            <StatisticsPage
+              summary={
+                diagnostics.summary
+              }
+              sessions={
+                diagnostics.sessions
+              }
+            />
+          )}
+          {activePage === 'logs' && (
+            <LogsPage
+              events={
+                diagnostics.events
+              }
+              onClear={
+                diagnostics.clear
+              }
+              onCopyReport={async () => {
+                await navigator.clipboard.writeText(
+                  diagnostics.exportReport(),
+                )
+              }}
+            />
+          )}
           {activePage === 'settings' && (
             <SettingsPage
               settings={
@@ -3376,31 +3508,69 @@ function RescuePage({
   )
 }
 
-function StatisticsPage() {
+function StatisticsPage({
+  summary,
+  sessions,
+}: {
+  summary: {
+    successfulSessions: number
+    failedAttempts: number
+    totalDurationMs: number
+    tunSessions: number
+  }
+  sessions: Array<{
+    id: string
+    startedAt: string
+    endedAt: string | null
+    serverName: string
+    subscriptionName: string
+    mode:
+      | 'tun'
+      | 'system-proxy'
+    latencyMs: number | null
+    exitIp: string | null
+    endReason:
+      | 'manual'
+      | 'connection-lost'
+      | 'application'
+      | null
+  }>
+}) {
+  const recentSessions =
+    sessions.slice(0, 10)
+
   return (
     <div className="page-stack">
       <section className="quick-statistics">
         <article className="statistic-card">
           <span className="statistic-icon">
-            ↓
+            ✓
           </span>
           <div>
             <span className="statistic-label">
-              دانلود
+              اتصال موفق
             </span>
-            <strong>۰ مگابایت</strong>
+            <strong>
+              {summary.successfulSessions.toLocaleString(
+                'fa-IR',
+              )}
+            </strong>
           </div>
         </article>
 
         <article className="statistic-card">
           <span className="statistic-icon">
-            ↑
+            !
           </span>
           <div>
             <span className="statistic-label">
-              آپلود
+              تلاش ناموفق
             </span>
-            <strong>۰ مگابایت</strong>
+            <strong>
+              {summary.failedAttempts.toLocaleString(
+                'fa-IR',
+              )}
+            </strong>
           </div>
         </article>
 
@@ -3410,69 +3580,378 @@ function StatisticsPage() {
           </span>
           <div>
             <span className="statistic-label">
-              مدت اتصال
+              مجموع زمان اتصال
             </span>
-            <strong>۰۰:۰۰:۰۰</strong>
+            <strong>
+              {formatDuration(
+                summary.totalDurationMs,
+              )}
+            </strong>
+          </div>
+        </article>
+
+        <article className="statistic-card">
+          <span className="statistic-icon">
+            T
+          </span>
+          <div>
+            <span className="statistic-label">
+              نشست TUN
+            </span>
+            <strong>
+              {summary.tunSessions.toLocaleString(
+                'fa-IR',
+              )}
+            </strong>
           </div>
         </article>
       </section>
 
-      <EmptyPage
-        icon="▥"
-        title="هنوز آماری وجود ندارد"
-        description="آمار این بخش فقط از داده‌های واقعی هسته اتصال خوانده خواهد شد؛ هیچ عدد ساختگی نمایش داده نمی‌شود."
-      />
+      <section className="panel-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">
+              Connection History
+            </span>
+            <h3>
+              نشست‌های اخیر
+            </h3>
+          </div>
+
+          <span className="count-badge">
+            {sessions.length.toLocaleString(
+              'fa-IR',
+            )} نشست
+          </span>
+        </div>
+
+        {recentSessions.length === 0 ? (
+          <EmptyPage
+            icon="▥"
+            title="هنوز نشستی ثبت نشده"
+            description="پس از اولین اتصال واقعی، سرور، روش اتصال و مدت نشست در این بخش نمایش داده می‌شود."
+          />
+        ) : (
+          <div className="diagnostic-session-list">
+            {recentSessions.map(
+              (session) => (
+                <article
+                  className="diagnostic-session-row"
+                  key={
+                    session.id
+                  }
+                >
+                  <div>
+                    <strong>
+                      {session.serverName}
+                    </strong>
+                    <span>
+                      {
+                        session.subscriptionName
+                      }
+                    </span>
+                  </div>
+
+                  <div className="diagnostic-session-meta">
+                    <span>
+                      {session.mode ===
+                      'tun'
+                        ? 'TUN'
+                        : 'System Proxy'}
+                    </span>
+                    <span>
+                      {formatSessionDuration(
+                        session.startedAt,
+                        session.endedAt,
+                      )}
+                    </span>
+                    <span>
+                      {session.latencyMs !==
+                      null
+                        ? `${session.latencyMs.toLocaleString(
+                            'fa-IR',
+                          )} ms`
+                        : 'بدون پینگ'}
+                    </span>
+                    <span>
+                      {session.endedAt
+                        ? formatLocalDateTime(
+                            session.endedAt,
+                          )
+                        : 'در حال اتصال'}
+                    </span>
+                  </div>
+                </article>
+              ),
+            )}
+          </div>
+        )}
+      </section>
     </div>
   )
 }
 
-function LogsPage() {
+function LogsPage({
+  events,
+  onClear,
+  onCopyReport,
+}: {
+  events: Array<{
+    id: string
+    timestamp: string
+    level:
+      | 'info'
+      | 'success'
+      | 'warning'
+      | 'error'
+    type: string
+    message: string
+    serverName: string | null
+    subscriptionName: string | null
+    mode:
+      | 'tun'
+      | 'system-proxy'
+      | null
+    latencyMs: number | null
+  }>
+  onClear: () => void
+  onCopyReport: () =>
+    Promise<void>
+}) {
+  const [copied, setCopied] =
+    useState(false)
+
+  async function copyReport() {
+    await onCopyReport()
+    setCopied(true)
+
+    window.setTimeout(() => {
+      setCopied(false)
+    }, 1800)
+  }
+
   return (
     <section className="panel-card log-panel">
       <div className="panel-heading">
         <div>
           <span className="panel-kicker">
-            Application Log
+            Application Diagnostics
           </span>
-          <h3>گزارش برنامه</h3>
+          <h3>
+            گزارش اتصال
+          </h3>
         </div>
 
-        <button
-          className="text-button"
-          type="button"
-        >
-          پاک‌کردن
-        </button>
-      </div>
+        <div className="log-actions">
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={
+              events.length === 0
+            }
+            onClick={() => {
+              void copyReport()
+            }}
+          >
+            {copied
+              ? 'کپی شد'
+              : 'کپی گزارش فنی'}
+          </button>
 
-      <div
-        className="log-viewer"
-        dir="ltr"
-      >
-        <div>
-          <span>INFO</span>
-          <p>
-            HamidsDeutsch Connect interface
-            started.
-          </p>
-        </div>
-
-        <div>
-          <span>INFO</span>
-          <p>
-            Electron secure shell is ready.
-          </p>
-        </div>
-
-        <div>
-          <span>WAIT</span>
-          <p>
-            Real VPN connection has not been
-            enabled yet.
-          </p>
+          <button
+            className="text-button"
+            type="button"
+            disabled={
+              events.length === 0
+            }
+            onClick={onClear}
+          >
+            پاک‌کردن
+          </button>
         </div>
       </div>
+
+      <p className="panel-description">
+        این گزارش شامل URI، UUID، رمز، کلید یا
+        نشانی اشتراک نیست و فقط وضعیت عملیاتی اتصال
+        را نگه می‌دارد.
+      </p>
+
+      {events.length === 0 ? (
+        <EmptyPage
+          icon="▤"
+          title="گزارشی ثبت نشده"
+          description="تلاش‌های اتصال و بازیابی خودکار پس از استفاده از برنامه در این بخش نمایش داده می‌شوند."
+        />
+      ) : (
+        <div className="diagnostic-log-list">
+          {events.map(
+            (event) => (
+              <article
+                className={`diagnostic-log-row diagnostic-log-${event.level}`}
+                key={event.id}
+              >
+                <div className="diagnostic-log-level">
+                  {formatDiagnosticLevel(
+                    event.level,
+                  )}
+                </div>
+
+                <div className="diagnostic-log-content">
+                  <strong>
+                    {event.message}
+                  </strong>
+
+                  <div>
+                    <span>
+                      {formatLocalDateTime(
+                        event.timestamp,
+                      )}
+                    </span>
+
+                    {event.serverName && (
+                      <span>
+                        {event.serverName}
+                      </span>
+                    )}
+
+                    {event.subscriptionName && (
+                      <span>
+                        {
+                          event.subscriptionName
+                        }
+                      </span>
+                    )}
+
+                    {event.mode && (
+                      <span>
+                        {event.mode ===
+                        'tun'
+                          ? 'TUN'
+                          : 'System Proxy'}
+                      </span>
+                    )}
+
+                    {event.latencyMs !==
+                      null && (
+                      <span>
+                        {event.latencyMs.toLocaleString(
+                          'fa-IR',
+                        )}{' '}
+                        ms
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </article>
+            ),
+          )}
+        </div>
+      )}
     </section>
+  )
+}
+
+function formatDiagnosticLevel(
+  level:
+    | 'info'
+    | 'success'
+    | 'warning'
+    | 'error',
+) {
+  if (level === 'success') {
+    return 'موفق'
+  }
+
+  if (level === 'warning') {
+    return 'هشدار'
+  }
+
+  if (level === 'error') {
+    return 'خطا'
+  }
+
+  return 'اطلاع'
+}
+
+function formatDuration(
+  durationMs: number,
+) {
+  const totalSeconds =
+    Math.floor(
+      durationMs / 1000,
+    )
+
+  const hours =
+    Math.floor(
+      totalSeconds / 3600,
+    )
+
+  const minutes =
+    Math.floor(
+      (
+        totalSeconds % 3600
+      ) / 60,
+    )
+
+  const seconds =
+    totalSeconds % 60
+
+  return [
+    hours,
+    minutes,
+    seconds,
+  ]
+    .map((value) =>
+      value
+        .toString()
+        .padStart(2, '0'),
+    )
+    .join(':')
+    .replace(
+      /\d/g,
+      (digit) =>
+        '۰۱۲۳۴۵۶۷۸۹'[
+          Number(digit)
+        ],
+    )
+}
+
+function formatSessionDuration(
+  startedAt: string,
+  endedAt: string | null,
+) {
+  const started =
+    new Date(
+      startedAt,
+    ).getTime()
+
+  const ended =
+    endedAt
+      ? new Date(
+          endedAt,
+        ).getTime()
+      : Date.now()
+
+  return formatDuration(
+    Math.max(
+      0,
+      ended - started,
+    ),
+  )
+}
+
+function formatLocalDateTime(
+  value: string,
+) {
+  return new Intl.DateTimeFormat(
+    'fa-IR',
+    {
+      dateStyle: 'short',
+      timeStyle: 'medium',
+    },
+  ).format(
+    new Date(value),
   )
 }
 

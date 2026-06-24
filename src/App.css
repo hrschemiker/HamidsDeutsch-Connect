@@ -2316,3 +2316,129 @@ button {
     width: 100%;
   }
 }
+
+/* Diagnostics and connection history */
+.diagnostic-session-list,
+.diagnostic-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diagnostic-session-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.diagnostic-session-row:last-child {
+  border-bottom: 0;
+}
+
+.diagnostic-session-row > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.diagnostic-session-row span,
+.diagnostic-log-content span {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.diagnostic-session-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 14px;
+}
+
+.log-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.diagnostic-log-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 13px;
+  padding: 13px 14px;
+  border: 1px solid var(--border-color);
+  background: rgba(15, 23, 42, 0.36);
+}
+
+.diagnostic-log-level {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  align-self: flex-start;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.diagnostic-log-success {
+  border-inline-start: 3px solid rgba(34, 197, 94, 0.8);
+}
+
+.diagnostic-log-warning {
+  border-inline-start: 3px solid rgba(245, 158, 11, 0.8);
+}
+
+.diagnostic-log-error {
+  border-inline-start: 3px solid rgba(239, 68, 68, 0.8);
+}
+
+.diagnostic-log-info {
+  border-inline-start: 3px solid rgba(59, 130, 246, 0.8);
+}
+
+.diagnostic-log-content {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.diagnostic-log-content strong {
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.diagnostic-log-content > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 13px;
+}
+
+@media (max-width: 760px) {
+  .diagnostic-session-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .diagnostic-session-meta {
+    justify-content: flex-start;
+  }
+
+  .log-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .diagnostic-log-row {
+    grid-template-columns: 1fr;
+  }
+
+  .diagnostic-log-level {
+    justify-self: flex-start;
+    padding: 4px 9px;
+  }
+}
