@@ -1,11 +1,117 @@
-const { app, BrowserWindow, shell } = require('electron')
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  shell,
+} = require('electron')
+
 const path = require('node:path')
+const fs = require('node:fs')
+const { execFile } = require('node:child_process')
+const { promisify } = require('node:util')
+
+const execFileAsync = promisify(execFile)
 
 const isDevelopment = !app.isPackaged
+
 let mainWindow = null
 
 console.log('[Electron] Main process started')
 console.log('[Electron] Development mode:', isDevelopment)
+
+function getEnginePath() {
+  if (isDevelopment) {
+    return path.join(
+      __dirname,
+      '..',
+      'resources',
+      'sing-box',
+      'sing-box.exe',
+    )
+  }
+
+  return path.join(
+    process.resourcesPath,
+    'sing-box',
+    'sing-box.exe',
+  )
+}
+
+async function getEngineInfo() {
+  const enginePath = getEnginePath()
+
+  console.log('[Engine] Checking path:', enginePath)
+
+  const exists = fs.existsSync(enginePath)
+
+  console.log('[Engine] File exists:', exists)
+
+  if (!exists) {
+    return {
+      installed: false,
+      healthy: false,
+      path: enginePath,
+      version: null,
+      architecture: null,
+      error: 'فایل sing-box.exe پیدا نشد.',
+    }
+  }
+
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      enginePath,
+      ['version'],
+      {
+        windowsHide: true,
+        timeout: 10000,
+        encoding: 'utf8',
+      },
+    )
+
+    const output = `${stdout}\n${stderr}`.trim()
+
+    const versionMatch = output.match(
+      /sing-box version\s+([^\s]+)/i,
+    )
+
+    const environmentMatch = output.match(
+      /Environment:\s+[^\s]+\s+([^\r\n]+)/i,
+    )
+
+    return {
+      installed: true,
+      healthy: true,
+      path: enginePath,
+      version: versionMatch?.[1] ?? 'نامشخص',
+      architecture:
+        environmentMatch?.[1]?.trim() ?? null,
+      error: null,
+    }
+  } catch (error) {
+    console.error(
+      '[Engine] Version check failed:',
+      error,
+    )
+
+    return {
+      installed: true,
+      healthy: false,
+      path: enginePath,
+      version: null,
+      architecture: null,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'اجرای sing-box با خطا مواجه شد.',
+    }
+  }
+}
+
+function registerIpcHandlers() {
+  ipcMain.handle('engine:get-info', async () => {
+    return getEngineInfo()
+  })
+}
 
 function createMainWindow() {
   console.log('[Electron] Creating main window...')
@@ -15,10 +121,7 @@ function createMainWindow() {
     height: 760,
     minWidth: 960,
     minHeight: 640,
-
-    // فعلاً پنجره را از ابتدا نشان می‌دهیم
     show: true,
-
     backgroundColor: '#090b10',
     title: 'HamidsDeutsch Connect',
     autoHideMenuBar: true,
@@ -35,7 +138,9 @@ function createMainWindow() {
   mainWindow.webContents.on(
     'did-finish-load',
     () => {
-      console.log('[Electron] Page loaded successfully')
+      console.log(
+        '[Electron] Page loaded successfully',
+      )
     },
   )
 
@@ -47,10 +152,21 @@ function createMainWindow() {
       errorDescription,
       validatedURL,
     ) => {
-      console.error('[Electron] Page failed to load')
-      console.error('Error code:', errorCode)
-      console.error('Description:', errorDescription)
-      console.error('URL:', validatedURL)
+      console.error(
+        '[Electron] Page failed to load',
+      )
+      console.error(
+        'Error code:',
+        errorCode,
+      )
+      console.error(
+        'Description:',
+        errorDescription,
+      )
+      console.error(
+        'URL:',
+        validatedURL,
+      )
     },
   )
 
@@ -64,20 +180,23 @@ function createMainWindow() {
     },
   )
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https://')) {
-      shell.openExternal(url)
-    }
+  mainWindow.webContents.setWindowOpenHandler(
+    ({ url }) => {
+      if (url.startsWith('https://')) {
+        void shell.openExternal(url)
+      }
 
-    return {
-      action: 'deny',
-    }
-  })
+      return {
+        action: 'deny',
+      }
+    },
+  )
 
   mainWindow.webContents.on(
     'will-navigate',
     (event, url) => {
-      const developmentUrl = 'http://localhost:5173'
+      const developmentUrl =
+        'http://localhost:5173'
 
       if (
         isDevelopment &&
@@ -95,7 +214,7 @@ function createMainWindow() {
       '[Electron] Loading http://localhost:5173',
     )
 
-    mainWindow.loadURL(
+    void mainWindow.loadURL(
       'http://localhost:5173',
     )
   } else {
@@ -111,7 +230,7 @@ function createMainWindow() {
       productionFile,
     )
 
-    mainWindow.loadFile(productionFile)
+    void mainWindow.loadFile(productionFile)
   }
 
   mainWindow.on('closed', () => {
@@ -121,6 +240,8 @@ function createMainWindow() {
 
 app.whenReady().then(() => {
   console.log('[Electron] Application is ready')
+
+  registerIpcHandlers()
   createMainWindow()
 
   app.on('activate', () => {
@@ -136,19 +257,4 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
-})
-
-app.on('certificate-error', (
-  event,
-  _webContents,
-  url,
-  error,
-) => {
-  console.error(
-    '[Electron] Certificate error:',
-    url,
-    error,
-  )
-
-  event.preventDefault()
 })

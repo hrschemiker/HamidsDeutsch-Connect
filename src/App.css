@@ -1103,3 +1103,8 @@ button {
   margin: 18px 0;
   text-align: center;
 }
+
+.engine-status-dot-ready {
+  background: var(--green);
+  box-shadow: 0 0 0 4px var(--green-soft);
+}

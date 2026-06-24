@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent } from 'react'
 import { useDirectDomains } from './domain/use-direct-domains'
+import { useEngineInfo } from './engine/use-engine-info'
 import './App.css'
 
 type PageId =
@@ -44,6 +45,7 @@ function App() {
   const [activePage, setActivePage] = useState<PageId>('home')
   const [isConnected, setIsConnected] = useState(false)
   const directDomains = useDirectDomains()
+  const engine = useEngineInfo()
 
   function toggleConnection() {
     setIsConnected((currentValue) => !currentValue)
@@ -83,12 +85,26 @@ function App() {
 
         <div className="sidebar-footer">
           <div className="engine-status">
-            <span className="engine-status-dot" />
-            <div>
-              <strong>هسته برنامه</strong>
-              <span>هنوز نصب نشده</span>
-            </div>
-          </div>
+  <span
+    className={
+      engine.info?.healthy
+        ? 'engine-status-dot engine-status-dot-ready'
+        : 'engine-status-dot'
+    }
+  />
+
+  <div>
+    <strong>هسته برنامه</strong>
+
+    <span>
+      {engine.loading
+        ? 'در حال بررسی...'
+        : engine.info?.healthy
+          ? `sing-box ${engine.info.version}`
+          : 'در دسترس نیست'}
+    </span>
+  </div>
+</div>
 
           <div className="version">نسخه 0.1.0</div>
         </div>
@@ -116,12 +132,13 @@ function App() {
         <main className="content">
           {activePage === 'home' && (
             <HomePage
-              isConnected={isConnected}
-              directDomains={directDomains.domains}
-              onToggleConnection={toggleConnection}
-              onOpenDirectSites={() => setActivePage('direct-sites')}
-              onOpenRescue={() => setActivePage('rescue')}
-            />
+  isConnected={isConnected}
+  directDomains={directDomains.domains}
+  engineInfo={engine.info}
+  onToggleConnection={toggleConnection}
+  onOpenDirectSites={() => setActivePage('direct-sites')}
+  onOpenRescue={() => setActivePage('rescue')}
+/>
           )}
 
           {activePage === 'servers' && (
@@ -171,6 +188,16 @@ function App() {
 type HomePageProps = {
   isConnected: boolean
   directDomains: string[]
+
+  engineInfo: {
+    installed: boolean
+    healthy: boolean
+    path: string
+    version: string | null
+    architecture: string | null
+    error: string | null
+  } | null
+
   onToggleConnection: () => void
   onOpenDirectSites: () => void
   onOpenRescue: () => void
@@ -179,6 +206,7 @@ type HomePageProps = {
 function HomePage({
   isConnected,
   directDomains,
+  engineInfo,
   onToggleConnection,
   onOpenDirectSites,
   onOpenRescue,
@@ -296,7 +324,20 @@ function HomePage({
           <div className="connection-details">
             <DetailRow label="حالت اتصال" value="TUN" />
             <DetailRow label="روش انتخاب" value="خودکار" />
-            <DetailRow label="هسته شبکه" value="نصب نشده" muted />
+            <DetailRow
+  label="هسته شبکه"
+  value={
+    engineInfo?.healthy
+      ? `sing-box ${engineInfo.version}`
+      : 'در دسترس نیست'
+  }
+  muted={!engineInfo?.healthy}
+/>
+<DetailRow
+  label="معماری هسته"
+  value={engineInfo?.architecture ?? '—'}
+  muted={!engineInfo?.architecture}
+/>
             <DetailRow label="بررسی IP" value="در انتظار اتصال" muted />
           </div>
         </article>
