@@ -1653,3 +1653,234 @@ button {
     flex-direction: column;
   }
 }
+
+/* Compact vertical server list */
+
+.server-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.server-list-item {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.server-list-item:hover {
+  border-color: rgba(230, 184, 79, 0.28);
+}
+
+.server-list-item-fastest {
+  border-color: rgba(230, 184, 79, 0.46);
+  box-shadow: 0 0 0 1px rgba(230, 184, 79, 0.06);
+}
+
+.server-list-item-selected {
+  border-color: rgba(54, 179, 126, 0.48);
+  box-shadow: 0 0 0 2px rgba(54, 179, 126, 0.06);
+}
+
+.server-list-item-invalid {
+  opacity: 0.68;
+}
+
+.server-list-summary {
+  display: grid;
+  width: 100%;
+  min-height: 68px;
+  align-items: center;
+  grid-template-columns:
+    34px minmax(180px, 1fr)
+    auto auto auto 24px;
+  gap: 12px;
+  padding: 12px 15px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+.server-list-summary:hover {
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.server-list-rank {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--gold-soft);
+  color: var(--gold);
+  font-size: 11px;
+}
+
+.server-list-name {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.server-list-name strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-list-name small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-list-status,
+.server-selected-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.server-status-ready,
+.server-status-online {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.server-status-checking,
+.server-status-pending {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+
+.server-status-error,
+.server-status-offline {
+  background: var(--red-soft);
+  color: #ef7777;
+}
+
+.server-selected-label {
+  background: rgba(54, 179, 126, 0.09);
+  color: var(--green);
+}
+
+.server-expand-icon {
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.server-list-details {
+  padding: 0 15px 15px;
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.server-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 24px;
+  padding-top: 6px;
+}
+
+.server-list-details .server-information-row {
+  min-height: 40px;
+}
+
+.server-list-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.server-list-actions .select-server-button,
+.server-list-actions .inspect-subscription-button {
+  width: auto;
+  min-width: 170px;
+  margin-top: 0;
+}
+
+.config-check-result {
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid;
+  border-radius: 10px;
+}
+
+.config-check-result strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 9px;
+}
+
+.config-check-result p {
+  margin: 0;
+  font-size: 8px;
+  line-height: 1.7;
+}
+
+.config-check-result-success {
+  border-color: rgba(54, 179, 126, 0.28);
+  background: rgba(54, 179, 126, 0.06);
+  color: var(--green);
+}
+
+.config-check-result-error {
+  border-color: rgba(212, 70, 70, 0.28);
+  background: rgba(212, 70, 70, 0.06);
+  color: #ef7777;
+}
+
+@media (max-width: 900px) {
+  .server-list-summary {
+    grid-template-columns:
+      30px minmax(130px, 1fr)
+      auto auto 24px;
+  }
+
+  .server-selected-label {
+    display: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .server-list-summary {
+    grid-template-columns: 28px minmax(0, 1fr) auto 22px;
+    gap: 8px;
+    padding: 11px;
+  }
+
+  .server-list-summary .server-list-status {
+    display: none;
+  }
+
+  .server-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .server-list-actions {
+    flex-direction: column;
+  }
+
+  .server-list-actions .select-server-button,
+  .server-list-actions .inspect-subscription-button {
+    width: 100%;
+    min-width: 0;
+  }
+}

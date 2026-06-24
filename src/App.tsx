@@ -14,6 +14,7 @@ import {
 } from './servers/use-server-nodes'
 import { useSelectedServer } from './servers/use-selected-server'
 import { useServerLatency } from './servers/use-server-latency'
+import { useServerConfigCheck } from './servers/use-server-config-check'
 import './App.css'
 
 type PageId =
@@ -88,6 +89,7 @@ function App() {
 
   const selectedServer = useSelectedServer()
   const latency = useServerLatency(serverNodes.nodes)
+  const configCheck = useServerConfigCheck()
 
   const automaticLatencyTestKey = useRef<string | null>(null)
 
@@ -109,6 +111,13 @@ function App() {
           selectedServer.selectedServer.id
         ] ?? null
       : null
+
+  const activeSubscriptionName =
+    subscriptions.subscriptions.find(
+      (subscription) =>
+        subscription.id ===
+        serverNodes.subscriptionId,
+    )?.name ?? 'اشتراک فعال'
 
   useEffect(() => {
     if (
@@ -315,6 +324,30 @@ function App() {
               fastestServerId={
                 latency.fastestServerId
               }
+              subscriptionId={
+                serverNodes.subscriptionId
+              }
+              subscriptionName={
+                activeSubscriptionName
+              }
+              directDomains={
+                directDomains.domains
+              }
+              configCheckingNodeId={
+                configCheck.checkingNodeId
+              }
+              configCheckResults={
+                configCheck.results
+              }
+              onCheckConfig={(nodeId) => {
+                void configCheck.checkConfig({
+                  subscriptionId:
+                    serverNodes.subscriptionId,
+                  nodeId,
+                  directDomains:
+                    directDomains.domains,
+                })
+              }}
               onTestLatency={() => {
                 void latency.testAll()
               }}
@@ -1491,6 +1524,12 @@ function ServersPage({
   latencyResults,
   latencyError,
   fastestServerId,
+  subscriptionId,
+  subscriptionName,
+  directDomains,
+  configCheckingNodeId,
+  configCheckResults,
+  onCheckConfig,
   onTestLatency,
   onSelectServer,
   onClearSelectedServer,
@@ -1507,6 +1546,26 @@ function ServersPage({
   >
   latencyError: string | null
   fastestServerId: string | null
+  subscriptionId: string | null
+  subscriptionName: string
+  directDomains: string[]
+  configCheckingNodeId: string | null
+  configCheckResults: Record<
+    string,
+    {
+      success: boolean
+      checkedAt: string
+      nodeId: string | null
+      protocol: string | null
+      server: string | null
+      serverPort: number | null
+      configPath: string | null
+      directDomainCount: number
+      stdout: string
+      error: string | null
+    }
+  >
+  onCheckConfig: (nodeId: string) => void
   onTestLatency: () => void
   onSelectServer: (
     server: PublicServer,
@@ -1514,18 +1573,16 @@ function ServersPage({
   onClearSelectedServer: () => void
   onOpenSubscriptions: () => void
 }) {
+  const [expandedServerId, setExpandedServerId] =
+    useState<string | null>(null)
+
   if (loading) {
     return (
       <section className="empty-state">
-        <div className="empty-state-icon">
-          ◌
-        </div>
-        <h2>
-          در حال دریافت سرورها
-        </h2>
+        <div className="empty-state-icon">◌</div>
+        <h2>در حال دریافت سرورها</h2>
         <p>
-          محتوای اشتراک در بخش امن برنامه
-          دریافت و تحلیل می‌شود.
+          محتوای اشتراک در بخش امن برنامه دریافت و تحلیل می‌شود.
         </p>
       </section>
     )
@@ -1534,14 +1591,9 @@ function ServersPage({
   if (error) {
     return (
       <section className="empty-state">
-        <div className="empty-state-icon">
-          !
-        </div>
-        <h2>
-          دریافت سرورها ناموفق بود
-        </h2>
+        <div className="empty-state-icon">!</div>
+        <h2>دریافت سرورها ناموفق بود</h2>
         <p>{error}</p>
-
         <button
           className="primary-button"
           type="button"
@@ -1569,6 +1621,86 @@ function ServersPage({
     (node) => node.valid,
   )
 
+  const sortedNodes = [...nodes].sort(
+    (firstNode, secondNode) => {
+      const firstResult =
+        latencyResults[firstNode.id]
+      const secondResult =
+        latencyResults[secondNode.id]
+
+      const firstRank =
+        firstResult?.reachable &&
+        typeof firstResult.latencyMs === 'number'
+          ? firstResult.latencyMs
+          : firstResult
+            ? Number.MAX_SAFE_INTEGER - 1
+            : Number.MAX_SAFE_INTEGER - 2
+
+      const secondRank =
+        secondResult?.reachable &&
+        typeof secondResult.latencyMs === 'number'
+          ? secondResult.latencyMs
+          : secondResult
+            ? Number.MAX_SAFE_INTEGER - 1
+            : Number.MAX_SAFE_INTEGER - 2
+
+      return firstRank - secondRank
+    },
+  )
+
+  function getServerStatus(
+    node: SafeServerNode,
+  ) {
+    const configResult =
+      configCheckResults[node.id]
+    const latencyResult =
+      latencyResults[node.id]
+
+    if (configCheckingNodeId === node.id) {
+      return {
+        label: 'در حال بررسی کانفیگ',
+        className: 'server-status-checking',
+      }
+    }
+
+    if (configResult?.success) {
+      return {
+        label: 'کانفیگ تأیید شد',
+        className: 'server-status-ready',
+      }
+    }
+
+    if (configResult && !configResult.success) {
+      return {
+        label: 'کانفیگ ناسازگار',
+        className: 'server-status-error',
+      }
+    }
+
+    if (latencyResult?.reachable) {
+      return {
+        label: 'در دسترس',
+        className: 'server-status-online',
+      }
+    }
+
+    if (latencyResult && !latencyResult.reachable) {
+      return {
+        label: 'پاسخ نداد',
+        className: 'server-status-offline',
+      }
+    }
+
+    return {
+      label: node.valid
+        ? 'آماده بررسی'
+        : 'اطلاعات ناقص',
+      className: node.valid
+        ? 'server-status-pending'
+        : 'server-status-error',
+    }
+  }
+
   return (
     <div className="page-stack">
       <section className="panel-card">
@@ -1577,7 +1709,7 @@ function ServersPage({
             <span className="panel-kicker">
               Subscription Nodes
             </span>
-            <h3>سرورهای استخراج‌شده</h3>
+            <h3>سرورها بر اساس سرعت</h3>
           </div>
 
           <div className="servers-heading-actions">
@@ -1593,16 +1725,14 @@ function ServersPage({
             >
               {latencyTesting
                 ? 'در حال تست همه...'
-                : 'تست پینگ همه'}
+                : 'تست دوباره پینگ'}
             </button>
 
             {selectedServerId && (
               <button
                 className="text-button"
                 type="button"
-                onClick={
-                  onClearSelectedServer
-                }
+                onClick={onClearSelectedServer}
               >
                 لغو انتخاب
               </button>
@@ -1611,10 +1741,8 @@ function ServersPage({
         </div>
 
         <p className="field-help">
-          اعداد نمایش‌داده‌شده زمان اتصال TCP
-          به پورت سرور هستند. UUID، رمزها و
-          کلیدهای اتصال در رابط قابل مشاهده
-          نیستند.
+          ردیف‌ها به‌صورت خودکار از سریع‌ترین به کندترین مرتب می‌شوند.
+          برای دیدن آدرس، پورت و سایر جزئیات روی هر ردیف بزن.
         </p>
 
         {latencyError && (
@@ -1624,144 +1752,189 @@ function ServersPage({
         )}
       </section>
 
-      <section className="server-grid">
-        {nodes.map((node) => {
+      <section className="server-list">
+        {sortedNodes.map((node) => {
           const latencyResult =
-            latencyResults[node.id] ??
-            null
-
+            latencyResults[node.id] ?? null
+          const configResult =
+            configCheckResults[node.id] ?? null
           const isFastest =
             fastestServerId === node.id
+          const isSelected =
+            selectedServerId === node.id
+          const isExpanded =
+            expandedServerId === node.id
+          const status =
+            getServerStatus(node)
 
           return (
             <article
               className={[
-                'server-card',
-                !node.valid
-                  ? 'server-card-invalid'
-                  : '',
-                selectedServerId ===
-                node.id
-                  ? 'server-card-selected'
-                  : '',
+                'server-list-item',
                 isFastest
-                  ? 'server-card-fastest'
+                  ? 'server-list-item-fastest'
+                  : '',
+                isSelected
+                  ? 'server-list-item-selected'
+                  : '',
+                !node.valid
+                  ? 'server-list-item-invalid'
                   : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
               key={node.id}
             >
-              <div className="server-card-header">
-                <div className="server-protocol-icon">
-                  {formatProtocolShortName(
-                    node.protocol,
-                  )}
-                </div>
+              <button
+                className="server-list-summary"
+                type="button"
+                aria-expanded={isExpanded}
+                onClick={() => {
+                  setExpandedServerId(
+                    isExpanded ? null : node.id,
+                  )
+                }}
+              >
+                <span className="server-list-rank">
+                  {isFastest ? '★' : '◉'}
+                </span>
 
-                <div className="server-title">
-                  <strong>
-                    {node.name}
-                  </strong>
-                  <span>
-                    {formatProtocolNameForUi(
-                      node.protocol,
-                    )}
-                  </span>
-                </div>
+                <span className="server-list-name">
+                  <strong>{node.name}</strong>
+                  <small>{subscriptionName}</small>
+                </span>
 
-                <div className="server-card-badges">
-                  {isFastest && (
-                    <span className="fastest-server-badge">
-                      سریع‌ترین
-                    </span>
-                  )}
-
-                  <span
-                    className={
-                      node.valid
-                        ? 'server-valid-badge'
-                        : 'server-invalid-badge'
-                    }
-                  >
-                    {node.valid
-                      ? 'آماده بررسی'
-                      : 'ناقص'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="server-latency-row">
-                <span>تأخیر</span>
                 <LatencyBadge
                   latencyMs={
-                    latencyResult
-                      ?.latencyMs ?? null
+                    latencyResult?.latencyMs ?? null
                   }
                   testing={
                     latencyTesting &&
                     !latencyResult
                   }
                 />
-              </div>
 
-              <div className="server-information">
-                <ServerInformationRow
-                  label="آدرس"
-                  value={
-                    node.host ?? 'نامشخص'
-                  }
-                  leftToRight
-                />
+                <span
+                  className={`server-list-status ${status.className}`}
+                >
+                  {status.label}
+                </span>
 
-                <ServerInformationRow
-                  label="پورت"
-                  value={
-                    node.port
-                      ? String(node.port)
-                      : 'نامشخص'
-                  }
-                />
+                {isSelected && (
+                  <span className="server-selected-label">
+                    انتخاب‌شده
+                  </span>
+                )}
 
-                <ServerInformationRow
-                  label="انتقال"
-                  value={
-                    node.transport ??
-                    'نامشخص'
-                  }
-                />
-
-                <ServerInformationRow
-                  label="امنیت"
-                  value={
-                    node.tls
-                      ? node.security ??
-                        'TLS'
-                      : 'بدون TLS'
-                  }
-                />
-              </div>
-
-              <button
-                className={
-                  selectedServerId ===
-                  node.id
-                    ? 'select-server-button select-server-button-selected'
-                    : 'select-server-button'
-                }
-                type="button"
-                disabled={!node.valid}
-                onClick={() => {
-                  onSelectServer(
-                    toPublicServer(node),
-                  )
-                }}
-              >
-                {selectedServerId ===
-                node.id
-                  ? 'سرور انتخاب‌شده'
-                  : 'انتخاب این سرور'}
+                <span className="server-expand-icon">
+                  {isExpanded ? '⌃' : '⌄'}
+                </span>
               </button>
+
+              {isExpanded && (
+                <div className="server-list-details">
+                  <div className="server-detail-grid">
+                    <ServerInformationRow
+                      label="آدرس"
+                      value={node.host ?? 'نامشخص'}
+                      leftToRight
+                    />
+                    <ServerInformationRow
+                      label="پورت"
+                      value={
+                        node.port
+                          ? String(node.port)
+                          : 'نامشخص'
+                      }
+                    />
+                    <ServerInformationRow
+                      label="پروتکل"
+                      value={
+                        formatProtocolNameForUi(
+                          node.protocol,
+                        )
+                      }
+                    />
+                    <ServerInformationRow
+                      label="انتقال"
+                      value={
+                        node.transport ?? 'نامشخص'
+                      }
+                    />
+                    <ServerInformationRow
+                      label="امنیت"
+                      value={
+                        node.tls
+                          ? node.security ?? 'TLS'
+                          : 'بدون TLS'
+                      }
+                    />
+                    <ServerInformationRow
+                      label="دامنه‌های مستقیم"
+                      value={`${directDomains.length} دامنه`}
+                    />
+                  </div>
+
+                  {configResult && (
+                    <div
+                      className={
+                        configResult.success
+                          ? 'config-check-result config-check-result-success'
+                          : 'config-check-result config-check-result-error'
+                      }
+                    >
+                      <strong>
+                        {configResult.success
+                          ? 'sing-box کانفیگ را تأیید کرد.'
+                          : 'کانفیگ توسط sing-box رد شد.'}
+                      </strong>
+                      <p>
+                        {configResult.success
+                          ? `${configResult.protocol ?? node.protocol} • ${configResult.directDomainCount} دامنه مستقیم`
+                          : configResult.error ?? 'خطای نامشخص'}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="server-list-actions">
+                    <button
+                      className={
+                        isSelected
+                          ? 'select-server-button select-server-button-selected'
+                          : 'select-server-button'
+                      }
+                      type="button"
+                      disabled={!node.valid}
+                      onClick={() => {
+                        onSelectServer(
+                          toPublicServer(node),
+                        )
+                      }}
+                    >
+                      {isSelected
+                        ? 'سرور انتخاب‌شده'
+                        : 'انتخاب این سرور'}
+                    </button>
+
+                    <button
+                      className="inspect-subscription-button"
+                      type="button"
+                      disabled={
+                        !node.valid ||
+                        !subscriptionId ||
+                        configCheckingNodeId === node.id
+                      }
+                      onClick={() => {
+                        onCheckConfig(node.id)
+                      }}
+                    >
+                      {configCheckingNodeId === node.id
+                        ? 'در حال بررسی کانفیگ...'
+                        : 'بررسی با sing-box'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </article>
           )
         })}
@@ -1792,26 +1965,6 @@ function ServerInformationRow({
         {value}
       </strong>
     </div>
-  )
-}
-
-function formatProtocolShortName(
-  protocol: string,
-) {
-  const names: Record<string, string> = {
-    vmess: 'VM',
-    vless: 'VL',
-    trojan: 'TR',
-    ss: 'SS',
-    hysteria: 'HY',
-    hysteria2: 'H2',
-    hy2: 'H2',
-    tuic: 'TU',
-  }
-
-  return (
-    names[protocol] ??
-    protocol.slice(0, 2).toUpperCase()
   )
 }
 
