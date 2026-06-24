@@ -1,12 +1,19 @@
 import {
+  useEffect,
+  useMemo,
+  useRef,
   useState,
   type KeyboardEvent,
 } from 'react'
 import { useDirectDomains } from './domain/use-direct-domains'
 import { useEngineInfo } from './engine/use-engine-info'
 import { useSubscriptions } from './subscriptions/use-subscriptions'
-import { useServerNodes } from './servers/use-server-nodes'
+import {
+  useServerNodes,
+  type SafeServerNode,
+} from './servers/use-server-nodes'
 import { useSelectedServer } from './servers/use-selected-server'
+import { useServerLatency } from './servers/use-server-latency'
 import './App.css'
 
 type PageId =
@@ -23,6 +30,23 @@ type NavigationItem = {
   id: PageId
   label: string
   icon: string
+}
+
+type PublicServer = {
+  id: string
+  name: string
+  protocol: string
+  host: string | null
+  port: number | null
+  transport: string | null
+  tls: boolean
+}
+
+type LatencyItem = {
+  id: string
+  reachable: boolean
+  latencyMs: number | null
+  error: string | null
 }
 
 const navigationItems: NavigationItem[] = [
@@ -50,18 +74,75 @@ const pageTitles: Record<PageId, string> = {
 function App() {
   const [activePage, setActivePage] = useState<PageId>('home')
   const [isConnected, setIsConnected] = useState(false)
+
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
   const subscriptions = useSubscriptions()
+
   const serverNodes = useServerNodes(
-  subscriptions.subscriptions.map(
-    (subscription) =>
-      subscription.id,
-  ),
-  subscriptions.loading,
-)
-  const selectedServer =
-  useSelectedServer()
+    subscriptions.subscriptions.map(
+      (subscription) => subscription.id,
+    ),
+    subscriptions.loading,
+  )
+
+  const selectedServer = useSelectedServer()
+  const latency = useServerLatency(serverNodes.nodes)
+
+  const automaticLatencyTestKey = useRef<string | null>(null)
+
+  const fastestServer = useMemo(
+    () =>
+      serverNodes.nodes.find(
+        (node) =>
+          node.id === latency.fastestServerId,
+      ) ?? null,
+    [
+      latency.fastestServerId,
+      serverNodes.nodes,
+    ],
+  )
+
+  const selectedServerLatency =
+    selectedServer.selectedServer
+      ? latency.results[
+          selectedServer.selectedServer.id
+        ] ?? null
+      : null
+
+  useEffect(() => {
+    if (
+      serverNodes.loading ||
+      serverNodes.nodes.length === 0 ||
+      latency.testing
+    ) {
+      return
+    }
+
+    const testKey = [
+      serverNodes.subscriptionId ?? 'none',
+      serverNodes.checkedAt ?? 'unknown',
+      serverNodes.nodes.length,
+    ].join('|')
+
+    if (
+      automaticLatencyTestKey.current ===
+      testKey
+    ) {
+      return
+    }
+
+    automaticLatencyTestKey.current =
+      testKey
+
+    void latency.testAll()
+  }, [
+    latency,
+    serverNodes.checkedAt,
+    serverNodes.loading,
+    serverNodes.nodes.length,
+    serverNodes.subscriptionId,
+  ])
 
   function toggleConnection() {
     setIsConnected((currentValue) => !currentValue)
@@ -81,7 +162,10 @@ function App() {
           </div>
         </div>
 
-        <nav className="navigation" aria-label="منوی اصلی">
+        <nav
+          className="navigation"
+          aria-label="منوی اصلی"
+        >
           {navigationItems.map((item) => (
             <button
               className={
@@ -91,9 +175,13 @@ function App() {
               }
               key={item.id}
               type="button"
-              onClick={() => setActivePage(item.id)}
+              onClick={() =>
+                setActivePage(item.id)
+              }
             >
-              <span className="navigation-icon">{item.icon}</span>
+              <span className="navigation-icon">
+                {item.icon}
+              </span>
               <span>{item.label}</span>
             </button>
           ))}
@@ -101,35 +189,39 @@ function App() {
 
         <div className="sidebar-footer">
           <div className="engine-status">
-  <span
-    className={
-      engine.info?.healthy
-        ? 'engine-status-dot engine-status-dot-ready'
-        : 'engine-status-dot'
-    }
-  />
+            <span
+              className={
+                engine.info?.healthy
+                  ? 'engine-status-dot engine-status-dot-ready'
+                  : 'engine-status-dot'
+              }
+            />
 
-  <div>
-    <strong>هسته برنامه</strong>
+            <div>
+              <strong>هسته برنامه</strong>
 
-    <span>
-      {engine.loading
-        ? 'در حال بررسی...'
-        : engine.info?.healthy
-          ? `sing-box ${engine.info.version}`
-          : 'در دسترس نیست'}
-    </span>
-  </div>
-</div>
+              <span>
+                {engine.loading
+                  ? 'در حال بررسی...'
+                  : engine.info?.healthy
+                    ? `sing-box ${engine.info.version}`
+                    : 'در دسترس نیست'}
+              </span>
+            </div>
+          </div>
 
-          <div className="version">نسخه 0.1.0</div>
+          <div className="version">
+            نسخه 0.1.0
+          </div>
         </div>
       </aside>
 
       <section className="main-area">
         <header className="topbar">
           <div>
-            <p className="topbar-eyebrow">HamidsDeutsch Connect</p>
+            <p className="topbar-eyebrow">
+              HamidsDeutsch Connect
+            </p>
             <h1>{pageTitles[activePage]}</h1>
           </div>
 
@@ -141,51 +233,117 @@ function App() {
             }
           >
             <span className="connection-pill-dot" />
-            <span>{isConnected ? 'متصل' : 'قطع'}</span>
+            <span>
+              {isConnected
+                ? 'حالت آزمایشی فعال'
+                : 'قطع'}
+            </span>
           </div>
         </header>
 
         <main className="content">
           {activePage === 'home' && (
             <HomePage
-  isConnected={isConnected}
-  directDomains={directDomains.domains}
-  engineInfo={engine.info}
-  selectedServer={
-  selectedServer.selectedServer
-  }
-  onToggleConnection={toggleConnection}
-  onOpenDirectSites={() => setActivePage('direct-sites')}
-  onOpenRescue={() => setActivePage('rescue')}
-/>
+              isConnected={isConnected}
+              directDomains={
+                directDomains.domains
+              }
+              engineInfo={engine.info}
+              selectedServer={
+                selectedServer.selectedServer
+              }
+              selectedServerLatency={
+                selectedServerLatency
+              }
+              fastestServer={
+                fastestServer
+              }
+              fastestLatencyMs={
+                latency.fastestLatencyMs
+              }
+              latencyTesting={
+                latency.testing
+              }
+              latencyError={latency.error}
+              onToggleConnection={
+                toggleConnection
+              }
+              onRetestLatency={() => {
+                void latency.testAll()
+              }}
+              onChooseFastest={() => {
+                if (fastestServer) {
+                  selectedServer.selectServer(
+                    toPublicServer(
+                      fastestServer,
+                    ),
+                  )
+                }
+              }}
+              onOpenServers={() =>
+                setActivePage('servers')
+              }
+              onOpenDirectSites={() =>
+                setActivePage(
+                  'direct-sites',
+                )
+              }
+              onOpenRescue={() =>
+                setActivePage('rescue')
+              }
+            />
           )}
 
           {activePage === 'servers' && (
-  <ServersPage
-  loading={serverNodes.loading}
-  nodes={serverNodes.nodes}
-  error={serverNodes.error}
-  selectedServerId={
-    selectedServer.selectedServer?.id ??
-    null
-  }
-  onSelectServer={
-    selectedServer.selectServer
-  }
-  onClearSelectedServer={
-    selectedServer.clearSelectedServer
-  }
-  onOpenSubscriptions={() =>
-    setActivePage('subscriptions')
-  }
-/>
-)}
+            <ServersPage
+              loading={serverNodes.loading}
+              nodes={serverNodes.nodes}
+              error={serverNodes.error}
+              selectedServerId={
+                selectedServer.selectedServer
+                  ?.id ?? null
+              }
+              latencyTesting={
+                latency.testing
+              }
+              latencyResults={
+                latency.results
+              }
+              latencyError={
+                latency.error
+              }
+              fastestServerId={
+                latency.fastestServerId
+              }
+              onTestLatency={() => {
+                void latency.testAll()
+              }}
+              onSelectServer={
+                selectedServer.selectServer
+              }
+              onClearSelectedServer={
+                selectedServer.clearSelectedServer
+              }
+              onOpenSubscriptions={() =>
+                setActivePage(
+                  'subscriptions',
+                )
+              }
+            />
+          )}
 
-          {activePage === 'subscriptions' && (
+          {activePage ===
+            'subscriptions' && (
             <SubscriptionsPage
-              loading={subscriptions.loading}
-              subscriptions={subscriptions.subscriptions}
-              loadError={subscriptions.error}
+              loading={
+                subscriptions.loading
+              }
+              subscriptions={
+                subscriptions.subscriptions
+              }
+              loadError={
+                subscriptions.error
+              }
               onAddSubscription={
                 subscriptions.addSubscription
               }
@@ -199,11 +357,15 @@ function App() {
                 subscriptionId,
               ) => {
                 const result =
-                  await serverNodes.loadFromSubscription(
-                    subscriptionId,
-                  )
+                  await serverNodes
+                    .loadFromSubscription(
+                      subscriptionId,
+                    )
 
                 if (result.success) {
+                  automaticLatencyTestKey.current =
+                    null
+
                   setActivePage('servers')
                 }
 
@@ -217,12 +379,21 @@ function App() {
             />
           )}
 
-          {activePage === 'direct-sites' && (
+          {activePage ===
+            'direct-sites' && (
             <DirectSitesPage
-              domains={directDomains.domains}
-              onAddDomain={directDomains.addDomain}
-              onRemoveDomain={directDomains.removeDomain}
-              onResetDomains={directDomains.resetDomains}
+              domains={
+                directDomains.domains
+              }
+              onAddDomain={
+                directDomains.addDomain
+              }
+              onRemoveDomain={
+                directDomains.removeDomain
+              }
+              onResetDomains={
+                directDomains.resetDomains
+              }
             />
           )}
 
@@ -230,7 +401,8 @@ function App() {
             <RescuePage />
           )}
 
-          {activePage === 'statistics' && (
+          {activePage ===
+            'statistics' && (
             <StatisticsPage />
           )}
 
@@ -247,6 +419,20 @@ function App() {
   )
 }
 
+function toPublicServer(
+  node: SafeServerNode,
+): PublicServer {
+  return {
+    id: node.id,
+    name: node.name,
+    protocol: node.protocol,
+    host: node.host,
+    port: node.port,
+    transport: node.transport,
+    tls: node.tls,
+  }
+}
+
 type HomePageProps = {
   isConnected: boolean
   directDomains: string[]
@@ -259,17 +445,24 @@ type HomePageProps = {
     architecture: string | null
     error: string | null
   } | null
-  selectedServer: {
-  id: string
-  name: string
-  protocol: string
-  host: string | null
-  port: number | null
-  transport: string | null
-  tls: boolean
-  } | null
+
+  selectedServer: PublicServer | null
+  selectedServerLatency:
+    | LatencyItem
+    | null
+
+  fastestServer:
+    | SafeServerNode
+    | null
+
+  fastestLatencyMs: number | null
+  latencyTesting: boolean
+  latencyError: string | null
 
   onToggleConnection: () => void
+  onRetestLatency: () => void
+  onChooseFastest: () => void
+  onOpenServers: () => void
   onOpenDirectSites: () => void
   onOpenRescue: () => void
 }
@@ -279,7 +472,15 @@ function HomePage({
   directDomains,
   engineInfo,
   selectedServer,
+  selectedServerLatency,
+  fastestServer,
+  fastestLatencyMs,
+  latencyTesting,
+  latencyError,
   onToggleConnection,
+  onRetestLatency,
+  onChooseFastest,
+  onOpenServers,
   onOpenDirectSites,
   onOpenRescue,
 }: HomePageProps) {
@@ -297,8 +498,8 @@ function HomePage({
             />
 
             {isConnected
-              ? 'اتصال آزمایشی فعال است'
-              : 'در حال حاضر اتصال برقرار نیست'}
+              ? 'حالت آزمایشی رابط فعال است'
+              : 'اتصال واقعی هنوز فعال نشده است'}
           </div>
 
           <h2>
@@ -308,8 +509,10 @@ function HomePage({
           </h2>
 
           <p>
-            اتصال واقعی، بررسی تغییر IP، جداسازی سایت‌های ایرانی و
-            راهکارهای نجات برای شرایط اختلال شدید.
+            سرورها خودکار به‌روزرسانی می‌شوند،
+            تأخیر واقعی پورت آن‌ها سنجیده می‌شود
+            و سریع‌ترین گزینه برای اتصال آماده
+            خواهد بود.
           </p>
 
           <button
@@ -327,19 +530,23 @@ function HomePage({
 
             <span>
               <strong>
-                {isConnected ? 'قطع اتصال آزمایشی' : 'اتصال آزمایشی'}
+                {isConnected
+                  ? 'پایان حالت آزمایشی'
+                  : 'آماده‌سازی اتصال سریع'}
               </strong>
 
               <small>
-                {isConnected
-                  ? 'این دکمه فعلاً فقط رابط را آزمایش می‌کند'
-                  : 'هسته شبکه در مراحل بعد اضافه می‌شود'}
+                فعلاً فقط رابط آزمایش می‌شود؛
+                هنوز تونل شبکه ساخته نشده است
               </small>
             </span>
           </button>
         </div>
 
-        <div className="hero-visual" aria-hidden="true">
+        <div
+          className="hero-visual"
+          aria-hidden="true"
+        >
           <div
             className={
               isConnected
@@ -349,7 +556,9 @@ function HomePage({
           >
             <div className="connection-orbit-middle">
               <div className="connection-orbit-core">
-                <span>{isConnected ? '✓' : 'H'}</span>
+                <span>
+                  {isConnected ? '✓' : 'H'}
+                </span>
               </div>
             </div>
           </div>
@@ -358,17 +567,29 @@ function HomePage({
 
       <section className="quick-statistics">
         <article className="statistic-card">
-          <span className="statistic-icon">◎</span>
+          <span className="statistic-icon">
+            ◎
+          </span>
           <div>
-            <span className="statistic-label">IP خروجی</span>
-            <strong>{isConnected ? 'آزمایشی' : '—'}</strong>
+            <span className="statistic-label">
+              IP خروجی
+            </span>
+            <strong>
+              {isConnected
+                ? 'آزمایشی'
+                : '—'}
+            </strong>
           </div>
         </article>
 
         <article className="statistic-card">
-          <span className="statistic-icon">◌</span>
+          <span className="statistic-icon">
+            ◌
+          </span>
           <div>
-            <span className="statistic-label">سرور انتخاب‌شده</span>
+            <span className="statistic-label">
+              سرور قبلی
+            </span>
             <strong>
               {selectedServer?.name ??
                 'انتخاب نشده'}
@@ -377,50 +598,150 @@ function HomePage({
         </article>
 
         <article className="statistic-card">
-          <span className="statistic-icon">↗</span>
+          <span className="statistic-icon">
+            ↗
+          </span>
           <div>
-            <span className="statistic-label">سایت‌های مستقیم</span>
-            <strong>{directDomains.length} دامنه</strong>
+            <span className="statistic-label">
+              سایت‌های مستقیم
+            </span>
+            <strong>
+              {directDomains.length} دامنه
+            </strong>
           </div>
         </article>
       </section>
+
+      <section className="connection-choice-grid">
+        <ConnectionChoiceCard
+          title="سریع‌ترین سرور"
+          kicker="پیشنهاد خودکار"
+          serverName={
+            fastestServer?.name ??
+            (latencyTesting
+              ? 'در حال سنجش...'
+              : 'هنوز مشخص نشده')
+          }
+          protocol={
+            fastestServer
+              ? formatProtocolNameForUi(
+                  fastestServer.protocol,
+                )
+              : '—'
+          }
+          latencyMs={fastestLatencyMs}
+          available={Boolean(
+            fastestServer,
+          )}
+          testing={latencyTesting}
+          actionLabel="انتخاب سریع‌ترین"
+          onAction={onChooseFastest}
+          secondaryActionLabel="مشاهده سرورها"
+          onSecondaryAction={
+            onOpenServers
+          }
+        />
+
+        <ConnectionChoiceCard
+          title="سرور قبلی"
+          kicker="آخرین انتخاب"
+          serverName={
+            selectedServer?.name ??
+            'سروری انتخاب نشده'
+          }
+          protocol={
+            selectedServer
+              ? formatProtocolNameForUi(
+                  selectedServer.protocol,
+                )
+              : '—'
+          }
+          latencyMs={
+            selectedServerLatency
+              ?.latencyMs ?? null
+          }
+          available={Boolean(
+            selectedServer,
+          )}
+          testing={latencyTesting}
+          actionLabel="آماده اتصال به قبلی"
+          onAction={() => {
+            if (selectedServer) {
+              onOpenServers()
+            }
+          }}
+          secondaryActionLabel="تست دوباره پینگ"
+          onSecondaryAction={
+            onRetestLatency
+          }
+        />
+      </section>
+
+      {latencyError && (
+        <div className="form-message form-message-error">
+          {latencyError}
+        </div>
+      )}
 
       <section className="home-grid">
         <article className="panel-card">
           <div className="panel-heading">
             <div>
-              <span className="panel-kicker">مسیر خروج</span>
+              <span className="panel-kicker">
+                مسیر خروج
+              </span>
               <h3>وضعیت اتصال</h3>
             </div>
 
-            <span className="panel-icon">◉</span>
+            <span className="panel-icon">
+              ◉
+            </span>
           </div>
 
           <div className="connection-details">
-            <DetailRow label="حالت اتصال" value="TUN" />
-            <DetailRow label="روش انتخاب" value="خودکار" />
             <DetailRow
-  label="هسته شبکه"
-  value={
-    engineInfo?.healthy
-      ? `sing-box ${engineInfo.version}`
-      : 'در دسترس نیست'
-  }
-  muted={!engineInfo?.healthy}
-/>
-<DetailRow
-  label="معماری هسته"
-  value={engineInfo?.architecture ?? '—'}
-  muted={!engineInfo?.architecture}
-/>
-            <DetailRow label="بررسی IP" value="در انتظار اتصال" muted />
+              label="حالت اتصال"
+              value="TUN"
+            />
+            <DetailRow
+              label="روش انتخاب"
+              value="خودکار + انتخاب قبلی"
+            />
+            <DetailRow
+              label="هسته شبکه"
+              value={
+                engineInfo?.healthy
+                  ? `sing-box ${engineInfo.version}`
+                  : 'در دسترس نیست'
+              }
+              muted={
+                !engineInfo?.healthy
+              }
+            />
+            <DetailRow
+              label="معماری هسته"
+              value={
+                engineInfo?.architecture ??
+                '—'
+              }
+              muted={
+                !engineInfo?.architecture
+              }
+            />
+            <DetailRow
+              label="بررسی IP"
+              value="در انتظار اتصال واقعی"
+              muted
+            />
           </div>
         </article>
 
         <article className="panel-card">
           <div className="panel-heading">
             <div>
-              <span className="panel-kicker">دسترسی مستقیم</span>
+              <span className="panel-kicker">
+                دسترسی مستقیم
+              </span>
               <h3>سایت‌های بدون VPN</h3>
             </div>
 
@@ -434,9 +755,14 @@ function HomePage({
           </div>
 
           <div className="domain-preview-list">
-            {directDomains.slice(0, 3).map((domain) => (
-              <DomainPreview domain={domain} key={domain} />
-            ))}
+            {directDomains
+              .slice(0, 3)
+              .map((domain) => (
+                <DomainPreview
+                  domain={domain}
+                  key={domain}
+                />
+              ))}
 
             {directDomains.length === 0 && (
               <p className="empty-list-message">
@@ -457,17 +783,22 @@ function HomePage({
         <article className="panel-card rescue-preview-card">
           <div className="panel-heading">
             <div>
-              <span className="panel-kicker">شرایط اختلال</span>
+              <span className="panel-kicker">
+                شرایط اختلال
+              </span>
               <h3>مرکز نجات اتصال</h3>
             </div>
 
-            <span className="rescue-badge">آماده‌سازی</span>
+            <span className="rescue-badge">
+              آماده‌سازی
+            </span>
           </div>
 
           <p>
-            در نسخه‌های بعد، برنامه Fragment، SNI، Serverless و
-            روش‌های Tor را بررسی می‌کند و راهکار قابل‌استفاده را
-            پیشنهاد می‌دهد.
+            در نسخه‌های بعد، برنامه Fragment،
+            SNI، Serverless و روش‌های Tor را
+            بررسی می‌کند و راهکار قابل‌استفاده
+            را پیشنهاد می‌دهد.
           </p>
 
           <button
@@ -483,6 +814,114 @@ function HomePage({
   )
 }
 
+function ConnectionChoiceCard({
+  title,
+  kicker,
+  serverName,
+  protocol,
+  latencyMs,
+  available,
+  testing,
+  actionLabel,
+  onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
+}: {
+  title: string
+  kicker: string
+  serverName: string
+  protocol: string
+  latencyMs: number | null
+  available: boolean
+  testing: boolean
+  actionLabel: string
+  onAction: () => void
+  secondaryActionLabel: string
+  onSecondaryAction: () => void
+}) {
+  return (
+    <article className="connection-choice-card">
+      <div className="connection-choice-heading">
+        <div>
+          <span className="panel-kicker">
+            {kicker}
+          </span>
+          <h3>{title}</h3>
+        </div>
+
+        <LatencyBadge
+          latencyMs={latencyMs}
+          testing={testing}
+        />
+      </div>
+
+      <div className="connection-choice-server">
+        <strong>{serverName}</strong>
+        <span>{protocol}</span>
+      </div>
+
+      <div className="connection-choice-actions">
+        <button
+          className="primary-button"
+          type="button"
+          disabled={!available}
+          onClick={onAction}
+        >
+          {actionLabel}
+        </button>
+
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={onSecondaryAction}
+        >
+          {secondaryActionLabel}
+        </button>
+      </div>
+    </article>
+  )
+}
+
+function LatencyBadge({
+  latencyMs,
+  testing = false,
+}: {
+  latencyMs: number | null
+  testing?: boolean
+}) {
+  if (testing) {
+    return (
+      <span className="latency-badge latency-badge-testing">
+        در حال تست
+      </span>
+    )
+  }
+
+  if (latencyMs === null) {
+    return (
+      <span className="latency-badge latency-badge-unavailable">
+        بدون نتیجه
+      </span>
+    )
+  }
+
+  const qualityClass =
+    latencyMs <= 120
+      ? 'latency-badge-good'
+      : latencyMs <= 280
+        ? 'latency-badge-medium'
+        : 'latency-badge-slow'
+
+  return (
+    <span
+      className={`latency-badge ${qualityClass}`}
+      dir="ltr"
+    >
+      {latencyMs} ms
+    </span>
+  )
+}
+
 function DetailRow({
   label,
   value,
@@ -495,15 +934,27 @@ function DetailRow({
   return (
     <div className="detail-row">
       <span>{label}</span>
-      <strong className={muted ? 'muted-value' : ''}>{value}</strong>
+      <strong
+        className={
+          muted ? 'muted-value' : ''
+        }
+      >
+        {value}
+      </strong>
     </div>
   )
 }
 
-function DomainPreview({ domain }: { domain: string }) {
+function DomainPreview({
+  domain,
+}: {
+  domain: string
+}) {
   return (
     <div className="domain-preview">
-      <span className="domain-preview-check">✓</span>
+      <span className="domain-preview-check">
+        ✓
+      </span>
       <span dir="ltr">{domain}</span>
       <small>مستقیم</small>
     </div>
@@ -525,7 +976,9 @@ function EmptyPage({
 }) {
   return (
     <section className="empty-state">
-      <div className="empty-state-icon">{icon}</div>
+      <div className="empty-state-icon">
+        {icon}
+      </div>
       <h2>{title}</h2>
       <p>{description}</p>
 
@@ -612,8 +1065,8 @@ type SubscriptionsPageProps = {
   >
 
   loadingServerSubscriptionId:
-    string | null
-
+    | string
+    | null
 }
 
 function SubscriptionsPage({
@@ -799,7 +1252,6 @@ function SubscriptionsPage({
             <span className="panel-kicker">
               منبع کانفیگ
             </span>
-
             <h3>افزودن اشتراک امن</h3>
           </div>
 
@@ -870,9 +1322,10 @@ function SubscriptionsPage({
         </div>
 
         <p className="field-help">
-          لینک اشتراک در فایل داده برنامه به‌صورت
-          رمزگذاری‌شده ذخیره می‌شود. اصل لینک پس از
-          ذخیره در این صفحه نمایش داده نخواهد شد.
+          لینک اشتراک در فایل داده برنامه
+          به‌صورت رمزگذاری‌شده ذخیره می‌شود.
+          اصل لینک پس از ذخیره در این صفحه
+          نمایش داده نخواهد شد.
         </p>
 
         {message && (
@@ -900,7 +1353,6 @@ function SubscriptionsPage({
             <span className="panel-kicker">
               اشتراک‌های ذخیره‌شده
             </span>
-
             <h3>منابع کانفیگ</h3>
           </div>
         </div>
@@ -941,40 +1393,42 @@ function SubscriptionsPage({
                     </span>
 
                     <button
-  className="load-servers-button"
-  type="button"
-  disabled={
-    loadingServerSubscriptionId ===
-    subscription.id
-  }
-  onClick={() => {
-    void handleLoadServers(
-      subscription.id,
-    )
-  }}
->
-  {loadingServerSubscriptionId ===
-  subscription.id
-    ? 'در حال دریافت...'
-    : 'مشاهده سرورها'}
-</button>
+                      className="load-servers-button"
+                      type="button"
+                      disabled={
+                        loadingServerSubscriptionId ===
+                        subscription.id
+                      }
+                      onClick={() => {
+                        void handleLoadServers(
+                          subscription.id,
+                        )
+                      }}
+                    >
+                      {loadingServerSubscriptionId ===
+                      subscription.id
+                        ? 'در حال دریافت...'
+                        : 'مشاهده سرورها'}
+                    </button>
 
                     <button
-  className="inspect-subscription-button"
-  type="button"
-  disabled={
-    inspectingId === subscription.id
-  }
-  onClick={() => {
-    void handleInspectSubscription(
-      subscription.id,
-    )
-  }}
->
-  {inspectingId === subscription.id
-    ? 'در حال بررسی...'
-    : 'بررسی اشتراک'}
-</button>
+                      className="inspect-subscription-button"
+                      type="button"
+                      disabled={
+                        inspectingId ===
+                        subscription.id
+                      }
+                      onClick={() => {
+                        void handleInspectSubscription(
+                          subscription.id,
+                        )
+                      }}
+                    >
+                      {inspectingId ===
+                      subscription.id
+                        ? 'در حال بررسی...'
+                        : 'بررسی اشتراک'}
+                    </button>
 
                     <button
                       className="remove-domain-button"
@@ -996,18 +1450,17 @@ function SubscriptionsPage({
                     </button>
                   </div>
 
-
                   {inspectionResults[
-  subscription.id
-] && (
-  <SubscriptionInspectionPanel
-    inspection={
-      inspectionResults[
-        subscription.id
-      ]
-    }
-  />
-)}
+                    subscription.id
+                  ] && (
+                    <SubscriptionInspectionPanel
+                      inspection={
+                        inspectionResults[
+                          subscription.id
+                        ]
+                      }
+                    />
+                  )}
                 </article>
               ),
             )}
@@ -1018,9 +1471,9 @@ function SubscriptionsPage({
             <strong>
               اشتراکی ثبت نشده است
             </strong>
-
             <p>
-              لینک شخصی خودت را از فرم بالا اضافه کن.
+              لینک شخصی خودت را از فرم بالا
+              اضافه کن.
             </p>
           </div>
         )}
@@ -1029,44 +1482,35 @@ function SubscriptionsPage({
   )
 }
 
-type ServerNodeItem = {
-  id: string
-  name: string
-  protocol: string
-  host: string | null
-  port: number | null
-  transport: string | null
-  tls: boolean
-  security: string | null
-  valid: boolean
-}
-
 function ServersPage({
   loading,
   nodes,
   error,
   selectedServerId,
+  latencyTesting,
+  latencyResults,
+  latencyError,
+  fastestServerId,
+  onTestLatency,
   onSelectServer,
   onClearSelectedServer,
   onOpenSubscriptions,
 }: {
   loading: boolean
-  nodes: ServerNodeItem[]
+  nodes: SafeServerNode[]
   error: string | null
   selectedServerId: string | null
-
+  latencyTesting: boolean
+  latencyResults: Record<
+    string,
+    LatencyItem
+  >
+  latencyError: string | null
+  fastestServerId: string | null
+  onTestLatency: () => void
   onSelectServer: (
-    server: {
-      id: string
-      name: string
-      protocol: string
-      host: string | null
-      port: number | null
-      transport: string | null
-      tls: boolean
-    },
+    server: PublicServer,
   ) => void
-
   onClearSelectedServer: () => void
   onOpenSubscriptions: () => void
 }) {
@@ -1076,11 +1520,9 @@ function ServersPage({
         <div className="empty-state-icon">
           ◌
         </div>
-
         <h2>
           در حال دریافت سرورها
         </h2>
-
         <p>
           محتوای اشتراک در بخش امن برنامه
           دریافت و تحلیل می‌شود.
@@ -1095,11 +1537,9 @@ function ServersPage({
         <div className="empty-state-icon">
           !
         </div>
-
         <h2>
           دریافت سرورها ناموفق بود
         </h2>
-
         <p>{error}</p>
 
         <button
@@ -1118,7 +1558,7 @@ function ServersPage({
       <EmptyPage
         icon="◉"
         title="هنوز سروری بارگذاری نشده است"
-        description="به صفحه اشتراک‌ها برو و روی دکمه مشاهده سرورها بزن."
+        description="سرورها در شروع برنامه خودکار بارگذاری می‌شوند؛ برای انتخاب منبع دیگر به صفحه اشتراک‌ها برو."
         actionLabel="رفتن به اشتراک‌ها"
         onAction={onOpenSubscriptions}
       />
@@ -1137,144 +1577,194 @@ function ServersPage({
             <span className="panel-kicker">
               Subscription Nodes
             </span>
-
             <h3>سرورهای استخراج‌شده</h3>
           </div>
 
           <div className="servers-heading-actions">
-  <span className="count-badge">
-    {validNodes.length} سرور معتبر
-  </span>
+            <span className="count-badge">
+              {validNodes.length} سرور معتبر
+            </span>
 
-  {selectedServerId && (
-    <button
-      className="text-button"
-      type="button"
-      onClick={onClearSelectedServer}
-    >
-      لغو انتخاب
-    </button>
-  )}
-</div>
+            <button
+              className="inspect-subscription-button"
+              type="button"
+              disabled={latencyTesting}
+              onClick={onTestLatency}
+            >
+              {latencyTesting
+                ? 'در حال تست همه...'
+                : 'تست پینگ همه'}
+            </button>
+
+            {selectedServerId && (
+              <button
+                className="text-button"
+                type="button"
+                onClick={
+                  onClearSelectedServer
+                }
+              >
+                لغو انتخاب
+              </button>
+            )}
+          </div>
         </div>
 
         <p className="field-help">
-          فقط اطلاعات عمومی نمایش داده
-          می‌شوند. UUID، رمزها و کلیدهای
-          اتصال در رابط قابل مشاهده نیستند.
+          اعداد نمایش‌داده‌شده زمان اتصال TCP
+          به پورت سرور هستند. UUID، رمزها و
+          کلیدهای اتصال در رابط قابل مشاهده
+          نیستند.
         </p>
+
+        {latencyError && (
+          <div className="form-message form-message-error">
+            {latencyError}
+          </div>
+        )}
       </section>
 
       <section className="server-grid">
-        {nodes.map((node) => (
-          <article
-  className={[
-    'server-card',
-    !node.valid
-      ? 'server-card-invalid'
-      : '',
-    selectedServerId === node.id
-      ? 'server-card-selected'
-      : '',
-  ]
-    .filter(Boolean)
-    .join(' ')}
-  key={node.id}
->
-            <div className="server-card-header">
-              <div className="server-protocol-icon">
-                {formatProtocolShortName(
-                  node.protocol,
-                )}
-              </div>
+        {nodes.map((node) => {
+          const latencyResult =
+            latencyResults[node.id] ??
+            null
 
-              <div className="server-title">
-                <strong>
-                  {node.name}
-                </strong>
+          const isFastest =
+            fastestServerId === node.id
 
-                <span>
-                  {formatProtocolNameForUi(
+          return (
+            <article
+              className={[
+                'server-card',
+                !node.valid
+                  ? 'server-card-invalid'
+                  : '',
+                selectedServerId ===
+                node.id
+                  ? 'server-card-selected'
+                  : '',
+                isFastest
+                  ? 'server-card-fastest'
+                  : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              key={node.id}
+            >
+              <div className="server-card-header">
+                <div className="server-protocol-icon">
+                  {formatProtocolShortName(
                     node.protocol,
                   )}
-                </span>
+                </div>
+
+                <div className="server-title">
+                  <strong>
+                    {node.name}
+                  </strong>
+                  <span>
+                    {formatProtocolNameForUi(
+                      node.protocol,
+                    )}
+                  </span>
+                </div>
+
+                <div className="server-card-badges">
+                  {isFastest && (
+                    <span className="fastest-server-badge">
+                      سریع‌ترین
+                    </span>
+                  )}
+
+                  <span
+                    className={
+                      node.valid
+                        ? 'server-valid-badge'
+                        : 'server-invalid-badge'
+                    }
+                  >
+                    {node.valid
+                      ? 'آماده بررسی'
+                      : 'ناقص'}
+                  </span>
+                </div>
               </div>
 
-              <span
+              <div className="server-latency-row">
+                <span>تأخیر</span>
+                <LatencyBadge
+                  latencyMs={
+                    latencyResult
+                      ?.latencyMs ?? null
+                  }
+                  testing={
+                    latencyTesting &&
+                    !latencyResult
+                  }
+                />
+              </div>
+
+              <div className="server-information">
+                <ServerInformationRow
+                  label="آدرس"
+                  value={
+                    node.host ?? 'نامشخص'
+                  }
+                  leftToRight
+                />
+
+                <ServerInformationRow
+                  label="پورت"
+                  value={
+                    node.port
+                      ? String(node.port)
+                      : 'نامشخص'
+                  }
+                />
+
+                <ServerInformationRow
+                  label="انتقال"
+                  value={
+                    node.transport ??
+                    'نامشخص'
+                  }
+                />
+
+                <ServerInformationRow
+                  label="امنیت"
+                  value={
+                    node.tls
+                      ? node.security ??
+                        'TLS'
+                      : 'بدون TLS'
+                  }
+                />
+              </div>
+
+              <button
                 className={
-                  node.valid
-                    ? 'server-valid-badge'
-                    : 'server-invalid-badge'
+                  selectedServerId ===
+                  node.id
+                    ? 'select-server-button select-server-button-selected'
+                    : 'select-server-button'
                 }
+                type="button"
+                disabled={!node.valid}
+                onClick={() => {
+                  onSelectServer(
+                    toPublicServer(node),
+                  )
+                }}
               >
-                {node.valid
-                  ? 'آماده بررسی'
-                  : 'ناقص'}
-              </span>
-            </div>
-
-            <div className="server-information">
-              <ServerInformationRow
-                label="آدرس"
-                value={
-                  node.host ?? 'نامشخص'
-                }
-                leftToRight
-              />
-
-              <ServerInformationRow
-                label="پورت"
-                value={
-                  node.port
-                    ? String(node.port)
-                    : 'نامشخص'
-                }
-              />
-
-              <ServerInformationRow
-                label="انتقال"
-                value={
-                  node.transport ??
-                  'نامشخص'
-                }
-              />
-
-              <ServerInformationRow
-                label="امنیت"
-                value={
-                  node.tls
-                    ? node.security ??
-                      'TLS'
-                    : 'بدون TLS'
-                }
-              />
-            </div>
-            <button
-  className={
-    selectedServerId === node.id
-      ? 'select-server-button select-server-button-selected'
-      : 'select-server-button'
-  }
-  type="button"
-  disabled={!node.valid}
-  onClick={() => {
-    onSelectServer({
-      id: node.id,
-      name: node.name,
-      protocol: node.protocol,
-      host: node.host,
-      port: node.port,
-      transport: node.transport,
-      tls: node.tls,
-    })
-  }}
->
-  {selectedServerId === node.id
-    ? 'سرور انتخاب‌شده'
-    : 'انتخاب این سرور'}
-</button>
-          </article>
-        ))}
+                {selectedServerId ===
+                node.id
+                  ? 'سرور انتخاب‌شده'
+                  : 'انتخاب این سرور'}
+              </button>
+            </article>
+          )
+        })}
       </section>
     </div>
   )
@@ -1292,7 +1782,6 @@ function ServerInformationRow({
   return (
     <div className="server-information-row">
       <span>{label}</span>
-
       <strong
         dir={
           leftToRight
@@ -1356,7 +1845,9 @@ type DirectSitesPageProps = {
         success: false
         error: string
       }
-  onRemoveDomain: (domain: string) => void
+  onRemoveDomain: (
+    domain: string,
+  ) => void
   onResetDomains: () => void
 }
 
@@ -1485,7 +1976,8 @@ function formatSubscriptionFormat(
     'base64-uri-list':
       'فهرست Base64',
     json: 'JSON',
-    'base64-json': 'JSON رمزگذاری‌شده',
+    'base64-json':
+      'JSON رمزگذاری‌شده',
     'base64-unknown':
       'Base64 ناشناخته',
     unknown: 'ناشناخته',
@@ -1522,21 +2014,24 @@ function DirectSitesPage({
   onRemoveDomain,
   onResetDomains,
 }: DirectSitesPageProps) {
-  const [domainInput, setDomainInput] = useState('')
-  const [message, setMessage] = useState<{
-    type: 'success' | 'error'
-    text: string
-  } | null>(null)
+  const [domainInput, setDomainInput] =
+    useState('')
+
+  const [message, setMessage] =
+    useState<{
+      type: 'success' | 'error'
+      text: string
+    } | null>(null)
 
   function handleAddDomain() {
-    const result = onAddDomain(domainInput)
+    const result =
+      onAddDomain(domainInput)
 
     if (!result.success) {
       setMessage({
         type: 'error',
         text: result.error,
       })
-
       return
     }
 
@@ -1547,13 +2042,17 @@ function DirectSitesPage({
     })
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+  function handleKeyDown(
+    event: KeyboardEvent<HTMLInputElement>,
+  ) {
     if (event.key === 'Enter') {
       handleAddDomain()
     }
   }
 
-  function handleRemoveDomain(domain: string) {
+  function handleRemoveDomain(
+    domain: string,
+  ) {
     onRemoveDomain(domain)
 
     setMessage({
@@ -1576,8 +2075,12 @@ function DirectSitesPage({
       <section className="panel-card">
         <div className="panel-heading">
           <div>
-            <span className="panel-kicker">Split Tunnel</span>
-            <h3>افزودن سایت بدون VPN</h3>
+            <span className="panel-kicker">
+              Split Tunnel
+            </span>
+            <h3>
+              افزودن سایت بدون VPN
+            </h3>
           </div>
 
           <span className="count-badge">
@@ -1593,7 +2096,9 @@ function DirectSitesPage({
             type="text"
             value={domainInput}
             onChange={(event) => {
-              setDomainInput(event.target.value)
+              setDomainInput(
+                event.target.value,
+              )
               setMessage(null)
             }}
             onKeyDown={handleKeyDown}
@@ -1609,9 +2114,10 @@ function DirectSitesPage({
         </div>
 
         <p className="field-help">
-          می‌توانی آدرس را با https، بدون https، همراه مسیر کامل یا
-          با پیشوند domain وارد کنی. برنامه نام دامنه را خودکار
-          استخراج می‌کند.
+          می‌توانی آدرس را با https، بدون
+          https، همراه مسیر کامل یا با پیشوند
+          domain وارد کنی. برنامه نام دامنه را
+          خودکار استخراج می‌کند.
         </p>
 
         {message && (
@@ -1630,7 +2136,9 @@ function DirectSitesPage({
       <section className="panel-card">
         <div className="panel-heading">
           <div>
-            <span className="panel-kicker">مسیر مستقیم</span>
+            <span className="panel-kicker">
+              مسیر مستقیم
+            </span>
             <h3>دامنه‌های ثبت‌شده</h3>
           </div>
 
@@ -1651,23 +2159,35 @@ function DirectSitesPage({
                 key={domain}
               >
                 <div className="domain-management-main">
-                  <span className="domain-preview-check">✓</span>
+                  <span className="domain-preview-check">
+                    ✓
+                  </span>
 
                   <div>
-                    <strong dir="ltr">{domain}</strong>
-                    <span>دامنه و تمام زیردامنه‌ها</span>
+                    <strong dir="ltr">
+                      {domain}
+                    </strong>
+                    <span>
+                      دامنه و تمام زیردامنه‌ها
+                    </span>
                   </div>
                 </div>
 
                 <div className="domain-management-actions">
-                  <span className="direct-badge">مستقیم</span>
+                  <span className="direct-badge">
+                    مستقیم
+                  </span>
 
                   <button
                     className="remove-domain-button"
                     type="button"
                     aria-label={`حذف ${domain}`}
                     title="حذف دامنه"
-                    onClick={() => handleRemoveDomain(domain)}
+                    onClick={() =>
+                      handleRemoveDomain(
+                        domain,
+                      )
+                    }
                   >
                     حذف
                   </button>
@@ -1678,8 +2198,13 @@ function DirectSitesPage({
         ) : (
           <div className="empty-domain-list">
             <span>↗</span>
-            <strong>فهرست خالی است</strong>
-            <p>یک آدرس سایت وارد کن تا بدون VPN باز شود.</p>
+            <strong>
+              فهرست خالی است
+            </strong>
+            <p>
+              یک آدرس سایت وارد کن تا بدون VPN
+              باز شود.
+            </p>
           </div>
         )}
       </section>
@@ -1691,22 +2216,26 @@ function RescuePage() {
   const rescueMethods = [
     {
       name: 'Fragment',
-      description: 'تقسیم کنترل‌شده بسته‌های TLS',
+      description:
+        'تقسیم کنترل‌شده بسته‌های TLS',
       status: 'در آینده',
     },
     {
       name: 'SNI Rescue',
-      description: 'راهکار کمکی برای شرایط DPI شدید',
+      description:
+        'راهکار کمکی برای شرایط DPI شدید',
       status: 'در آینده',
     },
     {
       name: 'Serverless',
-      description: 'واردکردن Profileهای بررسی‌شده',
+      description:
+        'واردکردن Profileهای بررسی‌شده',
       status: 'در آینده',
     },
     {
       name: 'Tor Bridges',
-      description: 'Snowflake، WebTunnel و Bridge',
+      description:
+        'Snowflake، WebTunnel و Bridge',
       status: 'در آینده',
     },
   ]
@@ -1714,28 +2243,44 @@ function RescuePage() {
   return (
     <div className="page-stack">
       <section className="rescue-header-card">
-        <span className="rescue-header-icon">✦</span>
+        <span className="rescue-header-icon">
+          ✦
+        </span>
 
         <div>
-          <span className="panel-kicker">Emergency Connection</span>
-          <h2>پیداکردن راهکار مناسب برای شبکه فعلی</h2>
+          <span className="panel-kicker">
+            Emergency Connection
+          </span>
+          <h2>
+            پیداکردن راهکار مناسب برای شبکه فعلی
+          </h2>
           <p>
-            این بخش بعداً وضعیت DNS، TCP، UDP و TLS را بررسی می‌کند
-            و روش قابل‌استفاده را پیشنهاد می‌دهد.
+            این بخش بعداً وضعیت DNS، TCP، UDP
+            و TLS را بررسی می‌کند و روش
+            قابل‌استفاده را پیشنهاد می‌دهد.
           </p>
         </div>
 
-        <button className="primary-button" type="button" disabled>
+        <button
+          className="primary-button"
+          type="button"
+          disabled
+        >
           شروع بررسی
         </button>
       </section>
 
       <section className="rescue-method-grid">
         {rescueMethods.map((method) => (
-          <article className="rescue-method-card" key={method.name}>
+          <article
+            className="rescue-method-card"
+            key={method.name}
+          >
             <div className="rescue-method-top">
               <span>◇</span>
-              <small>{method.status}</small>
+              <small>
+                {method.status}
+              </small>
             </div>
 
             <h3>{method.name}</h3>
@@ -1752,25 +2297,37 @@ function StatisticsPage() {
     <div className="page-stack">
       <section className="quick-statistics">
         <article className="statistic-card">
-          <span className="statistic-icon">↓</span>
+          <span className="statistic-icon">
+            ↓
+          </span>
           <div>
-            <span className="statistic-label">دانلود</span>
+            <span className="statistic-label">
+              دانلود
+            </span>
             <strong>۰ مگابایت</strong>
           </div>
         </article>
 
         <article className="statistic-card">
-          <span className="statistic-icon">↑</span>
+          <span className="statistic-icon">
+            ↑
+          </span>
           <div>
-            <span className="statistic-label">آپلود</span>
+            <span className="statistic-label">
+              آپلود
+            </span>
             <strong>۰ مگابایت</strong>
           </div>
         </article>
 
         <article className="statistic-card">
-          <span className="statistic-icon">◷</span>
+          <span className="statistic-icon">
+            ◷
+          </span>
           <div>
-            <span className="statistic-label">مدت اتصال</span>
+            <span className="statistic-label">
+              مدت اتصال
+            </span>
             <strong>۰۰:۰۰:۰۰</strong>
           </div>
         </article>
@@ -1790,29 +2347,45 @@ function LogsPage() {
     <section className="panel-card log-panel">
       <div className="panel-heading">
         <div>
-          <span className="panel-kicker">Application Log</span>
+          <span className="panel-kicker">
+            Application Log
+          </span>
           <h3>گزارش برنامه</h3>
         </div>
 
-        <button className="text-button" type="button">
+        <button
+          className="text-button"
+          type="button"
+        >
           پاک‌کردن
         </button>
       </div>
 
-      <div className="log-viewer" dir="ltr">
+      <div
+        className="log-viewer"
+        dir="ltr"
+      >
         <div>
           <span>INFO</span>
-          <p>HamidsDeutsch Connect interface started.</p>
+          <p>
+            HamidsDeutsch Connect interface
+            started.
+          </p>
         </div>
 
         <div>
           <span>INFO</span>
-          <p>Electron secure shell is ready.</p>
+          <p>
+            Electron secure shell is ready.
+          </p>
         </div>
 
         <div>
           <span>WAIT</span>
-          <p>Network engine has not been installed yet.</p>
+          <p>
+            Real VPN connection has not been
+            enabled yet.
+          </p>
         </div>
       </div>
     </section>
@@ -1825,14 +2398,23 @@ function SettingsPage() {
       <section className="panel-card">
         <div className="panel-heading">
           <div>
-            <span className="panel-kicker">عمومی</span>
+            <span className="panel-kicker">
+              عمومی
+            </span>
             <h3>تنظیمات برنامه</h3>
           </div>
         </div>
 
         <SettingRow
-          title="اتصال خودکار"
-          description="پس از اجرای برنامه، آخرین اتصال سالم بررسی شود."
+          title="بارگذاری خودکار سرورها"
+          description="هنگام اجرای برنامه، آخرین اشتراک به‌روز و سرورها بارگذاری شوند."
+          checked
+        />
+
+        <SettingRow
+          title="انتخاب سریع‌ترین سرور"
+          description="پس از سنجش تأخیر، سریع‌ترین سرور برای اتصال سریع پیشنهاد شود."
+          checked
         />
 
         <SettingRow
@@ -1851,7 +2433,9 @@ function SettingsPage() {
       <section className="panel-card">
         <div className="panel-heading">
           <div>
-            <span className="panel-kicker">ظاهر</span>
+            <span className="panel-kicker">
+              ظاهر
+            </span>
             <h3>نمای برنامه</h3>
           </div>
         </div>
@@ -1883,7 +2467,10 @@ function SettingRow({
       </div>
 
       <label className="switch">
-        <input defaultChecked={checked} type="checkbox" />
+        <input
+          defaultChecked={checked}
+          type="checkbox"
+        />
         <span className="switch-track" />
       </label>
     </div>
