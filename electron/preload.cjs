@@ -22,6 +22,19 @@ contextBridge.exposeInMainWorld(
           'engine:start-local-proxy',
         ),
 
+      activateSystemProxy: () =>
+        ipcRenderer.invoke(
+          'engine:activate-system-proxy',
+        ),
+
+      deactivateSystemProxy: (
+        keepLocalProxy = false,
+      ) =>
+        ipcRenderer.invoke(
+          'engine:deactivate-system-proxy',
+          keepLocalProxy,
+        ),
+
       stopLocalProxy: () =>
         ipcRenderer.invoke(
           'engine:stop-local-proxy',

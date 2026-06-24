@@ -1,3 +1,7 @@
+const {
+  createStableNodeId,
+} = require('./server-node-id.cjs')
+
 const SUPPORTED_PROTOCOLS = [
   'vmess://',
   'vless://',
@@ -36,7 +40,7 @@ function parseSubscriptionNodes(content) {
     if (node) {
       nodes.push({
         ...node,
-        id: createSafeNodeId(node, nodes.length),
+        id: createStableNodeId(line),
       })
     }
   }
@@ -378,40 +382,6 @@ function createUnknownNode(
     security: null,
     valid: false,
   }
-}
-
-function createSafeNodeId(
-  node,
-  index,
-) {
-  const source = [
-    node.protocol,
-    node.host ?? 'unknown',
-    node.port ?? 'unknown',
-    node.name,
-    index,
-  ].join('|')
-
-  let hash = 2166136261
-
-  for (
-    let characterIndex = 0;
-    characterIndex < source.length;
-    characterIndex += 1
-  ) {
-    hash ^= source.charCodeAt(
-      characterIndex,
-    )
-
-    hash = Math.imul(
-      hash,
-      16777619,
-    )
-  }
-
-  return `node-${(
-    hash >>> 0
-  ).toString(16)}`
 }
 
 function tryDecodeBase64(value) {

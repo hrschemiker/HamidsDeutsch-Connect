@@ -79,6 +79,9 @@ function App() {
   const [connectionActionError, setConnectionActionError] =
     useState<string | null>(null)
 
+  const [automaticConnectionRunning, setAutomaticConnectionRunning] =
+    useState(false)
+
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
   const engineProcess = useEngineProcess()
@@ -156,18 +159,17 @@ function App() {
     serverNodes.subscriptionId,
   ])
 
-  async function prepareAndStart(node: SafeServerNode) {
-    setConnectionActionError(null)
-    ipVerification.reset()
-
+  async function attemptServerConnection(
+    node: SafeServerNode,
+  ) {
     if (!serverNodes.subscriptionId) {
-      setConnectionActionError(
-        'اشتراک فعال برای این سرور مشخص نیست.',
-      )
-      return
+      return {
+        success: false as const,
+        error: 'اشتراک فعال برای این سرور مشخص نیست.',
+      }
     }
 
-    selectedServer.selectServer(toPublicServer(node))
+    ipVerification.reset()
 
     const checkResult = await configCheck.checkConfig({
       subscriptionId: serverNodes.subscriptionId,
@@ -176,31 +178,153 @@ function App() {
     })
 
     if (!checkResult.success) {
-      setConnectionActionError(
-        checkResult.error ?? 'کانفیگ توسط sing-box تأیید نشد.',
-      )
-      return
+      return {
+        success: false as const,
+        error:
+          checkResult.error ??
+          'کانفیگ توسط sing-box تأیید نشد.',
+      }
     }
 
     const startResult = await engineProcess.start()
 
     if (!startResult.success) {
-      setConnectionActionError(startResult.error)
-      return
+      return {
+        success: false as const,
+        error: startResult.error,
+      }
     }
 
-    const verificationResult = await ipVerification.verify()
+    const verificationResult =
+      await ipVerification.verify()
 
-    if (!verificationResult.success) {
-      setConnectionActionError(
-        verificationResult.error ?? 'بررسی تغییر IP ناموفق بود.',
+    if (
+      verificationResult.success &&
+      verificationResult.changed
+    ) {
+      selectedServer.selectServer(
+        toPublicServer(node),
       )
+
+      return {
+        success: true as const,
+        error: null,
+      }
+    }
+
+    await engineProcess.stop()
+    ipVerification.reset()
+
+    return {
+      success: false as const,
+      error:
+        verificationResult.error ??
+        'این سرور ترافیک واقعی عبور نداد.',
+    }
+  }
+
+  async function prepareAndStart(
+    node: SafeServerNode,
+  ) {
+    setConnectionActionError(null)
+
+    if (engineProcess.status.running) {
+      await engineProcess.stop()
+    }
+
+    const result =
+      await attemptServerConnection(node)
+
+    if (!result.success) {
+      setConnectionActionError(
+        result.error,
+      )
+    }
+  }
+
+  async function connectToFirstHealthyServer() {
+    if (automaticConnectionRunning) {
       return
     }
 
-    if (!verificationResult.changed) {
+    setAutomaticConnectionRunning(true)
+    setConnectionActionError(null)
+    ipVerification.reset()
+
+    try {
+      if (engineProcess.status.running) {
+        await engineProcess.stop()
+      }
+
+      const validNodes =
+        serverNodes.nodes.filter(
+          (node) => node.valid,
+        )
+
+      const candidates =
+        [...validNodes].sort(
+          (firstNode, secondNode) => {
+            const first =
+              latency.results[
+                firstNode.id
+              ]
+
+            const second =
+              latency.results[
+                secondNode.id
+              ]
+
+            const firstRank =
+              first?.reachable &&
+              typeof first.latencyMs ===
+                'number'
+                ? first.latencyMs
+                : Number.MAX_SAFE_INTEGER
+
+            const secondRank =
+              second?.reachable &&
+              typeof second.latencyMs ===
+                'number'
+                ? second.latencyMs
+                : Number.MAX_SAFE_INTEGER
+
+            return (
+              firstRank -
+              secondRank
+            )
+          },
+        )
+
+      if (candidates.length === 0) {
+        setConnectionActionError(
+          'هیچ سرور معتبری برای اتصال وجود ندارد.',
+        )
+        return
+      }
+
+      let lastError =
+        'هیچ‌کدام از سرورها اتصال واقعی برقرار نکردند.'
+
+      for (const node of candidates) {
+        const result =
+          await attemptServerConnection(
+            node,
+          )
+
+        if (result.success) {
+          return
+        }
+
+        lastError =
+          result.error ?? lastError
+      }
+
       setConnectionActionError(
-        'پروکسی محلی آماده است، اما IP خروجی تغییر نکرده است.',
+        lastError,
+      )
+    } finally {
+      setAutomaticConnectionRunning(
+        false,
       )
     }
   }
@@ -330,7 +454,10 @@ function App() {
               directDomains={directDomains.domains}
               engineInfo={engine.info}
               processStatus={engineProcess.status}
-              processBusy={engineProcess.busy}
+              processBusy={
+                engineProcess.busy ||
+                automaticConnectionRunning
+              }
               processError={connectionActionError ?? engineProcess.error}
               ipVerificationResult={ipVerification.result}
               ipVerificationChecking={ipVerification.checking}
@@ -344,16 +471,12 @@ function App() {
               onMainAction={() => {
                 if (engineProcess.status.running) {
                   void stopLocalProxy()
-                } else if (fastestServer) {
-                  void prepareAndStart(fastestServer)
-                } else if (selectedNode) {
-                  void prepareAndStart(selectedNode)
+                } else {
+                  void connectToFirstHealthyServer()
                 }
               }}
               onStartFastest={() => {
-                if (fastestServer) {
-                  void prepareAndStart(fastestServer)
-                }
+                void connectToFirstHealthyServer()
               }}
               onStartPrevious={() => {
                 if (selectedNode) {

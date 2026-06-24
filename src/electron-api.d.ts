@@ -12,6 +12,7 @@ type EngineInfo = {
 type EngineProcessStatus = {
   running: boolean
   ready: boolean
+  systemProxyEnabled: boolean
   pid: number | null
   startedAt: string | null
   stoppedAt: string | null
@@ -170,6 +171,13 @@ declare global {
 
         startLocalProxy: () =>
           Promise<EngineProcessResult>
+
+        activateSystemProxy: () =>
+          Promise<EngineProcessResult>
+
+        deactivateSystemProxy: (
+          keepLocalProxy?: boolean,
+        ) => Promise<EngineProcessResult>
 
         stopLocalProxy: () =>
           Promise<EngineProcessResult>

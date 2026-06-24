@@ -1,25 +1,32 @@
 const {
-  net: electronNet,
-} = require('electron')
+  execFile,
+} = require('node:child_process')
+const {
+  promisify,
+} = require('node:util')
+const net = require('node:net')
 
-const nodeNet =
-  require('node:net')
+const execFileAsync =
+  promisify(execFile)
 
-const tls =
-  require('node:tls')
+const REQUEST_TIMEOUT_SECONDS = 7
+const CONNECT_TIMEOUT_SECONDS = 5
+const MAX_OUTPUT_BYTES = 64 * 1024
 
-const crypto =
-  require('node:crypto')
-
-const DIRECT_TIMEOUT_MS = 10000
-const PROXY_TIMEOUT_MS = 12000
-const MAX_RESPONSE_BYTES = 64 * 1024
-
-const IP_SERVICE_HOST =
-  'api.ipify.org'
-
-const IP_SERVICE_PORT = 443
-const IP_SERVICE_PATH = '/'
+const IP_SERVICES = [
+  {
+    name: 'api.ipify.org',
+    url: 'https://api.ipify.org',
+  },
+  {
+    name: 'icanhazip.com',
+    url: 'https://icanhazip.com',
+  },
+  {
+    name: 'ifconfig.me',
+    url: 'https://ifconfig.me/ip',
+  },
+]
 
 async function verifyIpChange({
   proxyHost,
@@ -36,8 +43,12 @@ async function verifyIpChange({
   const directStartedAt =
     Date.now()
 
-  const directIp =
-    await fetchDirectIp()
+  const directResult =
+    await fetchFirstWorkingIp({
+      mode: 'direct',
+      proxyHost,
+      proxyPort,
+    })
 
   const directDurationMs =
     Date.now() -
@@ -46,8 +57,9 @@ async function verifyIpChange({
   const proxyStartedAt =
     Date.now()
 
-  const proxyIp =
-    await fetchIpThroughProxy({
+  const proxyResult =
+    await fetchFirstWorkingIp({
+      mode: 'proxy',
       proxyHost,
       proxyPort,
     })
@@ -55,6 +67,12 @@ async function verifyIpChange({
   const proxyDurationMs =
     Date.now() -
     proxyStartedAt
+
+  const directIp =
+    directResult.ip
+
+  const proxyIp =
+    proxyResult.ip
 
   const changed =
     directIp !== proxyIp
@@ -68,561 +86,159 @@ async function verifyIpChange({
     directDurationMs,
     proxyDurationMs,
     service:
-      IP_SERVICE_HOST,
+      `${directResult.service} / ${proxyResult.service}`,
     error: changed
       ? null
       : 'IP خروجی پروکسی با IP مستقیم یکسان است.',
   }
 }
 
-async function fetchDirectIp() {
-  const controller =
-    new AbortController()
-
-  const timeoutId =
-    setTimeout(() => {
-      controller.abort()
-    }, DIRECT_TIMEOUT_MS)
-
-  try {
-    const cacheBuster =
-      crypto.randomBytes(8)
-        .toString('hex')
-
-    const response =
-      await electronNet.fetch(
-        `https://${IP_SERVICE_HOST}${IP_SERVICE_PATH}?r=${cacheBuster}`,
-        {
-          method: 'GET',
-          redirect: 'error',
-          cache: 'no-store',
-          signal:
-            controller.signal,
-          headers: {
-            Accept:
-              'text/plain',
-            'User-Agent':
-              'HamidsDeutsch-Connect/0.1.0',
-          },
-        },
-      )
-
-    if (!response.ok) {
-      throw new Error(
-        `سرویس IP مستقیم با وضعیت HTTP ${response.status} پاسخ داد.`,
-      )
-    }
-
-    const text =
-      await response.text()
-
-    return normalizeIp(text)
-  } catch (error) {
-    if (
-      error?.name ===
-      'AbortError'
-    ) {
-      throw new Error(
-        'زمان دریافت IP مستقیم تمام شد.',
-      )
-    }
-
-    throw new Error(
-      error instanceof Error
-        ? `دریافت IP مستقیم ناموفق بود: ${error.message}`
-        : 'دریافت IP مستقیم ناموفق بود.',
-    )
-  } finally {
-    clearTimeout(timeoutId)
-  }
-}
-
-function fetchIpThroughProxy({
+async function fetchFirstWorkingIp({
+  mode,
   proxyHost,
   proxyPort,
 }) {
-  return new Promise(
-    (resolve, reject) => {
-      const proxySocket =
-        new nodeNet.Socket()
-
-      let settled = false
-      let connectBuffer =
-        Buffer.alloc(0)
-
-      const overallTimer =
-        setTimeout(() => {
-          finishError(
-            new Error(
-              'زمان دریافت IP از پروکسی تمام شد.',
-            ),
-          )
-        }, PROXY_TIMEOUT_MS)
-
-      function cleanup() {
-        clearTimeout(overallTimer)
-      }
-
-      function finishSuccess(ip) {
-        if (settled) {
-          return
-        }
-
-        settled = true
-        cleanup()
-        proxySocket.destroy()
-        resolve(ip)
-      }
-
-      function finishError(error) {
-        if (settled) {
-          return
-        }
-
-        settled = true
-        cleanup()
-        proxySocket.destroy()
-
-        reject(
-          error instanceof Error
-            ? error
-            : new Error(
-                'درخواست IP از پروکسی ناموفق بود.',
-              ),
-        )
-      }
-
-      proxySocket.setTimeout(
-        PROXY_TIMEOUT_MS,
-      )
-
-      proxySocket.once(
-        'timeout',
-        () => {
-          finishError(
-            new Error(
-              'پروکسی محلی در زمان تعیین‌شده پاسخ نداد.',
-            ),
-          )
-        },
-      )
-
-      proxySocket.once(
-        'error',
-        (error) => {
-          finishError(
-            new Error(
-              `اتصال به پروکسی محلی ناموفق بود: ${error.message}`,
-            ),
-          )
-        },
-      )
-
-      proxySocket.on(
-        'data',
-        handleConnectData,
-      )
-
-      proxySocket.once(
-        'connect',
-        () => {
-          const request = [
-            `CONNECT ${IP_SERVICE_HOST}:${IP_SERVICE_PORT} HTTP/1.1`,
-            `Host: ${IP_SERVICE_HOST}:${IP_SERVICE_PORT}`,
-            'Proxy-Connection: keep-alive',
-            'Connection: keep-alive',
-            '',
-            '',
-          ].join('\r\n')
-
-          proxySocket.write(
-            request,
-            'ascii',
-          )
-        },
-      )
-
-      function handleConnectData(
-        chunk,
-      ) {
-        connectBuffer =
-          Buffer.concat([
-            connectBuffer,
-            chunk,
-          ])
-
-        if (
-          connectBuffer.length >
-          MAX_RESPONSE_BYTES
-        ) {
-          finishError(
-            new Error(
-              'پاسخ CONNECT پروکسی بیش از حد بزرگ بود.',
-            ),
-          )
-
-          return
-        }
-
-        const headerEnd =
-          connectBuffer.indexOf(
-            '\r\n\r\n',
-          )
-
-        if (headerEnd < 0) {
-          return
-        }
-
-        proxySocket.off(
-          'data',
-          handleConnectData,
-        )
-
-        const header =
-          connectBuffer
-            .subarray(
-              0,
-              headerEnd,
-            )
-            .toString('latin1')
-
-        const statusLine =
-          header.split('\r\n')[0] ??
-          ''
-
-        const statusMatch =
-          statusLine.match(
-            /^HTTP\/\d(?:\.\d)?\s+(\d{3})/,
-          )
-
-        const statusCode =
-          statusMatch
-            ? Number(
-                statusMatch[1],
-              )
-            : null
-
-        if (statusCode !== 200) {
-          finishError(
-            new Error(
-              `پروکسی درخواست CONNECT را نپذیرفت${statusCode ? `؛ وضعیت ${statusCode}` : ''}.`,
-            ),
-          )
-
-          return
-        }
-
-        const remaining =
-          connectBuffer.subarray(
-            headerEnd + 4,
-          )
-
-        if (
-          remaining.length > 0
-        ) {
-          proxySocket.unshift(
-            remaining,
-          )
-        }
-
-        beginTlsRequest()
-      }
-
-      function beginTlsRequest() {
-        const tlsSocket =
-          tls.connect({
-            socket:
-              proxySocket,
-            servername:
-              IP_SERVICE_HOST,
-            rejectUnauthorized:
-              true,
-            ALPNProtocols: [
-              'http/1.1',
-            ],
+  const attempts =
+    IP_SERVICES.map(
+      async (service) => {
+        const ip =
+          await fetchIpWithCurl({
+            mode,
+            serviceUrl:
+              service.url,
+            proxyHost,
+            proxyPort,
           })
 
-        let responseBuffer =
-          Buffer.alloc(0)
+        return {
+          ip,
+          service:
+            service.name,
+        }
+      },
+    )
 
-        tlsSocket.setTimeout(
-          PROXY_TIMEOUT_MS,
-        )
-
-        tlsSocket.once(
-          'secureConnect',
-          () => {
-            const cacheBuster =
-              crypto.randomBytes(8)
-                .toString('hex')
-
-            const request = [
-              `GET ${IP_SERVICE_PATH}?r=${cacheBuster} HTTP/1.1`,
-              `Host: ${IP_SERVICE_HOST}`,
-              'Accept: text/plain',
-              'User-Agent: HamidsDeutsch-Connect/0.1.0',
-              'Connection: close',
-              '',
-              '',
-            ].join('\r\n')
-
-            tlsSocket.write(
-              request,
-              'ascii',
+  try {
+    return await Promise.any(
+      attempts,
+    )
+  } catch (aggregateError) {
+    const messages =
+      Array.isArray(
+        aggregateError?.errors,
+      )
+        ? aggregateError.errors
+            .map((error) =>
+              error instanceof Error
+                ? error.message
+                : String(error),
             )
-          },
-        )
+            .join(' | ')
+        : 'خطای نامشخص'
 
-        tlsSocket.on(
-          'data',
-          (chunk) => {
-            responseBuffer =
-              Buffer.concat([
-                responseBuffer,
-                chunk,
-              ])
+    const label =
+      mode === 'direct'
+        ? 'مستقیم'
+        : 'از داخل پروکسی'
 
-            if (
-              responseBuffer.length >
-              MAX_RESPONSE_BYTES
-            ) {
-              tlsSocket.destroy()
-
-              finishError(
-                new Error(
-                  'پاسخ سرویس IP بیش از حد بزرگ بود.',
-                ),
-              )
-            }
-          },
-        )
-
-        tlsSocket.once(
-          'timeout',
-          () => {
-            tlsSocket.destroy()
-
-            finishError(
-              new Error(
-                'درخواست HTTPS از داخل پروکسی زمان‌بر شد.',
-              ),
-            )
-          },
-        )
-
-        tlsSocket.once(
-          'error',
-          (error) => {
-            finishError(
-              new Error(
-                `درخواست TLS از داخل پروکسی ناموفق بود: ${error.message}`,
-              ),
-            )
-          },
-        )
-
-        tlsSocket.once(
-          'end',
-          () => {
-            try {
-              const body =
-                parseHttpResponse(
-                  responseBuffer,
-                )
-
-              finishSuccess(
-                normalizeIp(body),
-              )
-            } catch (error) {
-              finishError(error)
-            }
-          },
-        )
-      }
-
-      try {
-        proxySocket.connect({
-          host: proxyHost,
-          port: proxyPort,
-        })
-      } catch (error) {
-        finishError(error)
-      }
-    },
-  )
+    throw new Error(
+      `دریافت IP ${label} ناموفق بود. ${messages}`,
+    )
+  }
 }
 
-function parseHttpResponse(
-  responseBuffer,
-) {
-  const headerEnd =
-    responseBuffer.indexOf(
-      '\r\n\r\n',
+async function fetchIpWithCurl({
+  mode,
+  serviceUrl,
+  proxyHost,
+  proxyPort,
+}) {
+  const args = [
+    '--silent',
+    '--show-error',
+    '--fail',
+    '--ipv4',
+    '--connect-timeout',
+    String(
+      CONNECT_TIMEOUT_SECONDS,
+    ),
+    '--max-time',
+    String(
+      REQUEST_TIMEOUT_SECONDS,
+    ),
+    '--header',
+    'Accept: text/plain',
+    '--user-agent',
+    'HamidsDeutsch-Connect/0.1.0',
+  ]
+
+  if (mode === 'direct') {
+    args.push(
+      '--noproxy',
+      '*',
     )
-
-  if (headerEnd < 0) {
-    throw new Error(
-      'پاسخ HTTP سرویس IP ناقص بود.',
-    )
-  }
-
-  const headerText =
-    responseBuffer
-      .subarray(
-        0,
-        headerEnd,
-      )
-      .toString('latin1')
-
-  const headerLines =
-    headerText.split('\r\n')
-
-  const statusLine =
-    headerLines.shift() ?? ''
-
-  const statusMatch =
-    statusLine.match(
-      /^HTTP\/\d(?:\.\d)?\s+(\d{3})/,
-    )
-
-  const statusCode =
-    statusMatch
-      ? Number(statusMatch[1])
-      : null
-
-  if (
-    statusCode === null ||
-    statusCode < 200 ||
-    statusCode >= 300
-  ) {
-    throw new Error(
-      `سرویس IP از داخل پروکسی پاسخ معتبر نداد${statusCode ? `؛ وضعیت ${statusCode}` : ''}.`,
+  } else {
+    args.push(
+      '--proxy',
+      `http://${proxyHost}:${proxyPort}`,
     )
   }
 
-  const headers = {}
+  args.push(serviceUrl)
 
-  for (
-    const line of headerLines
-  ) {
-    const separator =
-      line.indexOf(':')
-
-    if (separator < 0) {
-      continue
-    }
-
-    const name =
-      line
-        .slice(0, separator)
-        .trim()
-        .toLowerCase()
-
-    const value =
-      line
-        .slice(separator + 1)
-        .trim()
-
-    headers[name] = value
-  }
-
-  const rawBody =
-    responseBuffer.subarray(
-      headerEnd + 4,
+  try {
+    const {
+      stdout,
+      stderr,
+    } = await execFileAsync(
+      'curl.exe',
+      args,
+      {
+        windowsHide: true,
+        timeout:
+          (REQUEST_TIMEOUT_SECONDS +
+            2) *
+          1000,
+        encoding: 'utf8',
+        maxBuffer:
+          MAX_OUTPUT_BYTES,
+        shell: false,
+      },
     )
 
-  if (
-    headers[
-      'transfer-encoding'
-    ]?.toLowerCase()
-      .includes('chunked')
-  ) {
-    return decodeChunkedBody(
-      rawBody,
-    ).toString('utf8')
-  }
+    const output =
+      String(stdout ?? '').trim()
 
-  return rawBody.toString(
-    'utf8',
-  )
-}
-
-function decodeChunkedBody(
-  buffer,
-) {
-  const chunks = []
-  let offset = 0
-
-  while (
-    offset < buffer.length
-  ) {
-    const lineEnd =
-      buffer.indexOf(
-        '\r\n',
-        offset,
-      )
-
-    if (lineEnd < 0) {
+    if (!output) {
       throw new Error(
-        'بدنه Chunked ناقص است.',
+        sanitizeError(stderr) ||
+        'پاسخ سرویس IP خالی بود.',
       )
     }
 
-    const sizeText =
-      buffer
-        .subarray(
-          offset,
-          lineEnd,
-        )
-        .toString('ascii')
-        .split(';')[0]
-        .trim()
-
-    const size =
-      Number.parseInt(
-        sizeText,
-        16,
-      )
-
+    return normalizeIp(output)
+  } catch (error) {
     if (
-      !Number.isFinite(size)
+      error?.code ===
+      'ENOENT'
     ) {
       throw new Error(
-        'اندازه Chunked معتبر نیست.',
+        'curl.exe در ویندوز پیدا نشد.',
       )
     }
 
-    offset =
-      lineEnd + 2
-
-    if (size === 0) {
-      break
-    }
-
-    const chunkEnd =
-      offset + size
-
-    if (
-      chunkEnd >
-      buffer.length
-    ) {
-      throw new Error(
-        'بدنه Chunked ناقص است.',
+    const stderr =
+      sanitizeError(
+        error?.stderr,
       )
-    }
 
-    chunks.push(
-      buffer.subarray(
-        offset,
-        chunkEnd,
-      ),
+    throw new Error(
+      stderr ||
+      (error instanceof Error
+        ? error.message
+        : 'اجرای curl ناموفق بود.'),
     )
-
-    offset =
-      chunkEnd + 2
   }
-
-  return Buffer.concat(chunks)
 }
 
 function normalizeIp(value) {
@@ -630,15 +246,16 @@ function normalizeIp(value) {
     String(value ?? '')
       .trim()
       .split(/\s+/)[0]
-      .replace(/^\[/, '')
-      .replace(/\]$/, '')
+      .replace(
+        /^[\[\("'`]+|[\]\)"'`,;]+$/g,
+        '',
+      )
 
   if (
-    nodeNet.isIP(candidate) ===
-    0
+    !net.isIP(candidate)
   ) {
     throw new Error(
-      'سرویس بررسی IP مقدار معتبری برنگرداند.',
+      'پاسخ سرویس، یک نشانی IP معتبر نبود.',
     )
   }
 
@@ -670,6 +287,20 @@ function validateProxyAddress(
       'پورت پروکسی محلی معتبر نیست.',
     )
   }
+}
+
+function sanitizeError(value) {
+  return String(value ?? '')
+    .replace(
+      /https?:\/\/[^\s]+/gi,
+      '[service-url]',
+    )
+    .replace(
+      /(?:password|passwd|token|secret|uuid)\s*[:=]\s*[^\s,]+/gi,
+      '$1=[hidden]',
+    )
+    .trim()
+    .slice(0, 1000)
 }
 
 module.exports = {

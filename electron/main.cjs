@@ -36,6 +36,8 @@ const {
 
 const {
   startLocalProxy,
+  activateSystemProxy,
+  deactivateSystemProxy,
   stopLocalProxy,
   getProcessStatus,
   disposeProcessManager,
@@ -214,6 +216,84 @@ function registerIpcHandlers() {
       } catch (error) {
         console.error(
           '[Engine] Local proxy start failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return createProcessErrorResult(
+          error,
+        )
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'engine:activate-system-proxy',
+    async () => {
+      try {
+        const result =
+          await activateSystemProxy({
+            enginePath:
+              getEnginePath(),
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+          })
+
+        console.log(
+          '[Engine] System proxy activation:',
+          result.success,
+          result.systemProxyEnabled,
+        )
+
+        return result
+      } catch (error) {
+        console.error(
+          '[Engine] System proxy activation failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return createProcessErrorResult(
+          error,
+        )
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'engine:deactivate-system-proxy',
+    async (
+      _event,
+      keepLocalProxy,
+    ) => {
+      try {
+        const result =
+          await deactivateSystemProxy({
+            enginePath:
+              getEnginePath(),
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+            keepLocalProxy:
+              Boolean(
+                keepLocalProxy,
+              ),
+          })
+
+        console.log(
+          '[Engine] System proxy deactivation:',
+          result.success,
+        )
+
+        return result
+      } catch (error) {
+        console.error(
+          '[Engine] System proxy deactivation failed:',
           error instanceof Error
             ? error.message
             : 'Unknown error',
@@ -447,7 +527,8 @@ function registerIpcHandlers() {
           httpStatusText: null,
           contentType: null,
           responseSize: null,
-          format: 'internal-error',
+          format:
+            'internal-error',
           configCount: 0,
           error:
             error instanceof Error
@@ -820,10 +901,14 @@ app.on(
     event.preventDefault()
     isQuitting = true
 
-    void disposeProcessManager()
-      .finally(() => {
-        app.quit()
-      })
+    void disposeProcessManager({
+      userDataPath:
+        app.getPath(
+          'userData',
+        ),
+    }).finally(() => {
+      app.quit()
+    })
   },
 )
 

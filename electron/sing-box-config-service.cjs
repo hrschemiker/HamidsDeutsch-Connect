@@ -1,3 +1,7 @@
+const {
+  createStableNodeId,
+} = require('./server-node-id.cjs')
+
 const { net } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs/promises')
@@ -269,8 +273,6 @@ function resolveNodeById(
     .map((line) => line.trim())
     .filter(Boolean)
 
-  let nodeIndex = 0
-
   for (const line of lines) {
     const lowerLine =
       line.toLowerCase()
@@ -290,10 +292,7 @@ function resolveNodeById(
       parseSafeNode(line)
 
     const nodeId =
-      createSafeNodeId(
-        safeNode,
-        nodeIndex,
-      )
+      createStableNodeId(line)
 
     if (nodeId === targetNodeId) {
       return {
@@ -302,7 +301,6 @@ function resolveNodeById(
       }
     }
 
-    nodeIndex += 1
   }
 
   return null
@@ -405,40 +403,6 @@ function parseSafeNode(uri) {
       parsed.port,
     ),
   }
-}
-
-function createSafeNodeId(
-  node,
-  index,
-) {
-  const source = [
-    node.protocol,
-    node.host ?? 'unknown',
-    node.port ?? 'unknown',
-    node.name,
-    index,
-  ].join('|')
-
-  let hash = 2166136261
-
-  for (
-    let characterIndex = 0;
-    characterIndex < source.length;
-    characterIndex += 1
-  ) {
-    hash ^= source.charCodeAt(
-      characterIndex,
-    )
-
-    hash = Math.imul(
-      hash,
-      16777619,
-    )
-  }
-
-  return `node-${(
-    hash >>> 0
-  ).toString(16)}`
 }
 
 function buildOutboundFromUri(uri) {
