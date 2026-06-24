@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld(
           'engine:start-local-proxy',
         ),
 
+      startTun: () =>
+        ipcRenderer.invoke(
+          'engine:start-tun',
+        ),
+
       activateSystemProxy: () =>
         ipcRenderer.invoke(
           'engine:activate-system-proxy',
@@ -57,6 +62,11 @@ contextBridge.exposeInMainWorld(
       verifyIpChange: () =>
         ipcRenderer.invoke(
           'network:verify-ip-change',
+        ),
+
+      getCurrentIp: () =>
+        ipcRenderer.invoke(
+          'network:get-current-ip',
         ),
     },
 

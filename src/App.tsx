@@ -17,6 +17,7 @@ import { useSelectedServer } from './servers/use-selected-server'
 import { useServerLatency } from './servers/use-server-latency'
 import { useServerConfigCheck } from './servers/use-server-config-check'
 import { useIpVerification } from './network/use-ip-verification'
+import { useWindowsPrivilege } from './system/use-windows-privilege'
 import './App.css'
 
 type PageId =
@@ -85,6 +86,15 @@ function App() {
   const [connectionWatchdogMessage, setConnectionWatchdogMessage] =
     useState<string | null>(null)
 
+  const [tunBaselineIp, setTunBaselineIp] =
+    useState<string | null>(null)
+
+  const [tunCurrentIp, setTunCurrentIp] =
+    useState<string | null>(null)
+
+  const [tunVerified, setTunVerified] =
+    useState(false)
+
   const connectionWatchdogBusyRef = useRef(false)
   const automaticConnectionBusyRef = useRef(false)
 
@@ -104,10 +114,14 @@ function App() {
   const latency = useServerLatency(serverNodes.nodes)
   const configCheck = useServerConfigCheck()
   const ipVerification = useIpVerification()
+  const windowsPrivilege = useWindowsPrivilege()
 
   const connectionVerified =
-    ipVerification.connected &&
-    engineProcess.status.systemProxyEnabled
+    engineProcess.status.connectionMode === 'tun'
+      ? tunVerified &&
+        engineProcess.status.tunEnabled
+      : ipVerification.connected &&
+        engineProcess.status.systemProxyEnabled
 
   const automaticLatencyTestKey = useRef<string | null>(null)
 
@@ -181,6 +195,9 @@ function App() {
     }
 
     ipVerification.reset()
+    setTunVerified(false)
+    setTunBaselineIp(null)
+    setTunCurrentIp(null)
 
     const checkResult = await configCheck.checkConfig({
       subscriptionId: serverNodes.subscriptionId,
@@ -213,7 +230,8 @@ function App() {
 
     if (
       !localVerification.success ||
-      !localVerification.changed
+      !localVerification.changed ||
+      !localVerification.directIp
     ) {
       await engineProcess.stop()
       ipVerification.reset()
@@ -224,6 +242,98 @@ function App() {
         error:
           localVerification.error ??
           'این سرور ترافیک واقعی عبور نداد.',
+      }
+    }
+
+    const baselineIp =
+      localVerification.directIp
+
+    if (
+      windowsPrivilege.status.supported &&
+      windowsPrivilege.status.isAdministrator
+    ) {
+      const tunCheck =
+        await window.hamidsDeutsch
+          .servers
+          .checkTunConfig({
+            subscriptionId:
+              serverNodes.subscriptionId,
+            nodeId: node.id,
+            directDomains:
+              directDomains.domains,
+          })
+
+      if (tunCheck.success) {
+        await engineProcess.stop()
+        ipVerification.reset()
+
+        const tunStart =
+          await engineProcess.startTun()
+
+        if (tunStart.success) {
+          const currentIp =
+            await window.hamidsDeutsch
+              .network
+              .getCurrentIp()
+
+          if (
+            currentIp.success &&
+            currentIp.ip &&
+            currentIp.ip !== baselineIp
+          ) {
+            setTunBaselineIp(
+              baselineIp,
+            )
+            setTunCurrentIp(
+              currentIp.ip,
+            )
+            setTunVerified(true)
+
+            selectedServer.selectServer(
+              toPublicServer(node),
+            )
+
+            return {
+              success: true as const,
+              fatal: false as const,
+              error: null,
+            }
+          }
+
+          await engineProcess.stop()
+        }
+      }
+
+      const restartLocal =
+        await engineProcess.start()
+
+      if (!restartLocal.success) {
+        return {
+          success: false as const,
+          fatal: false as const,
+          error:
+            restartLocal.error ??
+            'بازگشت از TUN به پروکسی محلی ناموفق بود.',
+        }
+      }
+
+      const fallbackVerification =
+        await ipVerification.verify()
+
+      if (
+        !fallbackVerification.success ||
+        !fallbackVerification.changed
+      ) {
+        await engineProcess.stop()
+        ipVerification.reset()
+
+        return {
+          success: false as const,
+          fatal: false as const,
+          error:
+            fallbackVerification.error ??
+            'تأیید اتصال fallback ناموفق بود.',
+        }
       }
     }
 
@@ -489,6 +599,9 @@ function App() {
     }
 
     ipVerification.reset()
+    setTunVerified(false)
+    setTunBaselineIp(null)
+    setTunCurrentIp(null)
   }
 
   useEffect(() => {
@@ -517,8 +630,7 @@ function App() {
 
         if (
           !currentStatus?.running ||
-          !currentStatus.ready ||
-          !currentStatus.systemProxyEnabled
+          !currentStatus.ready
         ) {
           connectionWatchdogBusyRef.current = false
 
@@ -529,20 +641,61 @@ function App() {
           return
         }
 
-        const health =
-          await ipVerification.verify()
-
         if (
-          !health.success ||
-          !health.changed
+          currentStatus.connectionMode === 'tun'
         ) {
-          connectionWatchdogBusyRef.current = false
+          const currentIp =
+            await window.hamidsDeutsch
+              .network
+              .getCurrentIp()
 
-          await recoverConnection(
-            selectedServer.selectedServer?.id ?? null,
+          if (
+            !currentIp.success ||
+            !currentIp.ip ||
+            !tunBaselineIp ||
+            currentIp.ip === tunBaselineIp
+          ) {
+            connectionWatchdogBusyRef.current = false
+
+            await recoverConnection(
+              selectedServer.selectedServer?.id ?? null,
+            )
+
+            return
+          }
+
+          setTunCurrentIp(
+            currentIp.ip,
           )
+          setTunVerified(true)
+        } else {
+          if (
+            !currentStatus.systemProxyEnabled
+          ) {
+            connectionWatchdogBusyRef.current = false
 
-          return
+            await recoverConnection(
+              selectedServer.selectedServer?.id ?? null,
+            )
+
+            return
+          }
+
+          const health =
+            await ipVerification.verify()
+
+          if (
+            !health.success ||
+            !health.changed
+          ) {
+            connectionWatchdogBusyRef.current = false
+
+            await recoverConnection(
+              selectedServer.selectedServer?.id ?? null,
+            )
+
+            return
+          }
         }
 
         setConnectionWatchdogMessage(null)
@@ -573,6 +726,7 @@ function App() {
     ipVerification.checking,
     ipVerification.verify,
     selectedServer.selectedServer?.id,
+    tunBaselineIp,
   ])
 
   return (
@@ -657,7 +811,9 @@ function App() {
                   : ipVerification.checking
                     ? 'در حال بررسی IP'
                     : connectionVerified
-                      ? 'متصل'
+                      ? engineProcess.status.connectionMode === 'tun'
+                        ? 'متصل با TUN'
+                        : 'متصل'
                       : engineProcess.status.systemProxyEnabled
                         ? 'System Proxy فعال؛ در حال تأیید'
                         : engineProcess.status.ready
@@ -675,6 +831,8 @@ function App() {
               directDomains={directDomains.domains}
               engineInfo={engine.info}
               processStatus={engineProcess.status}
+              tunBaselineIp={tunBaselineIp}
+              tunCurrentIp={tunCurrentIp}
               processBusy={
                 engineProcess.busy ||
                 automaticConnectionRunning
@@ -815,10 +973,18 @@ type HomePageProps = {
     architecture: string | null
     error: string | null
   } | null
+  tunBaselineIp: string | null
+  tunCurrentIp: string | null
   processStatus: {
     running: boolean
     ready: boolean
     systemProxyEnabled: boolean
+    tunEnabled: boolean
+    connectionMode:
+      | 'local-proxy'
+      | 'system-proxy'
+      | 'tun'
+      | null
     pid: number | null
     startedAt: string | null
     stoppedAt: string | null
@@ -864,6 +1030,8 @@ type HomePageProps = {
 function HomePage({
   directDomains,
   engineInfo,
+  tunBaselineIp,
+  tunCurrentIp,
   processStatus,
   processBusy,
   processError,
@@ -903,7 +1071,9 @@ function HomePage({
               }
             />
             {isConnected
-              ? `System Proxy فعال · IP خروجی ${ipVerificationResult.proxyIp ?? 'تأیید شد'}`
+              ? processStatus.connectionMode === 'tun'
+                ? `TUN فعال · IP خروجی ${tunCurrentIp ?? 'تأیید شد'}`
+                : `System Proxy فعال · IP خروجی ${ipVerificationResult.proxyIp ?? 'تأیید شد'}`
               : ipVerificationChecking
                 ? 'در حال مقایسه IP مستقیم و پروکسی'
                 : processStatus.ready
@@ -915,9 +1085,9 @@ function HomePage({
 
           <h2>اینترنت آزاد،<br />ساده و قابل اعتماد</h2>
           <p>
-            سرورها خودکار بررسی می‌شوند، نخستین تونل واقعاً سالم انتخاب
-            می‌شود و وضعیت «متصل» فقط پس از فعال‌شدن System Proxy ویندوز
-            و تأیید دوباره تغییر IP نمایش داده می‌شود.
+            سرورها خودکار بررسی می‌شوند. در حالت Administrator، اتصال
+            ابتدا با TUN برقرار می‌شود؛ در غیر این صورت یا هنگام شکست TUN،
+            System Proxy امن به‌عنوان fallback فعال خواهد شد.
           </p>
 
           <button
@@ -945,7 +1115,9 @@ function HomePage({
               </strong>
               <small>
                 {isConnected
-                  ? `IP مستقیم ${ipVerificationResult.directIp ?? '—'} ← IP خروجی ${ipVerificationResult.proxyIp ?? '—'}`
+                  ? processStatus.connectionMode === 'tun'
+                    ? `IP مبنا ${tunBaselineIp ?? '—'} ← IP خروجی ${tunCurrentIp ?? '—'}`
+                    : `IP مستقیم ${ipVerificationResult.directIp ?? '—'} ← IP خروجی ${ipVerificationResult.proxyIp ?? '—'}`
                   : processStatus.ready
                     ? 'پروکسی آماده است؛ می‌توانی بررسی IP را دوباره اجرا کنی'
                     : 'کانفیگ بررسی، sing-box اجرا و تغییر IP تأیید می‌شود'}
@@ -1113,7 +1285,11 @@ function HomePage({
           <div className="ip-verification-heading">
             <div>
               <span className="panel-kicker">IP Verification</span>
-              <h3>اتصال سراسری ویندوز تأیید شد</h3>
+              <h3>
+                {processStatus.connectionMode === 'tun'
+                  ? 'اتصال سراسری TUN تأیید شد'
+                  : 'اتصال سراسری ویندوز تأیید شد'}
+              </h3>
             </div>
             <span className="verified-connection-badge">متصل</span>
           </div>

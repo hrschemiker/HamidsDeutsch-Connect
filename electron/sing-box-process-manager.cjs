@@ -35,6 +35,8 @@ function createInitialState() {
     running: false,
     ready: false,
     systemProxyEnabled: false,
+    tunEnabled: false,
+    connectionMode: null,
     pid: null,
     startedAt: null,
     stoppedAt: null,
@@ -57,6 +59,17 @@ function getFixedConfigPath(
     'HamidsDeutsch-Connect',
     'runtime',
     'config.json',
+  )
+}
+
+function getTunConfigPath(
+  userDataPath,
+) {
+  return path.join(
+    userDataPath,
+    'HamidsDeutsch-Connect',
+    'runtime',
+    'tun-config.json',
   )
 }
 
@@ -114,6 +127,9 @@ async function startLocalProxy({
 
   resetForStart(
     systemProxyEnabled,
+    systemProxyEnabled
+      ? 'system-proxy'
+      : 'local-proxy',
   )
 
   const child = spawn(
@@ -176,6 +192,130 @@ async function startLocalProxy({
       error instanceof Error
         ? error.message
         : 'راه‌اندازی پروکسی محلی ناموفق بود.'
+
+    processState.lastError =
+      sanitizeLog(message)
+
+    return {
+      success: false,
+      ...getProcessStatus(),
+      error:
+        processState.lastError,
+    }
+  }
+}
+
+
+async function startTunMode({
+  enginePath,
+  userDataPath,
+}) {
+  validatePath(
+    enginePath,
+    'مسیر sing-box معتبر نیست.',
+  )
+
+  validatePath(
+    userDataPath,
+    'مسیر داده برنامه معتبر نیست.',
+  )
+
+  if (!fs.existsSync(enginePath)) {
+    throw new Error(
+      'فایل sing-box.exe پیدا نشد.',
+    )
+  }
+
+  const configPath =
+    getTunConfigPath(
+      userDataPath,
+    )
+
+  if (!fs.existsSync(configPath)) {
+    throw new Error(
+      'کانفیگ معتبر TUN وجود ندارد.',
+    )
+  }
+
+  if (
+    activeProcess &&
+    processState.running
+  ) {
+    await stopLocalProxy({
+      userDataPath,
+    })
+  }
+
+  await validateConfigAgain({
+    enginePath,
+    configPath,
+  })
+
+  resetForStart(
+    false,
+    'tun',
+  )
+
+  const child = spawn(
+    enginePath,
+    [
+      'run',
+      '-c',
+      configPath,
+    ],
+    {
+      windowsHide: true,
+      shell: false,
+      stdio: [
+        'ignore',
+        'pipe',
+        'pipe',
+      ],
+    },
+  )
+
+  activeProcess = child
+  processState.running = true
+  processState.tunEnabled = true
+  processState.connectionMode = 'tun'
+  processState.pid =
+    child.pid ?? null
+  processState.startedAt =
+    new Date().toISOString()
+
+  attachProcessListeners(child)
+
+  try {
+    await waitForLocalProxy(
+      child,
+    )
+
+    if (
+      activeProcess !== child ||
+      !processState.running
+    ) {
+      throw new Error(
+        processState.lastError ||
+        'فرایند TUN پیش از آماده‌شدن متوقف شد.',
+      )
+    }
+
+    processState.ready = true
+
+    return {
+      success: true,
+      ...getProcessStatus(),
+      error: null,
+    }
+  } catch (error) {
+    await stopSpecificProcess(
+      child,
+    )
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'راه‌اندازی TUN ناموفق بود.'
 
     processState.lastError =
       sanitizeLog(message)
@@ -279,9 +419,17 @@ async function activateSystemProxy({
     }
   }
 
+  processState.systemProxyEnabled =
+    true
+  processState.tunEnabled =
+    false
+  processState.connectionMode =
+    'system-proxy'
+
   return {
-    ...result,
-    systemProxyEnabled: true,
+    ...getProcessStatus(),
+    success: true,
+    error: null,
   }
 }
 
@@ -354,6 +502,10 @@ async function stopLocalProxy({
     processState.ready = false
     processState.systemProxyEnabled =
       false
+    processState.tunEnabled =
+      false
+    processState.connectionMode =
+      null
     processState.pid = null
 
     if (shouldRestoreWindowsProxy) {
@@ -382,6 +534,10 @@ async function stopLocalProxy({
 
     processState.systemProxyEnabled =
       false
+    processState.tunEnabled =
+      false
+    processState.connectionMode =
+      null
 
     return {
       success: true,
@@ -414,6 +570,10 @@ function getProcessStatus() {
       processState.ready,
     systemProxyEnabled:
       processState.systemProxyEnabled,
+    tunEnabled:
+      processState.tunEnabled,
+    connectionMode:
+      processState.connectionMode,
     pid:
       processState.pid,
     startedAt:
@@ -478,11 +638,15 @@ async function disposeProcessManager({
 
 function resetForStart(
   systemProxyEnabled,
+  connectionMode = 'local-proxy',
 ) {
   processState = {
     ...createInitialState(),
     running: true,
     systemProxyEnabled,
+    tunEnabled:
+      connectionMode === 'tun',
+    connectionMode,
     startedAt:
       new Date().toISOString(),
   }
@@ -530,6 +694,10 @@ function attachProcessListeners(
       processState.ready = false
       processState.systemProxyEnabled =
         false
+      processState.tunEnabled =
+        false
+      processState.connectionMode =
+        null
       processState.pid = null
       processState.stoppedAt =
         new Date().toISOString()
@@ -899,6 +1067,10 @@ async function stopSpecificProcess(
     processState.ready = false
     processState.systemProxyEnabled =
       false
+    processState.tunEnabled =
+      false
+    processState.connectionMode =
+      null
     processState.pid = null
     processState.stoppedAt =
       new Date().toISOString()
@@ -1063,6 +1235,7 @@ function validatePath(
 
 module.exports = {
   startLocalProxy,
+  startTunMode,
   activateSystemProxy,
   deactivateSystemProxy,
   stopLocalProxy,

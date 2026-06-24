@@ -13,6 +13,12 @@ type EngineProcessStatus = {
   running: boolean
   ready: boolean
   systemProxyEnabled: boolean
+  tunEnabled: boolean
+  connectionMode:
+    | 'local-proxy'
+    | 'system-proxy'
+    | 'tun'
+    | null
   pid: number | null
   startedAt: string | null
   stoppedAt: string | null
@@ -39,6 +45,15 @@ type IpVerificationResult = {
   directDurationMs: number | null
   proxyDurationMs: number | null
   service: string
+  error: string | null
+}
+
+type CurrentIpResult = {
+  success: boolean
+  checkedAt: string
+  ip: string | null
+  durationMs: number | null
+  service: string | null
   error: string | null
 }
 
@@ -199,6 +214,9 @@ declare global {
         startLocalProxy: () =>
           Promise<EngineProcessResult>
 
+        startTun: () =>
+          Promise<EngineProcessResult>
+
         activateSystemProxy: () =>
           Promise<EngineProcessResult>
 
@@ -216,6 +234,9 @@ declare global {
       network: {
         verifyIpChange: () =>
           Promise<IpVerificationResult>
+
+        getCurrentIp: () =>
+          Promise<CurrentIpResult>
       }
 
       subscriptions: {

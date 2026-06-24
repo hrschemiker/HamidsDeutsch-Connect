@@ -28,6 +28,31 @@ const IP_SERVICES = [
   },
 ]
 
+
+async function getCurrentIpSnapshot() {
+  const startedAt =
+    Date.now()
+
+  const result =
+    await fetchFirstWorkingIp({
+      mode: 'direct',
+      proxyHost: '127.0.0.1',
+      proxyPort: 2080,
+    })
+
+  return {
+    success: true,
+    checkedAt:
+      new Date().toISOString(),
+    ip: result.ip,
+    durationMs:
+      Date.now() - startedAt,
+    service:
+      result.service,
+    error: null,
+  }
+}
+
 async function verifyIpChange({
   proxyHost,
   proxyPort,
@@ -305,4 +330,5 @@ function sanitizeError(value) {
 
 module.exports = {
   verifyIpChange,
+  getCurrentIpSnapshot,
 }

@@ -37,6 +37,7 @@ const {
 
 const {
   startLocalProxy,
+  startTunMode,
   activateSystemProxy,
   deactivateSystemProxy,
   stopLocalProxy,
@@ -46,6 +47,7 @@ const {
 
 const {
   verifyIpChange,
+  getCurrentIpSnapshot,
 } = require('./ip-verification-service.cjs')
 
 const {
@@ -252,6 +254,57 @@ function registerIpcHandlers() {
   )
 
   ipcMain.handle(
+    'engine:start-tun',
+    async () => {
+      try {
+        const privilege =
+          await getWindowsPrivilegeStatus()
+
+        if (
+          !privilege.supported ||
+          !privilege.isAdministrator
+        ) {
+          return {
+            success: false,
+            ...getProcessStatus(),
+            error:
+              'اجرای TUN به دسترسی Administrator نیاز دارد.',
+          }
+        }
+
+        const result =
+          await startTunMode({
+            enginePath:
+              getEnginePath(),
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+          })
+
+        console.log(
+          '[Engine] TUN start:',
+          result.success,
+          result.ready,
+        )
+
+        return result
+      } catch (error) {
+        console.error(
+          '[Engine] TUN start failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return createProcessErrorResult(
+          error,
+        )
+      }
+    },
+  )
+
+  ipcMain.handle(
     'engine:activate-system-proxy',
     async () => {
       try {
@@ -435,6 +488,28 @@ function registerIpcHandlers() {
             error instanceof Error
               ? error.message
               : 'بررسی تغییر IP ناموفق بود.',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'network:get-current-ip',
+    async () => {
+      try {
+        return await getCurrentIpSnapshot()
+      } catch (error) {
+        return {
+          success: false,
+          checkedAt:
+            new Date().toISOString(),
+          ip: null,
+          durationMs: null,
+          service: null,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'دریافت IP فعلی ناموفق بود.',
         }
       }
     },

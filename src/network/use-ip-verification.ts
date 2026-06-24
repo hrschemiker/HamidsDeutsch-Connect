@@ -42,6 +42,8 @@ export function useIpVerification() {
         return {
           success: false as const,
           changed: false,
+          directIp: null,
+          proxyIp: null,
           error:
             'بررسی IP در حال انجام است.',
         }
@@ -62,6 +64,10 @@ export function useIpVerification() {
             nextResult.success,
           changed:
             nextResult.changed,
+          directIp:
+            nextResult.directIp,
+          proxyIp:
+            nextResult.proxyIp,
           error:
             nextResult.error,
         }
@@ -83,6 +89,8 @@ export function useIpVerification() {
         return {
           success: false as const,
           changed: false,
+          directIp: null,
+          proxyIp: null,
           error: message,
         }
       } finally {

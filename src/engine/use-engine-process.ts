@@ -8,6 +8,12 @@ export type EngineProcessStatus = {
   running: boolean
   ready: boolean
   systemProxyEnabled: boolean
+  tunEnabled: boolean
+  connectionMode:
+    | 'local-proxy'
+    | 'system-proxy'
+    | 'tun'
+    | null
   pid: number | null
   startedAt: string | null
   stoppedAt: string | null
@@ -23,6 +29,8 @@ const INITIAL_STATUS: EngineProcessStatus = {
   running: false,
   ready: false,
   systemProxyEnabled: false,
+  tunEnabled: false,
+  connectionMode: null,
   pid: null,
   startedAt: null,
   stoppedAt: null,
@@ -191,6 +199,58 @@ export function useEngineProcess() {
       stopping,
     ],
   )
+
+  const startTun =
+    useCallback(
+      async () => {
+        if (
+          starting ||
+          stopping ||
+          changingSystemProxy
+        ) {
+          return {
+            success: false as const,
+            error:
+              'یک عملیات دیگر در حال انجام است.',
+          }
+        }
+
+        setStarting(true)
+        setError(null)
+
+        try {
+          const result =
+            await window.hamidsDeutsch
+              .engine
+              .startTun()
+
+          return applyProcessResult(
+            result,
+            'اجرای TUN ناموفق بود.',
+          )
+        } catch (actionError) {
+          const message =
+            actionError instanceof Error
+              ? actionError.message
+              : 'اجرای TUN ناموفق بود.'
+
+          setError(message)
+
+          return {
+            success: false as const,
+            error: message,
+          }
+        } finally {
+          setStarting(false)
+        }
+      },
+      [
+        applyProcessResult,
+        changingSystemProxy,
+        starting,
+        stopping,
+      ],
+    )
 
   const enableSystemProxy =
     useCallback(
@@ -390,6 +450,7 @@ export function useEngineProcess() {
       changingSystemProxy,
     error,
     start,
+    startTun,
     stop,
     enableSystemProxy,
     disableSystemProxy,
