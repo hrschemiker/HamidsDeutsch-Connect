@@ -29,6 +29,18 @@ type EngineProcessResult =
     error: string | null
   }
 
+type IpVerificationResult = {
+  success: boolean
+  checkedAt: string
+  directIp: string | null
+  proxyIp: string | null
+  changed: boolean
+  directDurationMs: number | null
+  proxyDurationMs: number | null
+  service: string
+  error: string | null
+}
+
 type SubscriptionSummary = {
   id: string
   name: string
@@ -164,6 +176,11 @@ declare global {
 
         getProcessStatus: () =>
           Promise<EngineProcessStatus>
+      }
+
+      network: {
+        verifyIpChange: () =>
+          Promise<IpVerificationResult>
       }
 
       subscriptions: {

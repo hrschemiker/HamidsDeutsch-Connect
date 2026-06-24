@@ -41,6 +41,10 @@ const {
   disposeProcessManager,
 } = require('./sing-box-process-manager.cjs')
 
+const {
+  verifyIpChange,
+} = require('./ip-verification-service.cjs')
+
 const execFileAsync =
   promisify(execFile)
 
@@ -254,6 +258,77 @@ function registerIpcHandlers() {
     'engine:get-process-status',
     async () => {
       return getProcessStatus()
+    },
+  )
+
+  ipcMain.handle(
+    'network:verify-ip-change',
+    async () => {
+      const processStatus =
+        getProcessStatus()
+
+      if (
+        !processStatus.running ||
+        !processStatus.ready
+      ) {
+        return {
+          success: false,
+          checkedAt:
+            new Date().toISOString(),
+          directIp: null,
+          proxyIp: null,
+          changed: false,
+          directDurationMs: null,
+          proxyDurationMs: null,
+          service:
+            'api.ipify.org',
+          error:
+            'پروکسی محلی هنوز آماده نیست.',
+        }
+      }
+
+      try {
+        const result =
+          await verifyIpChange({
+            proxyHost:
+              processStatus.localHost,
+            proxyPort:
+              processStatus.localPort,
+          })
+
+        console.log(
+          '[Network] IP verification:',
+          result.changed,
+          result.directIp,
+          result.proxyIp,
+        )
+
+        return result
+      } catch (error) {
+        console.error(
+          '[Network] IP verification failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return {
+          success: false,
+          checkedAt:
+            new Date().toISOString(),
+          directIp: null,
+          proxyIp: null,
+          changed: false,
+          directDurationMs: null,
+          proxyDurationMs: null,
+          service:
+            'api.ipify.org',
+          error:
+            error instanceof Error
+              ? error.message
+              : 'بررسی تغییر IP ناموفق بود.',
+        }
+      }
     },
   )
 

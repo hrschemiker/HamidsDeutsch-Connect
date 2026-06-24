@@ -33,6 +33,13 @@ contextBridge.exposeInMainWorld(
         ),
     },
 
+    network: {
+      verifyIpChange: () =>
+        ipcRenderer.invoke(
+          'network:verify-ip-change',
+        ),
+    },
+
     subscriptions: {
       list: () =>
         ipcRenderer.invoke(
