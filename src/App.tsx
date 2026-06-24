@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, type KeyboardEvent } from 'react'
+import { useDirectDomains } from './domain/use-direct-domains'
 import './App.css'
 
 type PageId =
@@ -42,6 +43,7 @@ const pageTitles: Record<PageId, string> = {
 function App() {
   const [activePage, setActivePage] = useState<PageId>('home')
   const [isConnected, setIsConnected] = useState(false)
+  const directDomains = useDirectDomains()
 
   function toggleConnection() {
     setIsConnected((currentValue) => !currentValue)
@@ -115,6 +117,7 @@ function App() {
           {activePage === 'home' && (
             <HomePage
               isConnected={isConnected}
+              directDomains={directDomains.domains}
               onToggleConnection={toggleConnection}
               onOpenDirectSites={() => setActivePage('direct-sites')}
               onOpenRescue={() => setActivePage('rescue')}
@@ -136,7 +139,12 @@ function App() {
           )}
 
           {activePage === 'direct-sites' && (
-            <DirectSitesPage />
+            <DirectSitesPage
+              domains={directDomains.domains}
+              onAddDomain={directDomains.addDomain}
+              onRemoveDomain={directDomains.removeDomain}
+              onResetDomains={directDomains.resetDomains}
+            />
           )}
 
           {activePage === 'rescue' && (
@@ -162,6 +170,7 @@ function App() {
 
 type HomePageProps = {
   isConnected: boolean
+  directDomains: string[]
   onToggleConnection: () => void
   onOpenDirectSites: () => void
   onOpenRescue: () => void
@@ -169,6 +178,7 @@ type HomePageProps = {
 
 function HomePage({
   isConnected,
+  directDomains,
   onToggleConnection,
   onOpenDirectSites,
   onOpenRescue,
@@ -267,7 +277,7 @@ function HomePage({
           <span className="statistic-icon">↗</span>
           <div>
             <span className="statistic-label">سایت‌های مستقیم</span>
-            <strong>۵ دامنه</strong>
+            <strong>{directDomains.length} دامنه</strong>
           </div>
         </article>
       </section>
@@ -308,9 +318,15 @@ function HomePage({
           </div>
 
           <div className="domain-preview-list">
-            <DomainPreview domain="hamidrezasaadati.com" />
-            <DomainPreview domain="classinar.ir" />
-            <DomainPreview domain="okala.com" />
+            {directDomains.slice(0, 3).map((domain) => (
+              <DomainPreview domain={domain} key={domain} />
+            ))}
+
+            {directDomains.length === 0 && (
+              <p className="empty-list-message">
+                هنوز دامنه‌ای ثبت نشده است.
+              </p>
+            )}
           </div>
 
           <button
@@ -454,14 +470,77 @@ function SubscriptionsPage() {
   )
 }
 
-function DirectSitesPage() {
-  const domains = [
-    'nasr.irannsr.org',
-    'irannsr.org',
-    'okala.com',
-    'hamidrezasaadati.com',
-    'classinar.ir',
-  ]
+type DirectSitesPageProps = {
+  domains: string[]
+  onAddDomain: (
+    rawInput: string,
+  ) =>
+    | {
+        success: true
+        domain: string
+      }
+    | {
+        success: false
+        error: string
+      }
+  onRemoveDomain: (domain: string) => void
+  onResetDomains: () => void
+}
+
+function DirectSitesPage({
+  domains,
+  onAddDomain,
+  onRemoveDomain,
+  onResetDomains,
+}: DirectSitesPageProps) {
+  const [domainInput, setDomainInput] = useState('')
+  const [message, setMessage] = useState<{
+    type: 'success' | 'error'
+    text: string
+  } | null>(null)
+
+  function handleAddDomain() {
+    const result = onAddDomain(domainInput)
+
+    if (!result.success) {
+      setMessage({
+        type: 'error',
+        text: result.error,
+      })
+
+      return
+    }
+
+    setDomainInput('')
+    setMessage({
+      type: 'success',
+      text: `${result.domain} به فهرست سایت‌های مستقیم اضافه شد.`,
+    })
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter') {
+      handleAddDomain()
+    }
+  }
+
+  function handleRemoveDomain(domain: string) {
+    onRemoveDomain(domain)
+
+    setMessage({
+      type: 'success',
+      text: `${domain} از فهرست حذف شد.`,
+    })
+  }
+
+  function handleResetDomains() {
+    onResetDomains()
+
+    setMessage({
+      type: 'success',
+      text: 'فهرست اولیه سایت‌های مستقیم بازیابی شد.',
+    })
+  }
 
   return (
     <div className="page-stack">
@@ -472,7 +551,9 @@ function DirectSitesPage() {
             <h3>افزودن سایت بدون VPN</h3>
           </div>
 
-          <span className="count-badge">۵ دامنه</span>
+          <span className="count-badge">
+            {domains.length} دامنه
+          </span>
         </div>
 
         <div className="input-action-row">
@@ -481,17 +562,40 @@ function DirectSitesPage() {
             dir="ltr"
             placeholder="https://example.ir یا example.ir"
             type="text"
+            value={domainInput}
+            onChange={(event) => {
+              setDomainInput(event.target.value)
+              setMessage(null)
+            }}
+            onKeyDown={handleKeyDown}
           />
 
-          <button className="primary-button" type="button">
+          <button
+            className="primary-button"
+            type="button"
+            onClick={handleAddDomain}
+          >
             افزودن
           </button>
         </div>
 
         <p className="field-help">
-          بعداً می‌توانی آدرس را با https، بدون https یا با پیشوند
-          domain وارد کنی؛ برنامه آن را خودکار اصلاح خواهد کرد.
+          می‌توانی آدرس را با https، بدون https، همراه مسیر کامل یا
+          با پیشوند domain وارد کنی. برنامه نام دامنه را خودکار
+          استخراج می‌کند.
         </p>
+
+        {message && (
+          <div
+            className={
+              message.type === 'success'
+                ? 'form-message form-message-success'
+                : 'form-message form-message-error'
+            }
+          >
+            {message.text}
+          </div>
+        )}
       </section>
 
       <section className="panel-card">
@@ -500,27 +604,55 @@ function DirectSitesPage() {
             <span className="panel-kicker">مسیر مستقیم</span>
             <h3>دامنه‌های ثبت‌شده</h3>
           </div>
+
+          <button
+            className="text-button"
+            type="button"
+            onClick={handleResetDomains}
+          >
+            بازیابی فهرست اولیه
+          </button>
         </div>
 
-        <div className="domain-management-list">
-          {domains.map((domain) => (
-            <div className="domain-management-item" key={domain}>
-              <div className="domain-management-main">
-                <span className="domain-preview-check">✓</span>
+        {domains.length > 0 ? (
+          <div className="domain-management-list">
+            {domains.map((domain) => (
+              <div
+                className="domain-management-item"
+                key={domain}
+              >
+                <div className="domain-management-main">
+                  <span className="domain-preview-check">✓</span>
 
-                <div>
-                  <strong dir="ltr">{domain}</strong>
-                  <span>دامنه و تمام زیردامنه‌ها</span>
+                  <div>
+                    <strong dir="ltr">{domain}</strong>
+                    <span>دامنه و تمام زیردامنه‌ها</span>
+                  </div>
+                </div>
+
+                <div className="domain-management-actions">
+                  <span className="direct-badge">مستقیم</span>
+
+                  <button
+                    className="remove-domain-button"
+                    type="button"
+                    aria-label={`حذف ${domain}`}
+                    title="حذف دامنه"
+                    onClick={() => handleRemoveDomain(domain)}
+                  >
+                    حذف
+                  </button>
                 </div>
               </div>
-
-              <div className="domain-management-actions">
-                <span className="direct-badge">مستقیم</span>
-                <button type="button">•••</button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-domain-list">
+            <span>↗</span>
+            <strong>فهرست خالی است</strong>
+            <p>یک آدرس سایت وارد کن تا بدون VPN باز شود.</p>
+          </div>
+        )}
       </section>
     </div>
   )
