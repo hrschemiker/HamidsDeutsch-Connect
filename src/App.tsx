@@ -1,121 +1,731 @@
 import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
 import './App.css'
 
+type PageId =
+  | 'home'
+  | 'servers'
+  | 'subscriptions'
+  | 'direct-sites'
+  | 'rescue'
+  | 'statistics'
+  | 'logs'
+  | 'settings'
+
+type NavigationItem = {
+  id: PageId
+  label: string
+  icon: string
+}
+
+const navigationItems: NavigationItem[] = [
+  { id: 'home', label: 'خانه', icon: '⌂' },
+  { id: 'servers', label: 'سرورها', icon: '◉' },
+  { id: 'subscriptions', label: 'اشتراک‌ها', icon: '↧' },
+  { id: 'direct-sites', label: 'سایت‌های مستقیم', icon: '↗' },
+  { id: 'rescue', label: 'مرکز نجات', icon: '✦' },
+  { id: 'statistics', label: 'آمار', icon: '▥' },
+  { id: 'logs', label: 'گزارش', icon: '≡' },
+  { id: 'settings', label: 'تنظیمات', icon: '⚙' },
+]
+
+const pageTitles: Record<PageId, string> = {
+  home: 'خانه',
+  servers: 'سرورها',
+  subscriptions: 'اشتراک‌ها',
+  'direct-sites': 'سایت‌های مستقیم',
+  rescue: 'مرکز نجات اتصال',
+  statistics: 'آمار اتصال',
+  logs: 'گزارش برنامه',
+  settings: 'تنظیمات',
+}
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [activePage, setActivePage] = useState<PageId>('home')
+  const [isConnected, setIsConnected] = useState(false)
+
+  function toggleConnection() {
+    setIsConnected((currentValue) => !currentValue)
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="application-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-mark">
+            <span>H</span>
+          </div>
+
+          <div className="brand-text">
+            <strong>HamidsDeutsch</strong>
+            <span>Connect</span>
+          </div>
         </div>
-        <div>
-          <h1>Get started</h1>
+
+        <nav className="navigation" aria-label="منوی اصلی">
+          {navigationItems.map((item) => (
+            <button
+              className={
+                activePage === item.id
+                  ? 'navigation-item navigation-item-active'
+                  : 'navigation-item'
+              }
+              key={item.id}
+              type="button"
+              onClick={() => setActivePage(item.id)}
+            >
+              <span className="navigation-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="engine-status">
+            <span className="engine-status-dot" />
+            <div>
+              <strong>هسته برنامه</strong>
+              <span>هنوز نصب نشده</span>
+            </div>
+          </div>
+
+          <div className="version">نسخه 0.1.0</div>
+        </div>
+      </aside>
+
+      <section className="main-area">
+        <header className="topbar">
+          <div>
+            <p className="topbar-eyebrow">HamidsDeutsch Connect</p>
+            <h1>{pageTitles[activePage]}</h1>
+          </div>
+
+          <div
+            className={
+              isConnected
+                ? 'connection-pill connection-pill-online'
+                : 'connection-pill'
+            }
+          >
+            <span className="connection-pill-dot" />
+            <span>{isConnected ? 'متصل' : 'قطع'}</span>
+          </div>
+        </header>
+
+        <main className="content">
+          {activePage === 'home' && (
+            <HomePage
+              isConnected={isConnected}
+              onToggleConnection={toggleConnection}
+              onOpenDirectSites={() => setActivePage('direct-sites')}
+              onOpenRescue={() => setActivePage('rescue')}
+            />
+          )}
+
+          {activePage === 'servers' && (
+            <EmptyPage
+              icon="◉"
+              title="هنوز سروری اضافه نشده است"
+              description="بعداً در این بخش سرورها، کیفیت اتصال، تأخیر و وضعیت واقعی آن‌ها نمایش داده می‌شود."
+              actionLabel="افزودن اشتراک"
+              onAction={() => setActivePage('subscriptions')}
+            />
+          )}
+
+          {activePage === 'subscriptions' && (
+            <SubscriptionsPage />
+          )}
+
+          {activePage === 'direct-sites' && (
+            <DirectSitesPage />
+          )}
+
+          {activePage === 'rescue' && (
+            <RescuePage />
+          )}
+
+          {activePage === 'statistics' && (
+            <StatisticsPage />
+          )}
+
+          {activePage === 'logs' && (
+            <LogsPage />
+          )}
+
+          {activePage === 'settings' && (
+            <SettingsPage />
+          )}
+        </main>
+      </section>
+    </div>
+  )
+}
+
+type HomePageProps = {
+  isConnected: boolean
+  onToggleConnection: () => void
+  onOpenDirectSites: () => void
+  onOpenRescue: () => void
+}
+
+function HomePage({
+  isConnected,
+  onToggleConnection,
+  onOpenDirectSites,
+  onOpenRescue,
+}: HomePageProps) {
+  return (
+    <div className="home-layout">
+      <section className="hero-card">
+        <div className="hero-content">
+          <div className="status-label">
+            <span
+              className={
+                isConnected
+                  ? 'status-label-dot status-label-dot-online'
+                  : 'status-label-dot'
+              }
+            />
+
+            {isConnected
+              ? 'اتصال آزمایشی فعال است'
+              : 'در حال حاضر اتصال برقرار نیست'}
+          </div>
+
+          <h2>
+            اینترنت آزاد،
+            <br />
+            ساده و قابل اعتماد
+          </h2>
+
           <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
+            اتصال واقعی، بررسی تغییر IP، جداسازی سایت‌های ایرانی و
+            راهکارهای نجات برای شرایط اختلال شدید.
+          </p>
+
+          <button
+            className={
+              isConnected
+                ? 'connect-button connect-button-active'
+                : 'connect-button'
+            }
+            type="button"
+            onClick={onToggleConnection}
+          >
+            <span className="connect-button-icon">
+              {isConnected ? '■' : '▶'}
+            </span>
+
+            <span>
+              <strong>
+                {isConnected ? 'قطع اتصال آزمایشی' : 'اتصال آزمایشی'}
+              </strong>
+
+              <small>
+                {isConnected
+                  ? 'این دکمه فعلاً فقط رابط را آزمایش می‌کند'
+                  : 'هسته شبکه در مراحل بعد اضافه می‌شود'}
+              </small>
+            </span>
+          </button>
+        </div>
+
+        <div className="hero-visual" aria-hidden="true">
+          <div
+            className={
+              isConnected
+                ? 'connection-orbit connection-orbit-online'
+                : 'connection-orbit'
+            }
+          >
+            <div className="connection-orbit-middle">
+              <div className="connection-orbit-core">
+                <span>{isConnected ? '✓' : 'H'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="quick-statistics">
+        <article className="statistic-card">
+          <span className="statistic-icon">◎</span>
+          <div>
+            <span className="statistic-label">IP خروجی</span>
+            <strong>{isConnected ? 'آزمایشی' : '—'}</strong>
+          </div>
+        </article>
+
+        <article className="statistic-card">
+          <span className="statistic-icon">◌</span>
+          <div>
+            <span className="statistic-label">سرور انتخاب‌شده</span>
+            <strong>انتخاب نشده</strong>
+          </div>
+        </article>
+
+        <article className="statistic-card">
+          <span className="statistic-icon">↗</span>
+          <div>
+            <span className="statistic-label">سایت‌های مستقیم</span>
+            <strong>۵ دامنه</strong>
+          </div>
+        </article>
+      </section>
+
+      <section className="home-grid">
+        <article className="panel-card">
+          <div className="panel-heading">
+            <div>
+              <span className="panel-kicker">مسیر خروج</span>
+              <h3>وضعیت اتصال</h3>
+            </div>
+
+            <span className="panel-icon">◉</span>
+          </div>
+
+          <div className="connection-details">
+            <DetailRow label="حالت اتصال" value="TUN" />
+            <DetailRow label="روش انتخاب" value="خودکار" />
+            <DetailRow label="هسته شبکه" value="نصب نشده" muted />
+            <DetailRow label="بررسی IP" value="در انتظار اتصال" muted />
+          </div>
+        </article>
+
+        <article className="panel-card">
+          <div className="panel-heading">
+            <div>
+              <span className="panel-kicker">دسترسی مستقیم</span>
+              <h3>سایت‌های بدون VPN</h3>
+            </div>
+
+            <button
+              className="text-button"
+              type="button"
+              onClick={onOpenDirectSites}
+            >
+              مدیریت
+            </button>
+          </div>
+
+          <div className="domain-preview-list">
+            <DomainPreview domain="hamidrezasaadati.com" />
+            <DomainPreview domain="classinar.ir" />
+            <DomainPreview domain="okala.com" />
+          </div>
+
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={onOpenDirectSites}
+          >
+            مشاهده تمام دامنه‌ها
+          </button>
+        </article>
+
+        <article className="panel-card rescue-preview-card">
+          <div className="panel-heading">
+            <div>
+              <span className="panel-kicker">شرایط اختلال</span>
+              <h3>مرکز نجات اتصال</h3>
+            </div>
+
+            <span className="rescue-badge">آماده‌سازی</span>
+          </div>
+
+          <p>
+            در نسخه‌های بعد، برنامه Fragment، SNI، Serverless و
+            روش‌های Tor را بررسی می‌کند و راهکار قابل‌استفاده را
+            پیشنهاد می‌دهد.
+          </p>
+
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={onOpenRescue}
+          >
+            مشاهده مرکز نجات
+          </button>
+        </article>
+      </section>
+    </div>
+  )
+}
+
+function DetailRow({
+  label,
+  value,
+  muted = false,
+}: {
+  label: string
+  value: string
+  muted?: boolean
+}) {
+  return (
+    <div className="detail-row">
+      <span>{label}</span>
+      <strong className={muted ? 'muted-value' : ''}>{value}</strong>
+    </div>
+  )
+}
+
+function DomainPreview({ domain }: { domain: string }) {
+  return (
+    <div className="domain-preview">
+      <span className="domain-preview-check">✓</span>
+      <span dir="ltr">{domain}</span>
+      <small>مستقیم</small>
+    </div>
+  )
+}
+
+function EmptyPage({
+  icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: {
+  icon: string
+  title: string
+  description: string
+  actionLabel?: string
+  onAction?: () => void
+}) {
+  return (
+    <section className="empty-state">
+      <div className="empty-state-icon">{icon}</div>
+      <h2>{title}</h2>
+      <p>{description}</p>
+
+      {actionLabel && onAction && (
+        <button
+          className="primary-button"
+          type="button"
+          onClick={onAction}
+        >
+          {actionLabel}
+        </button>
+      )}
+    </section>
+  )
+}
+
+function SubscriptionsPage() {
+  return (
+    <div className="page-stack">
+      <section className="panel-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">منبع کانفیگ</span>
+            <h3>افزودن اشتراک</h3>
+          </div>
+        </div>
+
+        <label className="field-label" htmlFor="subscription-url">
+          آدرس اشتراک
+        </label>
+
+        <div className="input-action-row">
+          <input
+            id="subscription-url"
+            className="text-input"
+            dir="ltr"
+            placeholder="https://example.com/subscription"
+            type="url"
+          />
+
+          <button className="primary-button" type="button">
+            افزودن
+          </button>
+        </div>
+
+        <p className="field-help">
+          آدرس‌ها فعلاً ذخیره نمی‌شوند. این بخش در مرحله مدیریت
+          اشتراک‌ها فعال خواهد شد.
+        </p>
+      </section>
+
+      <EmptyPage
+        icon="↧"
+        title="اشتراکی ثبت نشده است"
+        description="پس از ساخت مدیر کانفیگ، اشتراک‌های شخصی و منابع آماده در این قسمت نمایش داده می‌شوند."
+      />
+    </div>
+  )
+}
+
+function DirectSitesPage() {
+  const domains = [
+    'nasr.irannsr.org',
+    'irannsr.org',
+    'okala.com',
+    'hamidrezasaadati.com',
+    'classinar.ir',
+  ]
+
+  return (
+    <div className="page-stack">
+      <section className="panel-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">Split Tunnel</span>
+            <h3>افزودن سایت بدون VPN</h3>
+          </div>
+
+          <span className="count-badge">۵ دامنه</span>
+        </div>
+
+        <div className="input-action-row">
+          <input
+            className="text-input"
+            dir="ltr"
+            placeholder="https://example.ir یا example.ir"
+            type="text"
+          />
+
+          <button className="primary-button" type="button">
+            افزودن
+          </button>
+        </div>
+
+        <p className="field-help">
+          بعداً می‌توانی آدرس را با https، بدون https یا با پیشوند
+          domain وارد کنی؛ برنامه آن را خودکار اصلاح خواهد کرد.
+        </p>
+      </section>
+
+      <section className="panel-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">مسیر مستقیم</span>
+            <h3>دامنه‌های ثبت‌شده</h3>
+          </div>
+        </div>
+
+        <div className="domain-management-list">
+          {domains.map((domain) => (
+            <div className="domain-management-item" key={domain}>
+              <div className="domain-management-main">
+                <span className="domain-preview-check">✓</span>
+
+                <div>
+                  <strong dir="ltr">{domain}</strong>
+                  <span>دامنه و تمام زیردامنه‌ها</span>
+                </div>
+              </div>
+
+              <div className="domain-management-actions">
+                <span className="direct-badge">مستقیم</span>
+                <button type="button">•••</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function RescuePage() {
+  const rescueMethods = [
+    {
+      name: 'Fragment',
+      description: 'تقسیم کنترل‌شده بسته‌های TLS',
+      status: 'در آینده',
+    },
+    {
+      name: 'SNI Rescue',
+      description: 'راهکار کمکی برای شرایط DPI شدید',
+      status: 'در آینده',
+    },
+    {
+      name: 'Serverless',
+      description: 'واردکردن Profileهای بررسی‌شده',
+      status: 'در آینده',
+    },
+    {
+      name: 'Tor Bridges',
+      description: 'Snowflake، WebTunnel و Bridge',
+      status: 'در آینده',
+    },
+  ]
+
+  return (
+    <div className="page-stack">
+      <section className="rescue-header-card">
+        <span className="rescue-header-icon">✦</span>
+
+        <div>
+          <span className="panel-kicker">Emergency Connection</span>
+          <h2>پیداکردن راهکار مناسب برای شبکه فعلی</h2>
+          <p>
+            این بخش بعداً وضعیت DNS، TCP، UDP و TLS را بررسی می‌کند
+            و روش قابل‌استفاده را پیشنهاد می‌دهد.
           </p>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
+
+        <button className="primary-button" type="button" disabled>
+          شروع بررسی
         </button>
       </section>
 
-      <div className="ticks"></div>
+      <section className="rescue-method-grid">
+        {rescueMethods.map((method) => (
+          <article className="rescue-method-card" key={method.name}>
+            <div className="rescue-method-top">
+              <span>◇</span>
+              <small>{method.status}</small>
+            </div>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
+            <h3>{method.name}</h3>
+            <p>{method.description}</p>
+          </article>
+        ))}
+      </section>
+    </div>
+  )
+}
+
+function StatisticsPage() {
+  return (
+    <div className="page-stack">
+      <section className="quick-statistics">
+        <article className="statistic-card">
+          <span className="statistic-icon">↓</span>
+          <div>
+            <span className="statistic-label">دانلود</span>
+            <strong>۰ مگابایت</strong>
+          </div>
+        </article>
+
+        <article className="statistic-card">
+          <span className="statistic-icon">↑</span>
+          <div>
+            <span className="statistic-label">آپلود</span>
+            <strong>۰ مگابایت</strong>
+          </div>
+        </article>
+
+        <article className="statistic-card">
+          <span className="statistic-icon">◷</span>
+          <div>
+            <span className="statistic-label">مدت اتصال</span>
+            <strong>۰۰:۰۰:۰۰</strong>
+          </div>
+        </article>
       </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      <EmptyPage
+        icon="▥"
+        title="هنوز آماری وجود ندارد"
+        description="آمار این بخش فقط از داده‌های واقعی هسته اتصال خوانده خواهد شد؛ هیچ عدد ساختگی نمایش داده نمی‌شود."
+      />
+    </div>
+  )
+}
+
+function LogsPage() {
+  return (
+    <section className="panel-card log-panel">
+      <div className="panel-heading">
+        <div>
+          <span className="panel-kicker">Application Log</span>
+          <h3>گزارش برنامه</h3>
+        </div>
+
+        <button className="text-button" type="button">
+          پاک‌کردن
+        </button>
+      </div>
+
+      <div className="log-viewer" dir="ltr">
+        <div>
+          <span>INFO</span>
+          <p>HamidsDeutsch Connect interface started.</p>
+        </div>
+
+        <div>
+          <span>INFO</span>
+          <p>Electron secure shell is ready.</p>
+        </div>
+
+        <div>
+          <span>WAIT</span>
+          <p>Network engine has not been installed yet.</p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function SettingsPage() {
+  return (
+    <div className="page-stack">
+      <section className="panel-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">عمومی</span>
+            <h3>تنظیمات برنامه</h3>
+          </div>
+        </div>
+
+        <SettingRow
+          title="اتصال خودکار"
+          description="پس از اجرای برنامه، آخرین اتصال سالم بررسی شود."
+        />
+
+        <SettingRow
+          title="حالت TUN"
+          description="تمام ترافیک سازگار سیستم از تونل عبور کند."
+          checked
+        />
+
+        <SettingRow
+          title="بررسی تغییر IP"
+          description="اتصال فقط پس از تغییر واقعی IP موفق شناخته شود."
+          checked
+        />
+      </section>
+
+      <section className="panel-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">ظاهر</span>
+            <h3>نمای برنامه</h3>
+          </div>
+        </div>
+
+        <SettingRow
+          title="حالت تیره"
+          description="رابط تیره HamidsDeutsch Connect"
+          checked
+        />
+      </section>
+    </div>
+  )
+}
+
+function SettingRow({
+  title,
+  description,
+  checked = false,
+}: {
+  title: string
+  description: string
+  checked?: boolean
+}) {
+  return (
+    <div className="setting-row">
+      <div>
+        <strong>{title}</strong>
+        <span>{description}</span>
+      </div>
+
+      <label className="switch">
+        <input defaultChecked={checked} type="checkbox" />
+        <span className="switch-track" />
+      </label>
+    </div>
   )
 }
 
