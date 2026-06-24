@@ -82,6 +82,12 @@ function App() {
   const [automaticConnectionRunning, setAutomaticConnectionRunning] =
     useState(false)
 
+  const [connectionWatchdogMessage, setConnectionWatchdogMessage] =
+    useState<string | null>(null)
+
+  const connectionWatchdogBusyRef = useRef(false)
+  const automaticConnectionBusyRef = useRef(false)
+
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
   const engineProcess = useEngineProcess()
@@ -288,13 +294,20 @@ function App() {
     }
   }
 
-  async function connectToFirstHealthyServer() {
-    if (automaticConnectionRunning) {
+  async function connectToFirstHealthyServer(
+    excludedNodeId: string | null = null,
+  ) {
+    if (
+      automaticConnectionRunning ||
+      automaticConnectionBusyRef.current
+    ) {
       return
     }
 
+    automaticConnectionBusyRef.current = true
     setAutomaticConnectionRunning(true)
     setConnectionActionError(null)
+    setConnectionWatchdogMessage(null)
     ipVerification.reset()
 
     try {
@@ -307,8 +320,22 @@ function App() {
           (node) => node.valid,
         )
 
+      const preferredNodes =
+        validNodes.filter(
+          (node) =>
+            node.id !== excludedNodeId,
+        )
+
+      const previouslyFailedNode =
+        excludedNodeId
+          ? validNodes.find(
+              (node) =>
+                node.id === excludedNodeId,
+            ) ?? null
+          : null
+
       const candidates =
-        [...validNodes].sort(
+        [...preferredNodes].sort(
           (firstNode, secondNode) => {
             const first =
               latency.results[
@@ -340,6 +367,12 @@ function App() {
             )
           },
         )
+
+      if (previouslyFailedNode) {
+        candidates.push(
+          previouslyFailedNode,
+        )
+      }
 
       if (candidates.length === 0) {
         setConnectionActionError(
@@ -376,9 +409,49 @@ function App() {
         lastError,
       )
     } finally {
+      automaticConnectionBusyRef.current = false
       setAutomaticConnectionRunning(
         false,
       )
+    }
+  }
+
+  async function recoverConnection(
+    failedNodeId: string | null,
+  ) {
+    if (
+      connectionWatchdogBusyRef.current ||
+      automaticConnectionBusyRef.current
+    ) {
+      return
+    }
+
+    connectionWatchdogBusyRef.current = true
+    setConnectionWatchdogMessage(
+      'اتصال قطع شد؛ در حال بازیابی خودکار...',
+    )
+
+    try {
+      const stopResult =
+        engineProcess.status.systemProxyEnabled
+          ? await engineProcess.disableSystemProxy(false)
+          : await engineProcess.stop()
+
+      ipVerification.reset()
+
+      if (!stopResult.success) {
+        setConnectionActionError(
+          stopResult.error ??
+          'آزادسازی Proxy ویندوز ناموفق بود.',
+        )
+        return
+      }
+
+      await connectToFirstHealthyServer(
+        failedNodeId,
+      )
+    } finally {
+      connectionWatchdogBusyRef.current = false
     }
   }
 
@@ -403,6 +476,7 @@ function App() {
 
   async function stopLocalProxy() {
     setConnectionActionError(null)
+    setConnectionWatchdogMessage(null)
 
     const result =
       engineProcess.status.systemProxyEnabled
@@ -416,6 +490,90 @@ function App() {
 
     ipVerification.reset()
   }
+
+  useEffect(() => {
+    if (!connectionVerified) {
+      return
+    }
+
+    let disposed = false
+
+    async function checkHealth() {
+      if (
+        disposed ||
+        connectionWatchdogBusyRef.current ||
+        automaticConnectionBusyRef.current ||
+        engineProcess.busy ||
+        ipVerification.checking
+      ) {
+        return
+      }
+
+      connectionWatchdogBusyRef.current = true
+
+      try {
+        const currentStatus =
+          await engineProcess.refreshStatus()
+
+        if (
+          !currentStatus?.running ||
+          !currentStatus.ready ||
+          !currentStatus.systemProxyEnabled
+        ) {
+          connectionWatchdogBusyRef.current = false
+
+          await recoverConnection(
+            selectedServer.selectedServer?.id ?? null,
+          )
+
+          return
+        }
+
+        const health =
+          await ipVerification.verify()
+
+        if (
+          !health.success ||
+          !health.changed
+        ) {
+          connectionWatchdogBusyRef.current = false
+
+          await recoverConnection(
+            selectedServer.selectedServer?.id ?? null,
+          )
+
+          return
+        }
+
+        setConnectionWatchdogMessage(null)
+      } finally {
+        connectionWatchdogBusyRef.current = false
+      }
+    }
+
+    const initialTimer =
+      window.setTimeout(() => {
+        void checkHealth()
+      }, 15000)
+
+    const intervalId =
+      window.setInterval(() => {
+        void checkHealth()
+      }, 30000)
+
+    return () => {
+      disposed = true
+      window.clearTimeout(initialTimer)
+      window.clearInterval(intervalId)
+    }
+  }, [
+    connectionVerified,
+    engineProcess.busy,
+    engineProcess.refreshStatus,
+    ipVerification.checking,
+    ipVerification.verify,
+    selectedServer.selectedServer?.id,
+  ])
 
   return (
     <div className="application-shell">
@@ -488,8 +646,12 @@ function App() {
           >
             <span className="connection-pill-dot" />
             <span>
-              {engineProcess.starting
-                ? 'در حال راه‌اندازی'
+              {connectionWatchdogMessage
+                ? 'در حال بازیابی خودکار'
+                : automaticConnectionRunning
+                  ? 'در حال یافتن سرور سالم'
+                  : engineProcess.starting
+                  ? 'در حال راه‌اندازی'
                 : engineProcess.stopping
                   ? 'در حال توقف'
                   : ipVerification.checking
@@ -517,7 +679,11 @@ function App() {
                 engineProcess.busy ||
                 automaticConnectionRunning
               }
-              processError={connectionActionError ?? engineProcess.error}
+              processError={
+                connectionActionError ??
+                connectionWatchdogMessage ??
+                engineProcess.error
+              }
               ipVerificationResult={ipVerification.result}
               ipVerificationChecking={ipVerification.checking}
               isConnected={connectionVerified}
