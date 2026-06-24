@@ -46,5 +46,13 @@ contextBridge.exposeInMainWorld(
           subscriptionId,
         ),
     },
+
+    servers: {
+      testLatency: (servers) =>
+        ipcRenderer.invoke(
+          'servers:test-latency',
+          servers,
+        ),
+    },
   },
 )

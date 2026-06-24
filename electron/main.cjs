@@ -22,6 +22,10 @@ const {
   loadSubscriptionNodes,
 } = require('./subscription-inspector.cjs')
 
+const {
+  testServerBatch,
+} = require('./server-latency.cjs')
+
 const execFileAsync = promisify(execFile)
 
 const isDevelopment = !app.isPackaged
@@ -282,6 +286,53 @@ function registerIpcHandlers() {
             error instanceof Error
               ? error.message
               : 'دریافت سرورها با خطا مواجه شد.',
+        }
+      }
+    },
+  )
+
+    ipcMain.handle(
+    'servers:test-latency',
+    async (_event, servers) => {
+      try {
+        const result =
+          await testServerBatch(
+            servers,
+          )
+
+        console.log(
+          '[Servers] Latency test completed:',
+          result.total,
+          result.reachable,
+        )
+
+        return {
+          success: true,
+          ...result,
+          error: null,
+        }
+      } catch (error) {
+        console.error(
+          '[Servers] Latency test failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return {
+          success: false,
+          checkedAt:
+            new Date().toISOString(),
+          total: 0,
+          reachable: 0,
+          unreachable: 0,
+          fastestServerId: null,
+          fastestLatencyMs: null,
+          results: [],
+          error:
+            error instanceof Error
+              ? error.message
+              : 'بررسی تأخیر سرورها ناموفق بود.',
         }
       }
     },

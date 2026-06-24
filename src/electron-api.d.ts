@@ -82,6 +82,31 @@ type LoadSubscriptionNodesResult =
       error: string
     }
 
+type ServerLatencyInput = {
+  id: string
+  host: string | null
+  port: number | null
+}
+
+type ServerLatencyItem = {
+  id: string
+  reachable: boolean
+  latencyMs: number | null
+  error: string | null
+}
+
+type ServerLatencyResult = {
+  success: boolean
+  checkedAt: string
+  total: number
+  reachable: number
+  unreachable: number
+  fastestServerId: string | null
+  fastestLatencyMs: number | null
+  results: ServerLatencyItem[]
+  error: string | null
+}
+
 declare global {
   interface Window {
     hamidsDeutsch: {
@@ -112,6 +137,12 @@ declare global {
         loadNodes: (
           subscriptionId: string,
         ) => Promise<LoadSubscriptionNodesResult>
+      }
+
+      servers: {
+        testLatency: (
+          servers: ServerLatencyInput[],
+        ) => Promise<ServerLatencyResult>
       }
     }
   }
