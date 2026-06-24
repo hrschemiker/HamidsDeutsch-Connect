@@ -1,0 +1,53 @@
+appId: com.hamidsdeutsch.connect
+productName: HamidsDeutsch Connect
+copyright: Copyright © 2026 HamidsDeutsch
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+  - "!release/**"
+  - "!release-reports/**"
+  - "!scripts/**"
+  - "!resources/**"
+  - "!**/*.map"
+  - "!**/*.md"
+
+extraResources:
+  - from: resources/sing-box
+    to: sing-box
+    filter:
+      - "**/*"
+
+asar: true
+compression: maximum
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  executableName: HamidsDeutsch Connect
+  requestedExecutionLevel: asInvoker
+  artifactName: HamidsDeutsch-Connect-Setup-${version}-x64.${ext}
+  verifyUpdateCodeSignature: false
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: HamidsDeutsch Connect
+  uninstallDisplayName: HamidsDeutsch Connect
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  displayLanguageSelector: false
+  installerLanguages:
+    - en_US
