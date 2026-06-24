@@ -16,6 +16,7 @@ import {
 import { useSelectedServer } from './servers/use-selected-server'
 import { useServerLatency } from './servers/use-server-latency'
 import { useServerConfigCheck } from './servers/use-server-config-check'
+import { useIpVerification } from './network/use-ip-verification'
 import './App.css'
 
 type PageId =
@@ -93,6 +94,7 @@ function App() {
   const selectedServer = useSelectedServer()
   const latency = useServerLatency(serverNodes.nodes)
   const configCheck = useServerConfigCheck()
+  const ipVerification = useIpVerification()
 
   const automaticLatencyTestKey = useRef<string | null>(null)
 
@@ -156,6 +158,7 @@ function App() {
 
   async function prepareAndStart(node: SafeServerNode) {
     setConnectionActionError(null)
+    ipVerification.reset()
 
     if (!serverNodes.subscriptionId) {
       setConnectionActionError(
@@ -183,6 +186,41 @@ function App() {
 
     if (!startResult.success) {
       setConnectionActionError(startResult.error)
+      return
+    }
+
+    const verificationResult = await ipVerification.verify()
+
+    if (!verificationResult.success) {
+      setConnectionActionError(
+        verificationResult.error ?? 'بررسی تغییر IP ناموفق بود.',
+      )
+      return
+    }
+
+    if (!verificationResult.changed) {
+      setConnectionActionError(
+        'پروکسی محلی آماده است، اما IP خروجی تغییر نکرده است.',
+      )
+    }
+  }
+
+  async function verifyCurrentIp() {
+    setConnectionActionError(null)
+
+    const verificationResult = await ipVerification.verify()
+
+    if (!verificationResult.success) {
+      setConnectionActionError(
+        verificationResult.error ?? 'بررسی تغییر IP ناموفق بود.',
+      )
+      return
+    }
+
+    if (!verificationResult.changed) {
+      setConnectionActionError(
+        'IP مستقیم و IP عبوری از پروکسی یکسان هستند.',
+      )
     }
   }
 
@@ -192,7 +230,10 @@ function App() {
 
     if (!result.success) {
       setConnectionActionError(result.error)
+      return
     }
+
+    ipVerification.reset()
   }
 
   return (
@@ -228,7 +269,7 @@ function App() {
           <div className="engine-status">
             <span
               className={
-                engineProcess.status.ready
+                ipVerification.connected
                   ? 'engine-status-dot engine-status-dot-ready'
                   : 'engine-status-dot'
               }
@@ -236,11 +277,13 @@ function App() {
             <div>
               <strong>هسته برنامه</strong>
               <span>
-                {engineProcess.status.ready
-                  ? `پروکسی محلی ${engineProcess.status.localPort}`
-                  : engine.info?.healthy
-                    ? `sing-box ${engine.info.version}`
-                    : 'در دسترس نیست'}
+                {ipVerification.connected
+                  ? `متصل · ${ipVerification.result.proxyIp ?? 'IP تأییدشده'}`
+                  : engineProcess.status.ready
+                    ? `پروکسی محلی ${engineProcess.status.localPort}`
+                    : engine.info?.healthy
+                      ? `sing-box ${engine.info.version}`
+                      : 'در دسترس نیست'}
               </span>
             </div>
           </div>
@@ -257,7 +300,7 @@ function App() {
 
           <div
             className={
-              engineProcess.status.ready
+              ipVerification.connected
                 ? 'connection-pill connection-pill-online'
                 : 'connection-pill'
             }
@@ -268,11 +311,15 @@ function App() {
                 ? 'در حال راه‌اندازی'
                 : engineProcess.stopping
                   ? 'در حال توقف'
-                  : engineProcess.status.ready
-                    ? 'پروکسی محلی آماده'
-                    : engineProcess.status.running
-                      ? 'در حال اجرا'
-                      : 'قطع'}
+                  : ipVerification.checking
+                    ? 'در حال بررسی IP'
+                    : ipVerification.connected
+                      ? 'متصل'
+                      : engineProcess.status.ready
+                        ? 'پروکسی آماده؛ IP تأیید نشده'
+                        : engineProcess.status.running
+                          ? 'در حال اجرا'
+                          : 'قطع'}
             </span>
           </div>
         </header>
@@ -285,6 +332,9 @@ function App() {
               processStatus={engineProcess.status}
               processBusy={engineProcess.busy}
               processError={connectionActionError ?? engineProcess.error}
+              ipVerificationResult={ipVerification.result}
+              ipVerificationChecking={ipVerification.checking}
+              isConnected={ipVerification.connected}
               selectedServer={selectedServer.selectedServer}
               selectedServerLatency={selectedServerLatency}
               fastestServer={fastestServer}
@@ -311,6 +361,7 @@ function App() {
                 }
               }}
               onStop={() => void stopLocalProxy()}
+              onVerifyIp={() => void verifyCurrentIp()}
               onRetestLatency={() => void latency.testAll()}
               onOpenServers={() => setActivePage('servers')}
               onOpenDirectSites={() => setActivePage('direct-sites')}
@@ -431,6 +482,19 @@ type HomePageProps = {
   }
   processBusy: boolean
   processError: string | null
+  ipVerificationResult: {
+    success: boolean
+    checkedAt: string
+    directIp: string | null
+    proxyIp: string | null
+    changed: boolean
+    directDurationMs: number | null
+    proxyDurationMs: number | null
+    service: string
+    error: string | null
+  }
+  ipVerificationChecking: boolean
+  isConnected: boolean
   selectedServer: PublicServer | null
   selectedServerLatency: LatencyItem | null
   fastestServer: SafeServerNode | null
@@ -441,6 +505,7 @@ type HomePageProps = {
   onStartFastest: () => void
   onStartPrevious: () => void
   onStop: () => void
+  onVerifyIp: () => void
   onRetestLatency: () => void
   onOpenServers: () => void
   onOpenDirectSites: () => void
@@ -453,6 +518,9 @@ function HomePage({
   processStatus,
   processBusy,
   processError,
+  ipVerificationResult,
+  ipVerificationChecking,
+  isConnected,
   selectedServer,
   selectedServerLatency,
   fastestServer,
@@ -463,6 +531,7 @@ function HomePage({
   onStartFastest,
   onStartPrevious,
   onStop,
+  onVerifyIp,
   onRetestLatency,
   onOpenServers,
   onOpenDirectSites,
@@ -479,50 +548,58 @@ function HomePage({
           <div className="status-label">
             <span
               className={
-                processStatus.ready
+                isConnected
                   ? 'status-label-dot status-label-dot-online'
                   : 'status-label-dot'
               }
             />
-            {processStatus.ready
-              ? `پروکسی محلی روی ${processStatus.localHost}:${processStatus.localPort} آماده است`
-              : processStatus.running
-                ? 'فرایند sing-box در حال اجراست'
-                : 'پروکسی محلی خاموش است'}
+            {isConnected
+              ? `اتصال با IP خروجی ${ipVerificationResult.proxyIp ?? 'تأیید شد'}`
+              : ipVerificationChecking
+                ? 'در حال مقایسه IP مستقیم و پروکسی'
+                : processStatus.ready
+                  ? `پروکسی محلی آماده است؛ تغییر IP هنوز تأیید نشده`
+                  : processStatus.running
+                    ? 'فرایند sing-box در حال اجراست'
+                    : 'اتصال برقرار نیست'}
           </div>
 
           <h2>اینترنت آزاد،<br />ساده و قابل اعتماد</h2>
           <p>
             سرورها خودکار به‌روزرسانی می‌شوند، کانفیگ با sing-box
-            بررسی می‌شود و پروکسی محلی فقط پس از آماده‌شدن واقعی پورت
-            فعال شناخته می‌شود.
+            بررسی می‌شود و وضعیت «متصل» فقط پس از تفاوت واقعی IP مستقیم
+            و IP عبوری از پروکسی نمایش داده می‌شود.
           </p>
 
           <button
             className={
-              processStatus.ready
+              isConnected
                 ? 'connect-button connect-button-active'
                 : 'connect-button'
             }
             type="button"
-            disabled={processBusy || !mainActionAvailable}
+            disabled={processBusy || ipVerificationChecking || !mainActionAvailable}
             onClick={onMainAction}
           >
             <span className="connect-button-icon">
-              {processBusy ? '…' : processStatus.running ? '■' : '▶'}
+              {processBusy || ipVerificationChecking ? '…' : processStatus.running ? '■' : '▶'}
             </span>
             <span>
               <strong>
                 {processBusy
                   ? 'در حال انجام عملیات...'
-                  : processStatus.running
-                    ? 'توقف پروکسی محلی'
-                    : 'اجرای سریع‌ترین سرور'}
+                  : ipVerificationChecking
+                    ? 'در حال تأیید تغییر IP...'
+                    : processStatus.running
+                      ? 'قطع اتصال'
+                      : 'اتصال با سریع‌ترین سرور'}
               </strong>
               <small>
-                {processStatus.ready
-                  ? 'پورت محلی آماده است؛ هنوز تغییر IP تأیید نشده'
-                  : 'کانفیگ بررسی و سپس sing-box اجرا می‌شود'}
+                {isConnected
+                  ? `IP مستقیم ${ipVerificationResult.directIp ?? '—'} ← IP خروجی ${ipVerificationResult.proxyIp ?? '—'}`
+                  : processStatus.ready
+                    ? 'پروکسی آماده است؛ می‌توانی بررسی IP را دوباره اجرا کنی'
+                    : 'کانفیگ بررسی، sing-box اجرا و تغییر IP تأیید می‌شود'}
               </small>
             </span>
           </button>
@@ -531,14 +608,14 @@ function HomePage({
         <div className="hero-visual" aria-hidden="true">
           <div
             className={
-              processStatus.ready
+              isConnected
                 ? 'connection-orbit connection-orbit-online'
                 : 'connection-orbit'
             }
           >
             <div className="connection-orbit-middle">
               <div className="connection-orbit-core">
-                <span>{processStatus.ready ? '✓' : 'H'}</span>
+                <span>{isConnected ? '✓' : 'H'}</span>
               </div>
             </div>
           </div>
@@ -549,8 +626,14 @@ function HomePage({
         <article className="statistic-card">
           <span className="statistic-icon">◎</span>
           <div>
-            <span className="statistic-label">وضعیت شبکه</span>
-            <strong>{processStatus.ready ? 'پروکسی محلی آماده' : 'قطع'}</strong>
+            <span className="statistic-label">IP خروجی</span>
+            <strong dir="ltr">
+              {isConnected
+                ? ipVerificationResult.proxyIp ?? 'تأییدشده'
+                : processStatus.ready
+                  ? 'در انتظار تأیید'
+                  : '—'}
+            </strong>
           </div>
         </article>
         <article className="statistic-card">
@@ -611,30 +694,98 @@ function HomePage({
       </section>
 
       {processStatus.running && (
-        <section className="local-proxy-status-card">
+        <section
+          className={
+            isConnected
+              ? 'local-proxy-status-card local-proxy-status-card-verified'
+              : 'local-proxy-status-card'
+          }
+        >
           <div>
-            <span className="panel-kicker">Local Proxy</span>
-            <h3>{processStatus.ready ? 'پروکسی محلی آماده است' : 'sing-box در حال اجراست'}</h3>
+            <span className="panel-kicker">
+              {isConnected ? 'Verified Connection' : 'Local Proxy'}
+            </span>
+            <h3>
+              {isConnected
+                ? 'تغییر IP و اتصال تأیید شد'
+                : processStatus.ready
+                  ? 'پروکسی محلی آماده است'
+                  : 'sing-box در حال اجراست'}
+            </h3>
             <p dir="ltr">
               {processStatus.localHost}:{processStatus.localPort}
               {processStatus.pid ? ` · PID ${processStatus.pid}` : ''}
             </p>
+
+            {(ipVerificationResult.directIp || ipVerificationResult.proxyIp) && (
+              <div className="ip-comparison-inline" dir="ltr">
+                <span>Direct: {ipVerificationResult.directIp ?? '—'}</span>
+                <span>Proxy: {ipVerificationResult.proxyIp ?? '—'}</span>
+              </div>
+            )}
           </div>
-          <button
-            className="remove-domain-button"
-            type="button"
-            disabled={processBusy}
-            onClick={onStop}
-          >
-            توقف
-          </button>
+
+          <div className="local-proxy-actions">
+            {processStatus.ready && !isConnected && (
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={processBusy || ipVerificationChecking}
+                onClick={onVerifyIp}
+              >
+                {ipVerificationChecking ? 'در حال بررسی...' : 'بررسی دوباره IP'}
+              </button>
+            )}
+
+            <button
+              className="remove-domain-button"
+              type="button"
+              disabled={processBusy || ipVerificationChecking}
+              onClick={onStop}
+            >
+              قطع
+            </button>
+          </div>
         </section>
       )}
 
-      {(processError || latencyError) && (
+      {(processError || latencyError || ipVerificationResult.error) && (
         <div className="form-message form-message-error">
-          {processError ?? latencyError}
+          {processError ?? ipVerificationResult.error ?? latencyError}
         </div>
+      )}
+
+      {isConnected && (
+        <section className="ip-verification-card">
+          <div className="ip-verification-heading">
+            <div>
+              <span className="panel-kicker">IP Verification</span>
+              <h3>اتصال به‌صورت واقعی تأیید شد</h3>
+            </div>
+            <span className="verified-connection-badge">متصل</span>
+          </div>
+
+          <div className="ip-verification-grid">
+            <div>
+              <span>IP مستقیم</span>
+              <strong dir="ltr">{ipVerificationResult.directIp ?? '—'}</strong>
+              <small>
+                {ipVerificationResult.directDurationMs !== null
+                  ? `${ipVerificationResult.directDurationMs} ms`
+                  : '—'}
+              </small>
+            </div>
+            <div>
+              <span>IP عبوری از پروکسی</span>
+              <strong dir="ltr">{ipVerificationResult.proxyIp ?? '—'}</strong>
+              <small>
+                {ipVerificationResult.proxyDurationMs !== null
+                  ? `${ipVerificationResult.proxyDurationMs} ms`
+                  : '—'}
+              </small>
+            </div>
+          </div>
+        </section>
       )}
 
       <section className="home-grid">
@@ -644,7 +795,10 @@ function HomePage({
             <span className="panel-icon">◉</span>
           </div>
           <div className="connection-details">
-            <DetailRow label="مرحله فعلی" value="پروکسی محلی" />
+            <DetailRow
+              label="مرحله فعلی"
+              value={isConnected ? 'اتصال تأییدشده' : 'پروکسی محلی'}
+            />
             <DetailRow
               label="پورت محلی"
               value={`${processStatus.localHost}:${processStatus.localPort}`}
@@ -656,7 +810,19 @@ function HomePage({
               muted={!engineInfo?.healthy}
             />
             <DetailRow label="System Proxy / TUN" value="هنوز فعال نشده" muted />
-            <DetailRow label="بررسی تغییر IP" value="مرحله بعد" muted />
+            <DetailRow
+              label="بررسی تغییر IP"
+              value={
+                isConnected
+                  ? `${ipVerificationResult.directIp ?? '—'} → ${ipVerificationResult.proxyIp ?? '—'}`
+                  : ipVerificationChecking
+                    ? 'در حال بررسی'
+                    : processStatus.ready
+                      ? 'تأیید نشده'
+                      : 'در انتظار اجرا'
+              }
+              muted={!isConnected}
+            />
           </div>
         </article>
 

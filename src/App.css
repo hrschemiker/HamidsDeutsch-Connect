@@ -1928,3 +1928,115 @@ button {
     flex-direction: column;
   }
 }
+/* Verified IP connection state */
+
+.local-proxy-status-card-verified {
+  border-color: rgba(54, 179, 126, 0.42);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(54, 179, 126, 0.12),
+      transparent 60%
+    ),
+    var(--surface);
+}
+
+.local-proxy-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.local-proxy-actions .secondary-button {
+  margin-top: 0;
+}
+
+.ip-comparison-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.ip-verification-card {
+  padding: 20px;
+  border: 1px solid rgba(54, 179, 126, 0.38);
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(54, 179, 126, 0.1),
+      transparent 55%
+    ),
+    var(--surface);
+}
+
+.ip-verification-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ip-verification-heading h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.verified-connection-badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.ip-verification-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.ip-verification-grid > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.ip-verification-grid span,
+.ip-verification-grid small {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.ip-verification-grid strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .local-proxy-status-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .local-proxy-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ip-verification-grid {
+    grid-template-columns: 1fr;
+  }
+}
