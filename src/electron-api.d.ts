@@ -184,6 +184,12 @@ type CheckServerConfigResult = {
   error: string | null
 }
 
+type OpenExtensionFolderResult = {
+  success: boolean
+  path: string
+  error: string | null
+}
+
 type ElevationResult = {
   success: boolean
   launched: boolean
@@ -225,6 +231,15 @@ declare global {
 
         relaunchAsAdministrator: () =>
           Promise<ElevationResult>
+
+        openVirtualLocationExtension: () =>
+          Promise<OpenExtensionFolderResult>
+
+        setVirtualLocationConnected: (
+          connected: boolean,
+        ) => Promise<{
+          success: boolean
+        }>
       }
 
       engine: {

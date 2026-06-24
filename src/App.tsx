@@ -137,6 +137,14 @@ function App() {
       : ipVerification.connected &&
         engineProcess.status.systemProxyEnabled
 
+  useEffect(() => {
+    void window.hamidsDeutsch
+      .system
+      .setVirtualLocationConnected(
+        connectionVerified,
+      )
+  }, [connectionVerified])
+
   const automaticLatencyTestKey = useRef<string | null>(null)
 
   const fastestServer = useMemo(
@@ -1208,6 +1216,11 @@ function App() {
                 setActivePage(
                   'direct-sites',
                 )
+              }
+              onOpenVirtualLocationExtension={() =>
+                window.hamidsDeutsch
+                  .system
+                  .openVirtualLocationExtension()
               }
             />
           )}
@@ -3963,6 +3976,7 @@ function SettingsPage({
   administratorAvailable,
   connected,
   onOpenDirectSites,
+  onOpenVirtualLocationExtension,
 }: {
   settings: {
     mode:
@@ -3985,7 +3999,67 @@ function SettingsPage({
   administratorAvailable: boolean
   connected: boolean
   onOpenDirectSites: () => void
+  onOpenVirtualLocationExtension: () =>
+    Promise<{
+      success: boolean
+      path: string
+      error: string | null
+    }>
 }) {
+  const [
+    extensionMessage,
+    setExtensionMessage,
+  ] = useState<{
+    type:
+      | 'success'
+      | 'error'
+    text: string
+  } | null>(null)
+
+  const [
+    openingExtensionFolder,
+    setOpeningExtensionFolder,
+  ] = useState(false)
+
+  async function openExtensionFolder() {
+    if (openingExtensionFolder) {
+      return
+    }
+
+    setOpeningExtensionFolder(true)
+    setExtensionMessage(null)
+
+    try {
+      const result =
+        await onOpenVirtualLocationExtension()
+
+      if (result.success) {
+        setExtensionMessage({
+          type: 'success',
+          text:
+            'پوشه افزونه باز شد. آن را با گزینه Load unpacked در Chrome یا Edge انتخاب کن.',
+        })
+      } else {
+        setExtensionMessage({
+          type: 'error',
+          text:
+            result.error ??
+            'بازکردن پوشه افزونه ناموفق بود.',
+        })
+      }
+    } catch (error) {
+      setExtensionMessage({
+        type: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'بازکردن پوشه افزونه ناموفق بود.',
+      })
+    } finally {
+      setOpeningExtensionFolder(false)
+    }
+  }
+
   return (
     <div className="page-stack">
       <section className="panel-card">
@@ -4124,6 +4198,77 @@ function SettingsPage({
         >
           مدیریت سایت‌های مستقیم
         </button>
+      </section>
+
+      <section className="panel-card virtual-location-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">
+              Browser Virtual Location
+            </span>
+            <h3>
+              مکان مجازی مرورگر
+            </h3>
+          </div>
+
+          <span className="count-badge">
+            Chrome / Edge
+          </span>
+        </div>
+
+        <p className="panel-description">
+          افزونه همراه فقط هنگام اتصال تأییدشده
+          HamidsDeutsch فعال می‌شود و مختصات HTML5
+          Geolocation را با کشور و شهر IP خروجی
+          هماهنگ می‌کند. با قطع برنامه یا استفاده
+          از VPN دیگر، خودکار غیرفعال می‌شود.
+        </p>
+
+        <div className="virtual-location-steps">
+          <span>
+            ۱. پوشه افزونه را فقط یک‌بار باز کن
+          </span>
+          <span>
+            ۲. صفحه Extensions مرورگر را باز کن
+          </span>
+          <span>
+            ۳. Developer mode و سپس Load unpacked
+          </span>
+        </div>
+
+        <button
+          className="primary-button compact-primary"
+          type="button"
+          disabled={
+            openingExtensionFolder
+          }
+          onClick={() => {
+            void openExtensionFolder()
+          }}
+        >
+          {openingExtensionFolder
+            ? 'در حال بازکردن...'
+            : 'بازکردن پوشه افزونه'}
+        </button>
+
+        {extensionMessage && (
+          <div
+            className={
+              extensionMessage.type ===
+              'success'
+                ? 'inline-notice virtual-location-message'
+                : 'inline-error virtual-location-message'
+            }
+          >
+            {extensionMessage.text}
+          </div>
+        )}
+
+        <p className="virtual-location-privacy">
+          نصب افزونه در مرورگر فقط یک‌بار است؛
+          روشن و خاموش‌شدن آن پس از آن کاملاً خودکار
+          و وابسته به وضعیت همین برنامه خواهد بود.
+        </p>
       </section>
 
       <section className="panel-card">

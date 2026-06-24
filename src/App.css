@@ -2442,3 +2442,53 @@ button {
     padding: 4px 9px;
   }
 }
+
+/* Optional browser virtual location */
+.virtual-location-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.virtual-location-card::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: -48px;
+  top: -48px;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: rgba(250, 204, 21, 0.05);
+  pointer-events: none;
+}
+
+.virtual-location-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.virtual-location-steps span {
+  border: 1px solid var(--border-color);
+  background: rgba(15, 23, 42, 0.36);
+  color: var(--text-muted);
+  padding: 7px 10px;
+  font-size: 0.75rem;
+}
+
+.virtual-location-message {
+  margin-top: 14px;
+}
+
+.virtual-location-privacy {
+  margin: 14px 0 0;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  line-height: 1.8;
+}
+
+@media (max-width: 760px) {
+  .virtual-location-steps {
+    flex-direction: column;
+  }
+}

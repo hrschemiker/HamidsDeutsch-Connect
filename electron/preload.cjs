@@ -21,6 +21,19 @@ contextBridge.exposeInMainWorld(
         ipcRenderer.invoke(
           'system:relaunch-as-administrator',
         ),
+
+      openVirtualLocationExtension: () =>
+        ipcRenderer.invoke(
+          'system:open-virtual-location-extension',
+        ),
+
+      setVirtualLocationConnected: (
+        connected,
+      ) =>
+        ipcRenderer.invoke(
+          'system:set-virtual-location-connected',
+          connected,
+        ),
     },
 
     engine: {

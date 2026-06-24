@@ -74,6 +74,16 @@ const {
   relaunchAsAdministrator,
 } = require('./windows-elevation.cjs')
 
+const {
+  ensureVirtualLocationExtension,
+} = require('./virtual-location-extension-bundle.cjs')
+
+const {
+  startVirtualLocationService,
+  stopVirtualLocationService,
+  setVirtualLocationConnected,
+} = require('./virtual-location-service.cjs')
+
 const execFileAsync =
   promisify(execFile)
 
@@ -245,6 +255,15 @@ function createProcessErrorResult(
   }
 }
 
+async function getVirtualLocationExtensionPath() {
+  return ensureVirtualLocationExtension(
+    app.getPath(
+      'userData',
+    ),
+  )
+}
+
+
 function registerIpcHandlers() {
   ipcMain.handle(
     'engine:get-info',
@@ -257,6 +276,62 @@ function registerIpcHandlers() {
     'system:get-privilege-status',
     async () => {
       return getWindowsPrivilegeStatus()
+    },
+  )
+
+  ipcMain.handle(
+    'system:open-virtual-location-extension',
+    async () => {
+      const extensionPath =
+        await getVirtualLocationExtensionPath()
+
+      if (!fs.existsSync(extensionPath)) {
+        return {
+          success: false,
+          path:
+            extensionPath,
+          error:
+            'پوشه افزونه مکان مجازی پیدا نشد.',
+        }
+      }
+
+      const errorMessage =
+        await shell.openPath(
+          extensionPath,
+        )
+
+      if (errorMessage) {
+        return {
+          success: false,
+          path:
+            extensionPath,
+          error:
+            errorMessage,
+        }
+      }
+
+      return {
+        success: true,
+        path:
+          extensionPath,
+        error: null,
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'system:set-virtual-location-connected',
+    async (
+      _event,
+      connected,
+    ) => {
+      setVirtualLocationConnected(
+        connected === true,
+      )
+
+      return {
+        success: true,
+      }
     },
   )
 
@@ -1355,6 +1430,23 @@ app.whenReady().then(async () => {
     )
   }
 
+  try {
+    await ensureVirtualLocationExtension(
+      app.getPath(
+        'userData',
+      ),
+    )
+
+    await startVirtualLocationService()
+  } catch (error) {
+    console.error(
+      '[VirtualLocation] Startup failed:',
+      error instanceof Error
+        ? error.message
+        : 'Unknown error',
+    )
+  }
+
   registerIpcHandlers()
   createMainWindow()
 
@@ -1388,8 +1480,14 @@ app.on(
           'userData',
         ),
     }).finally(() => {
-      clearSubscriptionNodeCache()
-      app.quit()
+      void stopVirtualLocationService()
+        .catch(() => {
+          // Best effort during shutdown.
+        })
+        .finally(() => {
+          clearSubscriptionNodeCache()
+          app.quit()
+        })
     })
   },
 )
