@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { useDirectDomains } from './domain/use-direct-domains'
 import { useEngineInfo } from './engine/use-engine-info'
+import { useEngineProcess } from './engine/use-engine-process'
 import { useSubscriptions } from './subscriptions/use-subscriptions'
 import {
   useServerNodes,
@@ -74,10 +75,12 @@ const pageTitles: Record<PageId, string> = {
 
 function App() {
   const [activePage, setActivePage] = useState<PageId>('home')
-  const [isConnected, setIsConnected] = useState(false)
+  const [connectionActionError, setConnectionActionError] =
+    useState<string | null>(null)
 
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
+  const engineProcess = useEngineProcess()
   const subscriptions = useSubscriptions()
 
   const serverNodes = useServerNodes(
@@ -96,27 +99,30 @@ function App() {
   const fastestServer = useMemo(
     () =>
       serverNodes.nodes.find(
-        (node) =>
-          node.id === latency.fastestServerId,
+        (node) => node.id === latency.fastestServerId,
       ) ?? null,
-    [
-      latency.fastestServerId,
-      serverNodes.nodes,
-    ],
+    [latency.fastestServerId, serverNodes.nodes],
   )
 
-  const selectedServerLatency =
-    selectedServer.selectedServer
-      ? latency.results[
-          selectedServer.selectedServer.id
-        ] ?? null
-      : null
+  const selectedNode = useMemo(
+    () =>
+      selectedServer.selectedServer
+        ? serverNodes.nodes.find(
+            (node) =>
+              node.id === selectedServer.selectedServer?.id,
+          ) ?? null
+        : null,
+    [selectedServer.selectedServer, serverNodes.nodes],
+  )
+
+  const selectedServerLatency = selectedServer.selectedServer
+    ? latency.results[selectedServer.selectedServer.id] ?? null
+    : null
 
   const activeSubscriptionName =
     subscriptions.subscriptions.find(
       (subscription) =>
-        subscription.id ===
-        serverNodes.subscriptionId,
+        subscription.id === serverNodes.subscriptionId,
     )?.name ?? 'اشتراک فعال'
 
   useEffect(() => {
@@ -134,16 +140,11 @@ function App() {
       serverNodes.nodes.length,
     ].join('|')
 
-    if (
-      automaticLatencyTestKey.current ===
-      testKey
-    ) {
+    if (automaticLatencyTestKey.current === testKey) {
       return
     }
 
-    automaticLatencyTestKey.current =
-      testKey
-
+    automaticLatencyTestKey.current = testKey
     void latency.testAll()
   }, [
     latency,
@@ -153,28 +154,59 @@ function App() {
     serverNodes.subscriptionId,
   ])
 
-  function toggleConnection() {
-    setIsConnected((currentValue) => !currentValue)
+  async function prepareAndStart(node: SafeServerNode) {
+    setConnectionActionError(null)
+
+    if (!serverNodes.subscriptionId) {
+      setConnectionActionError(
+        'اشتراک فعال برای این سرور مشخص نیست.',
+      )
+      return
+    }
+
+    selectedServer.selectServer(toPublicServer(node))
+
+    const checkResult = await configCheck.checkConfig({
+      subscriptionId: serverNodes.subscriptionId,
+      nodeId: node.id,
+      directDomains: directDomains.domains,
+    })
+
+    if (!checkResult.success) {
+      setConnectionActionError(
+        checkResult.error ?? 'کانفیگ توسط sing-box تأیید نشد.',
+      )
+      return
+    }
+
+    const startResult = await engineProcess.start()
+
+    if (!startResult.success) {
+      setConnectionActionError(startResult.error)
+    }
+  }
+
+  async function stopLocalProxy() {
+    setConnectionActionError(null)
+    const result = await engineProcess.stop()
+
+    if (!result.success) {
+      setConnectionActionError(result.error)
+    }
   }
 
   return (
     <div className="application-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">
-            <span>H</span>
-          </div>
-
+          <div className="brand-mark"><span>H</span></div>
           <div className="brand-text">
             <strong>HamidsDeutsch</strong>
             <span>Connect</span>
           </div>
         </div>
 
-        <nav
-          className="navigation"
-          aria-label="منوی اصلی"
-        >
+        <nav className="navigation" aria-label="منوی اصلی">
           {navigationItems.map((item) => (
             <button
               className={
@@ -184,13 +216,9 @@ function App() {
               }
               key={item.id}
               type="button"
-              onClick={() =>
-                setActivePage(item.id)
-              }
+              onClick={() => setActivePage(item.id)}
             >
-              <span className="navigation-icon">
-                {item.icon}
-              </span>
+              <span className="navigation-icon">{item.icon}</span>
               <span>{item.label}</span>
             </button>
           ))}
@@ -200,52 +228,51 @@ function App() {
           <div className="engine-status">
             <span
               className={
-                engine.info?.healthy
+                engineProcess.status.ready
                   ? 'engine-status-dot engine-status-dot-ready'
                   : 'engine-status-dot'
               }
             />
-
             <div>
               <strong>هسته برنامه</strong>
-
               <span>
-                {engine.loading
-                  ? 'در حال بررسی...'
+                {engineProcess.status.ready
+                  ? `پروکسی محلی ${engineProcess.status.localPort}`
                   : engine.info?.healthy
                     ? `sing-box ${engine.info.version}`
                     : 'در دسترس نیست'}
               </span>
             </div>
           </div>
-
-          <div className="version">
-            نسخه 0.1.0
-          </div>
+          <div className="version">نسخه 0.1.0</div>
         </div>
       </aside>
 
       <section className="main-area">
         <header className="topbar">
           <div>
-            <p className="topbar-eyebrow">
-              HamidsDeutsch Connect
-            </p>
+            <p className="topbar-eyebrow">HamidsDeutsch Connect</p>
             <h1>{pageTitles[activePage]}</h1>
           </div>
 
           <div
             className={
-              isConnected
+              engineProcess.status.ready
                 ? 'connection-pill connection-pill-online'
                 : 'connection-pill'
             }
           >
             <span className="connection-pill-dot" />
             <span>
-              {isConnected
-                ? 'حالت آزمایشی فعال'
-                : 'قطع'}
+              {engineProcess.starting
+                ? 'در حال راه‌اندازی'
+                : engineProcess.stopping
+                  ? 'در حال توقف'
+                  : engineProcess.status.ready
+                    ? 'پروکسی محلی آماده'
+                    : engineProcess.status.running
+                      ? 'در حال اجرا'
+                      : 'قطع'}
             </span>
           </div>
         </header>
@@ -253,53 +280,41 @@ function App() {
         <main className="content">
           {activePage === 'home' && (
             <HomePage
-              isConnected={isConnected}
-              directDomains={
-                directDomains.domains
-              }
+              directDomains={directDomains.domains}
               engineInfo={engine.info}
-              selectedServer={
-                selectedServer.selectedServer
-              }
-              selectedServerLatency={
-                selectedServerLatency
-              }
-              fastestServer={
-                fastestServer
-              }
-              fastestLatencyMs={
-                latency.fastestLatencyMs
-              }
-              latencyTesting={
-                latency.testing
-              }
+              processStatus={engineProcess.status}
+              processBusy={engineProcess.busy}
+              processError={connectionActionError ?? engineProcess.error}
+              selectedServer={selectedServer.selectedServer}
+              selectedServerLatency={selectedServerLatency}
+              fastestServer={fastestServer}
+              fastestLatencyMs={latency.fastestLatencyMs}
+              latencyTesting={latency.testing}
               latencyError={latency.error}
-              onToggleConnection={
-                toggleConnection
-              }
-              onRetestLatency={() => {
-                void latency.testAll()
-              }}
-              onChooseFastest={() => {
-                if (fastestServer) {
-                  selectedServer.selectServer(
-                    toPublicServer(
-                      fastestServer,
-                    ),
-                  )
+              onMainAction={() => {
+                if (engineProcess.status.running) {
+                  void stopLocalProxy()
+                } else if (fastestServer) {
+                  void prepareAndStart(fastestServer)
+                } else if (selectedNode) {
+                  void prepareAndStart(selectedNode)
                 }
               }}
-              onOpenServers={() =>
-                setActivePage('servers')
-              }
-              onOpenDirectSites={() =>
-                setActivePage(
-                  'direct-sites',
-                )
-              }
-              onOpenRescue={() =>
-                setActivePage('rescue')
-              }
+              onStartFastest={() => {
+                if (fastestServer) {
+                  void prepareAndStart(fastestServer)
+                }
+              }}
+              onStartPrevious={() => {
+                if (selectedNode) {
+                  void prepareAndStart(selectedNode)
+                }
+              }}
+              onStop={() => void stopLocalProxy()}
+              onRetestLatency={() => void latency.testAll()}
+              onOpenServers={() => setActivePage('servers')}
+              onOpenDirectSites={() => setActivePage('direct-sites')}
+              onOpenRescue={() => setActivePage('rescue')}
             />
           )}
 
@@ -308,144 +323,69 @@ function App() {
               loading={serverNodes.loading}
               nodes={serverNodes.nodes}
               error={serverNodes.error}
-              selectedServerId={
-                selectedServer.selectedServer
-                  ?.id ?? null
-              }
-              latencyTesting={
-                latency.testing
-              }
-              latencyResults={
-                latency.results
-              }
-              latencyError={
-                latency.error
-              }
-              fastestServerId={
-                latency.fastestServerId
-              }
-              subscriptionId={
-                serverNodes.subscriptionId
-              }
-              subscriptionName={
-                activeSubscriptionName
-              }
-              directDomains={
-                directDomains.domains
-              }
-              configCheckingNodeId={
-                configCheck.checkingNodeId
-              }
-              configCheckResults={
-                configCheck.results
-              }
+              selectedServerId={selectedServer.selectedServer?.id ?? null}
+              latencyTesting={latency.testing}
+              latencyResults={latency.results}
+              latencyError={latency.error}
+              fastestServerId={latency.fastestServerId}
+              subscriptionId={serverNodes.subscriptionId}
+              subscriptionName={activeSubscriptionName}
+              directDomains={directDomains.domains}
+              configCheckingNodeId={configCheck.checkingNodeId}
+              configCheckResults={configCheck.results}
               onCheckConfig={(nodeId) => {
                 void configCheck.checkConfig({
-                  subscriptionId:
-                    serverNodes.subscriptionId,
+                  subscriptionId: serverNodes.subscriptionId,
                   nodeId,
-                  directDomains:
-                    directDomains.domains,
+                  directDomains: directDomains.domains,
                 })
               }}
-              onTestLatency={() => {
-                void latency.testAll()
-              }}
-              onSelectServer={
-                selectedServer.selectServer
-              }
-              onClearSelectedServer={
-                selectedServer.clearSelectedServer
-              }
-              onOpenSubscriptions={() =>
-                setActivePage(
-                  'subscriptions',
-                )
-              }
+              onTestLatency={() => void latency.testAll()}
+              onSelectServer={selectedServer.selectServer}
+              onClearSelectedServer={selectedServer.clearSelectedServer}
+              onOpenSubscriptions={() => setActivePage('subscriptions')}
             />
           )}
 
-          {activePage ===
-            'subscriptions' && (
+          {activePage === 'subscriptions' && (
             <SubscriptionsPage
-              loading={
-                subscriptions.loading
-              }
-              subscriptions={
-                subscriptions.subscriptions
-              }
-              loadError={
-                subscriptions.error
-              }
-              onAddSubscription={
-                subscriptions.addSubscription
-              }
-              onRemoveSubscription={
-                subscriptions.removeSubscription
-              }
-              onInspectSubscription={
-                subscriptions.inspectSubscription
-              }
-              onLoadServers={async (
-                subscriptionId,
-              ) => {
-                const result =
-                  await serverNodes
-                    .loadFromSubscription(
-                      subscriptionId,
-                    )
+              loading={subscriptions.loading}
+              subscriptions={subscriptions.subscriptions}
+              loadError={subscriptions.error}
+              onAddSubscription={subscriptions.addSubscription}
+              onRemoveSubscription={subscriptions.removeSubscription}
+              onInspectSubscription={subscriptions.inspectSubscription}
+              onLoadServers={async (subscriptionId) => {
+                const result = await serverNodes.loadFromSubscription(
+                  subscriptionId,
+                )
 
                 if (result.success) {
-                  automaticLatencyTestKey.current =
-                    null
-
+                  automaticLatencyTestKey.current = null
                   setActivePage('servers')
                 }
 
                 return result
               }}
               loadingServerSubscriptionId={
-                serverNodes.loading
-                  ? serverNodes.subscriptionId
-                  : null
+                serverNodes.loading ? serverNodes.subscriptionId : null
               }
             />
           )}
 
-          {activePage ===
-            'direct-sites' && (
+          {activePage === 'direct-sites' && (
             <DirectSitesPage
-              domains={
-                directDomains.domains
-              }
-              onAddDomain={
-                directDomains.addDomain
-              }
-              onRemoveDomain={
-                directDomains.removeDomain
-              }
-              onResetDomains={
-                directDomains.resetDomains
-              }
+              domains={directDomains.domains}
+              onAddDomain={directDomains.addDomain}
+              onRemoveDomain={directDomains.removeDomain}
+              onResetDomains={directDomains.resetDomains}
             />
           )}
 
-          {activePage === 'rescue' && (
-            <RescuePage />
-          )}
-
-          {activePage ===
-            'statistics' && (
-            <StatisticsPage />
-          )}
-
-          {activePage === 'logs' && (
-            <LogsPage />
-          )}
-
-          {activePage === 'settings' && (
-            <SettingsPage />
-          )}
+          {activePage === 'rescue' && <RescuePage />}
+          {activePage === 'statistics' && <StatisticsPage />}
+          {activePage === 'logs' && <LogsPage />}
+          {activePage === 'settings' && <SettingsPage />}
         </main>
       </section>
     </div>
@@ -467,9 +407,7 @@ function toPublicServer(
 }
 
 type HomePageProps = {
-  isConnected: boolean
   directDomains: string[]
-
   engineInfo: {
     installed: boolean
     healthy: boolean
@@ -478,45 +416,62 @@ type HomePageProps = {
     architecture: string | null
     error: string | null
   } | null
-
+  processStatus: {
+    running: boolean
+    ready: boolean
+    pid: number | null
+    startedAt: string | null
+    stoppedAt: string | null
+    localHost: string
+    localPort: number
+    lastExitCode: number | null
+    lastSignal: string | null
+    lastError: string | null
+    logTail: string
+  }
+  processBusy: boolean
+  processError: string | null
   selectedServer: PublicServer | null
-  selectedServerLatency:
-    | LatencyItem
-    | null
-
-  fastestServer:
-    | SafeServerNode
-    | null
-
+  selectedServerLatency: LatencyItem | null
+  fastestServer: SafeServerNode | null
   fastestLatencyMs: number | null
   latencyTesting: boolean
   latencyError: string | null
-
-  onToggleConnection: () => void
+  onMainAction: () => void
+  onStartFastest: () => void
+  onStartPrevious: () => void
+  onStop: () => void
   onRetestLatency: () => void
-  onChooseFastest: () => void
   onOpenServers: () => void
   onOpenDirectSites: () => void
   onOpenRescue: () => void
 }
 
 function HomePage({
-  isConnected,
   directDomains,
   engineInfo,
+  processStatus,
+  processBusy,
+  processError,
   selectedServer,
   selectedServerLatency,
   fastestServer,
   fastestLatencyMs,
   latencyTesting,
   latencyError,
-  onToggleConnection,
+  onMainAction,
+  onStartFastest,
+  onStartPrevious,
+  onStop,
   onRetestLatency,
-  onChooseFastest,
   onOpenServers,
   onOpenDirectSites,
   onOpenRescue,
 }: HomePageProps) {
+  const mainActionAvailable = Boolean(
+    processStatus.running || fastestServer || selectedServer,
+  )
+
   return (
     <div className="home-layout">
       <section className="hero-card">
@@ -524,74 +479,66 @@ function HomePage({
           <div className="status-label">
             <span
               className={
-                isConnected
+                processStatus.ready
                   ? 'status-label-dot status-label-dot-online'
                   : 'status-label-dot'
               }
             />
-
-            {isConnected
-              ? 'حالت آزمایشی رابط فعال است'
-              : 'اتصال واقعی هنوز فعال نشده است'}
+            {processStatus.ready
+              ? `پروکسی محلی روی ${processStatus.localHost}:${processStatus.localPort} آماده است`
+              : processStatus.running
+                ? 'فرایند sing-box در حال اجراست'
+                : 'پروکسی محلی خاموش است'}
           </div>
 
-          <h2>
-            اینترنت آزاد،
-            <br />
-            ساده و قابل اعتماد
-          </h2>
-
+          <h2>اینترنت آزاد،<br />ساده و قابل اعتماد</h2>
           <p>
-            سرورها خودکار به‌روزرسانی می‌شوند،
-            تأخیر واقعی پورت آن‌ها سنجیده می‌شود
-            و سریع‌ترین گزینه برای اتصال آماده
-            خواهد بود.
+            سرورها خودکار به‌روزرسانی می‌شوند، کانفیگ با sing-box
+            بررسی می‌شود و پروکسی محلی فقط پس از آماده‌شدن واقعی پورت
+            فعال شناخته می‌شود.
           </p>
 
           <button
             className={
-              isConnected
+              processStatus.ready
                 ? 'connect-button connect-button-active'
                 : 'connect-button'
             }
             type="button"
-            onClick={onToggleConnection}
+            disabled={processBusy || !mainActionAvailable}
+            onClick={onMainAction}
           >
             <span className="connect-button-icon">
-              {isConnected ? '■' : '▶'}
+              {processBusy ? '…' : processStatus.running ? '■' : '▶'}
             </span>
-
             <span>
               <strong>
-                {isConnected
-                  ? 'پایان حالت آزمایشی'
-                  : 'آماده‌سازی اتصال سریع'}
+                {processBusy
+                  ? 'در حال انجام عملیات...'
+                  : processStatus.running
+                    ? 'توقف پروکسی محلی'
+                    : 'اجرای سریع‌ترین سرور'}
               </strong>
-
               <small>
-                فعلاً فقط رابط آزمایش می‌شود؛
-                هنوز تونل شبکه ساخته نشده است
+                {processStatus.ready
+                  ? 'پورت محلی آماده است؛ هنوز تغییر IP تأیید نشده'
+                  : 'کانفیگ بررسی و سپس sing-box اجرا می‌شود'}
               </small>
             </span>
           </button>
         </div>
 
-        <div
-          className="hero-visual"
-          aria-hidden="true"
-        >
+        <div className="hero-visual" aria-hidden="true">
           <div
             className={
-              isConnected
+              processStatus.ready
                 ? 'connection-orbit connection-orbit-online'
                 : 'connection-orbit'
             }
           >
             <div className="connection-orbit-middle">
               <div className="connection-orbit-core">
-                <span>
-                  {isConnected ? '✓' : 'H'}
-                </span>
+                <span>{processStatus.ready ? '✓' : 'H'}</span>
               </div>
             </div>
           </div>
@@ -600,47 +547,24 @@ function HomePage({
 
       <section className="quick-statistics">
         <article className="statistic-card">
-          <span className="statistic-icon">
-            ◎
-          </span>
+          <span className="statistic-icon">◎</span>
           <div>
-            <span className="statistic-label">
-              IP خروجی
-            </span>
-            <strong>
-              {isConnected
-                ? 'آزمایشی'
-                : '—'}
-            </strong>
+            <span className="statistic-label">وضعیت شبکه</span>
+            <strong>{processStatus.ready ? 'پروکسی محلی آماده' : 'قطع'}</strong>
           </div>
         </article>
-
         <article className="statistic-card">
-          <span className="statistic-icon">
-            ◌
-          </span>
+          <span className="statistic-icon">◌</span>
           <div>
-            <span className="statistic-label">
-              سرور قبلی
-            </span>
-            <strong>
-              {selectedServer?.name ??
-                'انتخاب نشده'}
-            </strong>
+            <span className="statistic-label">سرور قبلی</span>
+            <strong>{selectedServer?.name ?? 'انتخاب نشده'}</strong>
           </div>
         </article>
-
         <article className="statistic-card">
-          <span className="statistic-icon">
-            ↗
-          </span>
+          <span className="statistic-icon">↗</span>
           <div>
-            <span className="statistic-label">
-              سایت‌های مستقیم
-            </span>
-            <strong>
-              {directDomains.length} دامنه
-            </strong>
+            <span className="statistic-label">سایت‌های مستقیم</span>
+            <strong>{directDomains.length} دامنه</strong>
           </div>
         </article>
       </section>
@@ -651,194 +575,116 @@ function HomePage({
           kicker="پیشنهاد خودکار"
           serverName={
             fastestServer?.name ??
-            (latencyTesting
-              ? 'در حال سنجش...'
-              : 'هنوز مشخص نشده')
+            (latencyTesting ? 'در حال سنجش...' : 'هنوز مشخص نشده')
           }
           protocol={
             fastestServer
-              ? formatProtocolNameForUi(
-                  fastestServer.protocol,
-                )
+              ? formatProtocolNameForUi(fastestServer.protocol)
               : '—'
           }
           latencyMs={fastestLatencyMs}
-          available={Boolean(
-            fastestServer,
-          )}
+          available={Boolean(fastestServer) && !processBusy}
           testing={latencyTesting}
-          actionLabel="انتخاب سریع‌ترین"
-          onAction={onChooseFastest}
+          actionLabel="اجرا با سریع‌ترین"
+          onAction={onStartFastest}
           secondaryActionLabel="مشاهده سرورها"
-          onSecondaryAction={
-            onOpenServers
-          }
+          onSecondaryAction={onOpenServers}
         />
 
         <ConnectionChoiceCard
           title="سرور قبلی"
           kicker="آخرین انتخاب"
-          serverName={
-            selectedServer?.name ??
-            'سروری انتخاب نشده'
-          }
+          serverName={selectedServer?.name ?? 'سروری انتخاب نشده'}
           protocol={
             selectedServer
-              ? formatProtocolNameForUi(
-                  selectedServer.protocol,
-                )
+              ? formatProtocolNameForUi(selectedServer.protocol)
               : '—'
           }
-          latencyMs={
-            selectedServerLatency
-              ?.latencyMs ?? null
-          }
-          available={Boolean(
-            selectedServer,
-          )}
+          latencyMs={selectedServerLatency?.latencyMs ?? null}
+          available={Boolean(selectedServer) && !processBusy}
           testing={latencyTesting}
-          actionLabel="آماده اتصال به قبلی"
-          onAction={() => {
-            if (selectedServer) {
-              onOpenServers()
-            }
-          }}
+          actionLabel="اجرا با سرور قبلی"
+          onAction={onStartPrevious}
           secondaryActionLabel="تست دوباره پینگ"
-          onSecondaryAction={
-            onRetestLatency
-          }
+          onSecondaryAction={onRetestLatency}
         />
       </section>
 
-      {latencyError && (
+      {processStatus.running && (
+        <section className="local-proxy-status-card">
+          <div>
+            <span className="panel-kicker">Local Proxy</span>
+            <h3>{processStatus.ready ? 'پروکسی محلی آماده است' : 'sing-box در حال اجراست'}</h3>
+            <p dir="ltr">
+              {processStatus.localHost}:{processStatus.localPort}
+              {processStatus.pid ? ` · PID ${processStatus.pid}` : ''}
+            </p>
+          </div>
+          <button
+            className="remove-domain-button"
+            type="button"
+            disabled={processBusy}
+            onClick={onStop}
+          >
+            توقف
+          </button>
+        </section>
+      )}
+
+      {(processError || latencyError) && (
         <div className="form-message form-message-error">
-          {latencyError}
+          {processError ?? latencyError}
         </div>
       )}
 
       <section className="home-grid">
         <article className="panel-card">
           <div className="panel-heading">
-            <div>
-              <span className="panel-kicker">
-                مسیر خروج
-              </span>
-              <h3>وضعیت اتصال</h3>
-            </div>
-
-            <span className="panel-icon">
-              ◉
-            </span>
+            <div><span className="panel-kicker">مسیر خروج</span><h3>وضعیت هسته</h3></div>
+            <span className="panel-icon">◉</span>
           </div>
-
           <div className="connection-details">
+            <DetailRow label="مرحله فعلی" value="پروکسی محلی" />
             <DetailRow
-              label="حالت اتصال"
-              value="TUN"
-            />
-            <DetailRow
-              label="روش انتخاب"
-              value="خودکار + انتخاب قبلی"
+              label="پورت محلی"
+              value={`${processStatus.localHost}:${processStatus.localPort}`}
+              muted={!processStatus.ready}
             />
             <DetailRow
               label="هسته شبکه"
-              value={
-                engineInfo?.healthy
-                  ? `sing-box ${engineInfo.version}`
-                  : 'در دسترس نیست'
-              }
-              muted={
-                !engineInfo?.healthy
-              }
+              value={engineInfo?.healthy ? `sing-box ${engineInfo.version}` : 'در دسترس نیست'}
+              muted={!engineInfo?.healthy}
             />
-            <DetailRow
-              label="معماری هسته"
-              value={
-                engineInfo?.architecture ??
-                '—'
-              }
-              muted={
-                !engineInfo?.architecture
-              }
-            />
-            <DetailRow
-              label="بررسی IP"
-              value="در انتظار اتصال واقعی"
-              muted
-            />
+            <DetailRow label="System Proxy / TUN" value="هنوز فعال نشده" muted />
+            <DetailRow label="بررسی تغییر IP" value="مرحله بعد" muted />
           </div>
         </article>
 
         <article className="panel-card">
           <div className="panel-heading">
-            <div>
-              <span className="panel-kicker">
-                دسترسی مستقیم
-              </span>
-              <h3>سایت‌های بدون VPN</h3>
-            </div>
-
-            <button
-              className="text-button"
-              type="button"
-              onClick={onOpenDirectSites}
-            >
-              مدیریت
-            </button>
+            <div><span className="panel-kicker">دسترسی مستقیم</span><h3>سایت‌های بدون VPN</h3></div>
+            <button className="text-button" type="button" onClick={onOpenDirectSites}>مدیریت</button>
           </div>
-
           <div className="domain-preview-list">
-            {directDomains
-              .slice(0, 3)
-              .map((domain) => (
-                <DomainPreview
-                  domain={domain}
-                  key={domain}
-                />
-              ))}
-
+            {directDomains.slice(0, 3).map((domain) => (
+              <DomainPreview domain={domain} key={domain} />
+            ))}
             {directDomains.length === 0 && (
-              <p className="empty-list-message">
-                هنوز دامنه‌ای ثبت نشده است.
-              </p>
+              <p className="empty-list-message">هنوز دامنه‌ای ثبت نشده است.</p>
             )}
           </div>
-
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={onOpenDirectSites}
-          >
+          <button className="secondary-button" type="button" onClick={onOpenDirectSites}>
             مشاهده تمام دامنه‌ها
           </button>
         </article>
 
         <article className="panel-card rescue-preview-card">
           <div className="panel-heading">
-            <div>
-              <span className="panel-kicker">
-                شرایط اختلال
-              </span>
-              <h3>مرکز نجات اتصال</h3>
-            </div>
-
-            <span className="rescue-badge">
-              آماده‌سازی
-            </span>
+            <div><span className="panel-kicker">شرایط اختلال</span><h3>مرکز نجات اتصال</h3></div>
+            <span className="rescue-badge">آماده‌سازی</span>
           </div>
-
-          <p>
-            در نسخه‌های بعد، برنامه Fragment،
-            SNI، Serverless و روش‌های Tor را
-            بررسی می‌کند و راهکار قابل‌استفاده
-            را پیشنهاد می‌دهد.
-          </p>
-
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={onOpenRescue}
-          >
+          <p>در نسخه‌های بعد، برنامه Fragment، SNI، Serverless و روش‌های Tor را بررسی می‌کند.</p>
+          <button className="secondary-button" type="button" onClick={onOpenRescue}>
             مشاهده مرکز نجات
           </button>
         </article>

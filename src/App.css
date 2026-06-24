@@ -1884,3 +1884,47 @@ button {
     min-width: 0;
   }
 }
+/* Local sing-box process controls */
+
+.local-proxy-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 17px 19px;
+  border: 1px solid rgba(54, 179, 126, 0.3);
+  border-radius: 15px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(54, 179, 126, 0.1),
+      transparent 60%
+    ),
+    var(--surface);
+}
+
+.local-proxy-status-card h3 {
+  margin: 4px 0 7px;
+  font-size: 13px;
+}
+
+.local-proxy-status-card p {
+  margin: 0;
+  color: var(--green);
+  font-family: Consolas, monospace;
+  font-size: 10px;
+}
+
+.connect-button:disabled,
+.connection-choice-actions button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+  transform: none;
+}
+
+@media (max-width: 640px) {
+  .local-proxy-status-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
