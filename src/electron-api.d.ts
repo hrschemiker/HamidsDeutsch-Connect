@@ -155,10 +155,20 @@ type ServerLatencyResult = {
   error: string | null
 }
 
+
+type RescueOptions = {
+  enabled: boolean
+  recordFragment: boolean
+  handshakeFragment: boolean
+  fragmentFallbackDelay: string
+  customSni: string
+}
+
 type CheckServerConfigInput = {
   subscriptionId: string
   nodeId: string
   directDomains: string[]
+  rescueOptions?: RescueOptions
 }
 
 type CheckServerConfigResult = {

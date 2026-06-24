@@ -4,8 +4,20 @@ import {
   useState,
 } from 'react'
 
+const STORAGE_KEY =
+  'hamidsdeutsch:selected-server:v2'
+
+const LEGACY_STORAGE_KEYS = [
+  'hamidsdeutsch:selected-server',
+  'hamidsDeutsch:selectedServer',
+  'selectedServer',
+]
+
 export type SelectedServer = {
   id: string
+  nodeId: string
+  subscriptionId: string
+  subscriptionName: string
   name: string
   protocol: string
   host: string | null
@@ -14,101 +26,241 @@ export type SelectedServer = {
   tls: boolean
 }
 
-const STORAGE_KEY =
-  'hamidsdeutsch-connect.selected-server'
+function isSelectedServer(
+  value: unknown,
+): value is SelectedServer {
+  if (
+    !value ||
+    typeof value !== 'object'
+  ) {
+    return false
+  }
 
-function loadSelectedServer():
-  | SelectedServer
-  | null {
+  const server =
+    value as Record<
+      string,
+      unknown
+    >
+
+  return (
+    typeof server.id === 'string' &&
+    typeof server.nodeId === 'string' &&
+    typeof server.subscriptionId === 'string' &&
+    typeof server.subscriptionName === 'string' &&
+    typeof server.name === 'string' &&
+    typeof server.protocol === 'string' &&
+    (
+      server.host === null ||
+      typeof server.host === 'string'
+    ) &&
+    (
+      server.port === null ||
+      typeof server.port === 'number'
+    ) &&
+    (
+      server.transport === null ||
+      typeof server.transport === 'string'
+    ) &&
+    typeof server.tls === 'boolean'
+  )
+}
+
+function readStoredServer():
+  SelectedServer | null {
   try {
-    const storedValue =
+    const raw =
       window.localStorage.getItem(
         STORAGE_KEY,
       )
 
-    if (!storedValue) {
-      return null
+    if (raw) {
+      const parsed =
+        JSON.parse(raw)
+
+      if (isSelectedServer(parsed)) {
+        return parsed
+      }
     }
 
-    const parsedValue: unknown =
-      JSON.parse(storedValue)
-
-    if (
-      !parsedValue ||
-      typeof parsedValue !== 'object'
+    for (
+      const legacyKey of
+        LEGACY_STORAGE_KEYS
     ) {
-      return null
-    }
+      const legacyRaw =
+        window.localStorage.getItem(
+          legacyKey,
+        )
 
-    const candidate =
-      parsedValue as Partial<SelectedServer>
+      if (!legacyRaw) {
+        continue
+      }
 
-    if (
-      typeof candidate.id !== 'string' ||
-      typeof candidate.name !== 'string' ||
-      typeof candidate.protocol !== 'string'
-    ) {
-      return null
-    }
+      const parsed =
+        JSON.parse(legacyRaw)
 
-    return {
-      id: candidate.id,
-      name: candidate.name,
-      protocol: candidate.protocol,
-      host:
-        typeof candidate.host === 'string'
-          ? candidate.host
-          : null,
-      port:
-        typeof candidate.port === 'number'
-          ? candidate.port
-          : null,
-      transport:
-        typeof candidate.transport ===
-        'string'
-          ? candidate.transport
-          : null,
-      tls: candidate.tls === true,
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        typeof parsed.id === 'string' &&
+        typeof parsed.name === 'string'
+      ) {
+        const legacyServer =
+          parsed as Record<
+            string,
+            unknown
+          >
+
+        const migrated:
+          SelectedServer = {
+            id:
+              String(
+                legacyServer.id,
+              ),
+            nodeId:
+              typeof legacyServer.nodeId ===
+                'string'
+                ? legacyServer.nodeId
+                : String(
+                    legacyServer.id,
+                  ),
+            subscriptionId:
+              typeof legacyServer.subscriptionId ===
+                'string'
+                ? legacyServer.subscriptionId
+                : '',
+            subscriptionName:
+              typeof legacyServer.subscriptionName ===
+                'string'
+                ? legacyServer.subscriptionName
+                : 'اشتراک قبلی',
+            name:
+              String(
+                legacyServer.name,
+              ),
+            protocol:
+              typeof legacyServer.protocol ===
+                'string'
+                ? legacyServer.protocol
+                : 'unknown',
+            host:
+              typeof legacyServer.host ===
+                'string'
+                ? legacyServer.host
+                : null,
+            port:
+              typeof legacyServer.port ===
+                'number'
+                ? legacyServer.port
+                : null,
+            transport:
+              typeof legacyServer.transport ===
+                'string'
+                ? legacyServer.transport
+                : null,
+            tls:
+              Boolean(
+                legacyServer.tls,
+              ),
+          }
+
+        window.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(
+            migrated,
+          ),
+        )
+
+        return migrated
+      }
     }
   } catch {
     return null
   }
+
+  return null
 }
 
 export function useSelectedServer() {
   const [
     selectedServer,
     setSelectedServer,
-  ] = useState<SelectedServer | null>(
-    loadSelectedServer,
-  )
+  ] = useState<
+    SelectedServer | null
+  >(() => readStoredServer())
 
-  useEffect(() => {
-    if (!selectedServer) {
-      window.localStorage.removeItem(
-        STORAGE_KEY,
-      )
+  const selectServer =
+    useCallback(
+      (
+        server:
+          SelectedServer,
+      ) => {
+        setSelectedServer(
+          server,
+        )
 
-      return
-    }
-
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(selectedServer),
+        window.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(
+            server,
+          ),
+        )
+      },
+      [],
     )
-  }, [selectedServer])
-
-  const selectServer = useCallback(
-    (server: SelectedServer) => {
-      setSelectedServer(server)
-    },
-    [],
-  )
 
   const clearSelectedServer =
-    useCallback(() => {
-      setSelectedServer(null)
-    }, [])
+    useCallback(
+      () => {
+        setSelectedServer(
+          null,
+        )
+
+        window.localStorage.removeItem(
+          STORAGE_KEY,
+        )
+
+        for (
+          const legacyKey of
+            LEGACY_STORAGE_KEYS
+        ) {
+          window.localStorage.removeItem(
+            legacyKey,
+          )
+        }
+      },
+      [],
+    )
+
+  useEffect(() => {
+    const handleStorage =
+      (
+        event:
+          StorageEvent,
+      ) => {
+        if (
+          event.key !==
+          STORAGE_KEY
+        ) {
+          return
+        }
+
+        setSelectedServer(
+          readStoredServer(),
+        )
+      }
+
+    window.addEventListener(
+      'storage',
+      handleStorage,
+    )
+
+    return () => {
+      window.removeEventListener(
+        'storage',
+        handleStorage,
+      )
+    }
+  }, [])
 
   return {
     selectedServer,

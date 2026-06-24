@@ -35,11 +35,21 @@ export function useServerConfigCheck() {
     async ({
       subscriptionId,
       nodeId,
+      resultKey = nodeId,
       directDomains,
+      rescueOptions,
     }: {
       subscriptionId: string | null
       nodeId: string
+      resultKey?: string
       directDomains: string[]
+      rescueOptions?: {
+        enabled: boolean
+        recordFragment: boolean
+        handshakeFragment: boolean
+        fragmentFallbackDelay: string
+        customSni: string
+      }
     }) => {
       if (!subscriptionId) {
         const result: ConfigCheckResult = {
@@ -54,14 +64,14 @@ export function useServerConfigCheck() {
           directDomainCount: 0,
           stdout: '',
           error:
-            'اشتراک فعال برای این سرور مشخص نیست.',
+            'اشتراک این سرور مشخص نیست.',
         }
 
         setState((current) => ({
           checkingNodeId: null,
           results: {
             ...current.results,
-            [nodeId]: result,
+            [resultKey]: result,
           },
         }))
 
@@ -70,7 +80,8 @@ export function useServerConfigCheck() {
 
       setState((current) => ({
         ...current,
-        checkingNodeId: nodeId,
+        checkingNodeId:
+          resultKey,
       }))
 
       try {
@@ -81,13 +92,14 @@ export function useServerConfigCheck() {
               subscriptionId,
               nodeId,
               directDomains,
+              rescueOptions,
             })
 
         setState((current) => ({
           checkingNodeId: null,
           results: {
             ...current.results,
-            [nodeId]: result,
+            [resultKey]: result,
           },
         }))
 
@@ -114,7 +126,7 @@ export function useServerConfigCheck() {
           checkingNodeId: null,
           results: {
             ...current.results,
-            [nodeId]: result,
+            [resultKey]: result,
           },
         }))
 
@@ -125,17 +137,20 @@ export function useServerConfigCheck() {
   )
 
   const clearResult = useCallback(
-    (nodeId: string) => {
+    (resultKey: string) => {
       setState((current) => {
         const nextResults = {
           ...current.results,
         }
 
-        delete nextResults[nodeId]
+        delete nextResults[
+          resultKey
+        ]
 
         return {
           ...current,
-          results: nextResults,
+          results:
+            nextResults,
         }
       })
     },
@@ -145,7 +160,8 @@ export function useServerConfigCheck() {
   return {
     checkingNodeId:
       state.checkingNodeId,
-    results: state.results,
+    results:
+      state.results,
     checkConfig,
     clearResult,
   }

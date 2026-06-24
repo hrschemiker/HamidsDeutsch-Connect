@@ -19,6 +19,7 @@ import { useServerConfigCheck } from './servers/use-server-config-check'
 import { useIpVerification } from './network/use-ip-verification'
 import { useWindowsPrivilege } from './system/use-windows-privilege'
 import { useWindowsElevation } from './system/use-windows-elevation'
+import { useRescueSettings } from './rescue/use-rescue-settings'
 import './App.css'
 
 type PageId =
@@ -39,6 +40,9 @@ type NavigationItem = {
 
 type PublicServer = {
   id: string
+  nodeId: string
+  subscriptionId: string
+  subscriptionName: string
   name: string
   protocol: string
   host: string | null
@@ -106,7 +110,10 @@ function App() {
 
   const serverNodes = useServerNodes(
     subscriptions.subscriptions.map(
-      (subscription) => subscription.id,
+      (subscription) => ({
+        id: subscription.id,
+        name: subscription.name,
+      }),
     ),
     subscriptions.loading,
   )
@@ -117,6 +124,7 @@ function App() {
   const ipVerification = useIpVerification()
   const windowsPrivilege = useWindowsPrivilege()
   const windowsElevation = useWindowsElevation()
+  const rescueSettings = useRescueSettings()
 
   const connectionVerified =
     engineProcess.status.connectionMode === 'tun'
@@ -150,12 +158,6 @@ function App() {
     ? latency.results[selectedServer.selectedServer.id] ?? null
     : null
 
-  const activeSubscriptionName =
-    subscriptions.subscriptions.find(
-      (subscription) =>
-        subscription.id === serverNodes.subscriptionId,
-    )?.name ?? 'اشتراک فعال'
-
   useEffect(() => {
     if (
       serverNodes.loading ||
@@ -166,9 +168,9 @@ function App() {
     }
 
     const testKey = [
-      serverNodes.subscriptionId ?? 'none',
       serverNodes.checkedAt ?? 'unknown',
       serverNodes.nodes.length,
+      subscriptions.subscriptions.length,
     ].join('|')
 
     if (automaticLatencyTestKey.current === testKey) {
@@ -182,17 +184,20 @@ function App() {
     serverNodes.checkedAt,
     serverNodes.loading,
     serverNodes.nodes.length,
-    serverNodes.subscriptionId,
+    subscriptions.subscriptions.length,
   ])
 
   async function attemptServerConnection(
     node: SafeServerNode,
   ) {
-    if (!serverNodes.subscriptionId) {
+    if (
+      !node.subscriptionId ||
+      !node.nodeId
+    ) {
       return {
         success: false as const,
         fatal: true as const,
-        error: 'اشتراک فعال برای این سرور مشخص نیست.',
+        error: 'اشتراک این سرور مشخص نیست.',
       }
     }
 
@@ -202,9 +207,16 @@ function App() {
     setTunCurrentIp(null)
 
     const checkResult = await configCheck.checkConfig({
-      subscriptionId: serverNodes.subscriptionId,
-      nodeId: node.id,
-      directDomains: directDomains.domains,
+      subscriptionId:
+        node.subscriptionId,
+      nodeId:
+        node.nodeId,
+      resultKey:
+        node.id,
+      directDomains:
+        directDomains.domains,
+      rescueOptions:
+        rescueSettings.settings,
     })
 
     if (!checkResult.success) {
@@ -259,10 +271,13 @@ function App() {
           .servers
           .checkTunConfig({
             subscriptionId:
-              serverNodes.subscriptionId,
-            nodeId: node.id,
+              node.subscriptionId,
+            nodeId:
+              node.nodeId,
             directDomains:
               directDomains.domains,
+            rescueOptions:
+              rescueSettings.settings,
           })
 
       if (tunCheck.success) {
@@ -859,7 +874,13 @@ function App() {
               ipVerificationResult={ipVerification.result}
               ipVerificationChecking={ipVerification.checking}
               isConnected={connectionVerified}
-              selectedServer={selectedServer.selectedServer}
+              selectedServer={
+                selectedNode
+                  ? toPublicServer(
+                      selectedNode,
+                    )
+                  : null
+              }
               selectedServerLatency={selectedServerLatency}
               fastestServer={fastestServer}
               fastestLatencyMs={latency.fastestLatencyMs}
@@ -899,16 +920,21 @@ function App() {
               latencyResults={latency.results}
               latencyError={latency.error}
               fastestServerId={latency.fastestServerId}
-              subscriptionId={serverNodes.subscriptionId}
-              subscriptionName={activeSubscriptionName}
               directDomains={directDomains.domains}
               configCheckingNodeId={configCheck.checkingNodeId}
               configCheckResults={configCheck.results}
-              onCheckConfig={(nodeId) => {
+              onCheckConfig={(node) => {
                 void configCheck.checkConfig({
-                  subscriptionId: serverNodes.subscriptionId,
-                  nodeId,
-                  directDomains: directDomains.domains,
+                  subscriptionId:
+                    node.subscriptionId,
+                  nodeId:
+                    node.nodeId,
+                  resultKey:
+                    node.id,
+                  directDomains:
+                    directDomains.domains,
+                  rescueOptions:
+                    rescueSettings.settings,
                 })
               }}
               onTestLatency={() => void latency.testAll()}
@@ -927,19 +953,30 @@ function App() {
               onRemoveSubscription={subscriptions.removeSubscription}
               onInspectSubscription={subscriptions.inspectSubscription}
               onLoadServers={async (subscriptionId) => {
-                const result = await serverNodes.loadFromSubscription(
-                  subscriptionId,
-                )
+                const result =
+                  await serverNodes.loadFromSubscription(
+                    subscriptionId,
+                  )
 
                 if (result.success) {
                   automaticLatencyTestKey.current = null
                   setActivePage('servers')
+
+                  return {
+                    success: true as const,
+                    error: null,
+                  }
                 }
 
-                return result
+                return {
+                  success: false as const,
+                  error:
+                    result.error ??
+                    'دریافت سرورها ناموفق بود.',
+                }
               }}
               loadingServerSubscriptionId={
-                serverNodes.loading ? serverNodes.subscriptionId : null
+                serverNodes.refreshingSubscriptionId
               }
             />
           )}
@@ -953,7 +990,22 @@ function App() {
             />
           )}
 
-          {activePage === 'rescue' && <RescuePage />}
+          {activePage === 'rescue' && (
+            <RescuePage
+              settings={
+                rescueSettings.settings
+              }
+              onUpdate={
+                rescueSettings.update
+              }
+              onReset={
+                rescueSettings.reset
+              }
+              connected={
+                connectionVerified
+              }
+            />
+          )}
           {activePage === 'statistics' && <StatisticsPage />}
           {activePage === 'logs' && <LogsPage />}
           {activePage === 'settings' && <SettingsPage />}
@@ -968,6 +1020,12 @@ function toPublicServer(
 ): PublicServer {
   return {
     id: node.id,
+    nodeId:
+      node.nodeId,
+    subscriptionId:
+      node.subscriptionId,
+    subscriptionName:
+      node.subscriptionName,
     name: node.name,
     protocol: node.protocol,
     host: node.host,
@@ -1104,13 +1162,6 @@ function HomePage({
                     ? 'فرایند sing-box در حال اجراست'
                     : 'اتصال برقرار نیست'}
           </div>
-
-          <h2>اینترنت آزاد،<br />ساده و قابل اعتماد</h2>
-          <p>
-            سرورها خودکار بررسی می‌شوند. در حالت Administrator، اتصال
-            ابتدا با TUN برقرار می‌شود؛ در غیر این صورت یا هنگام شکست TUN،
-            System Proxy امن به‌عنوان fallback فعال خواهد شد.
-          </p>
 
           {!administratorAvailable && !processStatus.running && (
             <div className="elevation-panel">
@@ -2114,8 +2165,6 @@ function ServersPage({
   latencyResults,
   latencyError,
   fastestServerId,
-  subscriptionId,
-  subscriptionName,
   directDomains,
   configCheckingNodeId,
   configCheckResults,
@@ -2136,8 +2185,6 @@ function ServersPage({
   >
   latencyError: string | null
   fastestServerId: string | null
-  subscriptionId: string | null
-  subscriptionName: string
   directDomains: string[]
   configCheckingNodeId: string | null
   configCheckResults: Record<
@@ -2155,7 +2202,9 @@ function ServersPage({
       error: string | null
     }
   >
-  onCheckConfig: (nodeId: string) => void
+  onCheckConfig: (
+    node: SafeServerNode,
+  ) => void
   onTestLatency: () => void
   onSelectServer: (
     server: PublicServer,
@@ -2200,7 +2249,7 @@ function ServersPage({
       <EmptyPage
         icon="◉"
         title="هنوز سروری بارگذاری نشده است"
-        description="سرورها در شروع برنامه خودکار بارگذاری می‌شوند؛ برای انتخاب منبع دیگر به صفحه اشتراک‌ها برو."
+        description="سرورهای همه اشتراک‌ها در شروع برنامه خودکار بارگذاری می‌شوند."
         actionLabel="رفتن به اشتراک‌ها"
         onAction={onOpenSubscriptions}
       />
@@ -2297,14 +2346,21 @@ function ServersPage({
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
-              Subscription Nodes
+              All Subscription Nodes
             </span>
-            <h3>سرورها بر اساس سرعت</h3>
+            <h3>همه سرورها بر اساس سرعت</h3>
           </div>
 
           <div className="servers-heading-actions">
             <span className="count-badge">
-              {validNodes.length} سرور معتبر
+              {validNodes.length} سرور معتبر از {
+                new Set(
+                  nodes.map(
+                    (node) =>
+                      node.subscriptionId,
+                  ),
+                ).size
+              } اشتراک
             </span>
 
             <button
@@ -2331,8 +2387,9 @@ function ServersPage({
         </div>
 
         <p className="field-help">
-          ردیف‌ها به‌صورت خودکار از سریع‌ترین به کندترین مرتب می‌شوند.
-          برای دیدن آدرس، پورت و سایر جزئیات روی هر ردیف بزن.
+          سرورهای همه اشتراک‌ها باهم بررسی و از سریع‌ترین به کندترین
+          مرتب می‌شوند. برای دیدن اشتراک، آدرس، پورت و سایر جزئیات روی هر
+          ردیف بزن.
         </p>
 
         {latencyError && (
@@ -2391,7 +2448,9 @@ function ServersPage({
 
                 <span className="server-list-name">
                   <strong>{node.name}</strong>
-                  <small>{subscriptionName}</small>
+                  <small>
+                    {node.subscriptionName}
+                  </small>
                 </span>
 
                 <LatencyBadge
@@ -2443,6 +2502,12 @@ function ServersPage({
                         formatProtocolNameForUi(
                           node.protocol,
                         )
+                      }
+                    />
+                    <ServerInformationRow
+                      label="اشتراک"
+                      value={
+                        node.subscriptionName
                       }
                     />
                     <ServerInformationRow
@@ -2511,11 +2576,12 @@ function ServersPage({
                       type="button"
                       disabled={
                         !node.valid ||
-                        !subscriptionId ||
-                        configCheckingNodeId === node.id
+                        !node.subscriptionId ||
+                        configCheckingNodeId ===
+                          node.id
                       }
                       onClick={() => {
-                        onCheckConfig(node.id)
+                        onCheckConfig(node)
                       }}
                     >
                       {configCheckingNodeId === node.id
@@ -2955,37 +3021,34 @@ function DirectSitesPage({
   )
 }
 
-function RescuePage() {
-  const rescueMethods = [
-    {
-      name: 'Fragment',
-      description:
-        'تقسیم کنترل‌شده بسته‌های TLS',
-      status: 'در آینده',
-    },
-    {
-      name: 'SNI Rescue',
-      description:
-        'راهکار کمکی برای شرایط DPI شدید',
-      status: 'در آینده',
-    },
-    {
-      name: 'Serverless',
-      description:
-        'واردکردن Profileهای بررسی‌شده',
-      status: 'در آینده',
-    },
-    {
-      name: 'Tor Bridges',
-      description:
-        'Snowflake، WebTunnel و Bridge',
-      status: 'در آینده',
-    },
-  ]
-
+function RescuePage({
+  settings,
+  onUpdate,
+  onReset,
+  connected,
+}: {
+  settings: {
+    enabled: boolean
+    recordFragment: boolean
+    handshakeFragment: boolean
+    fragmentFallbackDelay: string
+    customSni: string
+  }
+  onUpdate: (
+    patch: Partial<{
+      enabled: boolean
+      recordFragment: boolean
+      handshakeFragment: boolean
+      fragmentFallbackDelay: string
+      customSni: string
+    }>,
+  ) => void
+  onReset: () => void
+  connected: boolean
+}) {
   return (
     <div className="page-stack">
-      <section className="rescue-header-card">
+      <section className="rescue-header-card active-rescue-header">
         <span className="rescue-header-icon">
           ✦
         </span>
@@ -2995,41 +3058,249 @@ function RescuePage() {
             Emergency Connection
           </span>
           <h2>
-            پیداکردن راهکار مناسب برای شبکه فعلی
+            تنظیمات نجات اتصال
           </h2>
           <p>
-            این بخش بعداً وضعیت DNS، TCP، UDP
-            و TLS را بررسی می‌کند و روش
-            قابل‌استفاده را پیشنهاد می‌دهد.
+            این گزینه‌ها فقط هنگام ساخت اتصال جدید
+            اعمال می‌شوند. برای تغییر حالت، ابتدا
+            اتصال فعلی را قطع و دوباره وصل کن.
           </p>
         </div>
 
-        <button
-          className="primary-button"
-          type="button"
-          disabled
-        >
-          شروع بررسی
-        </button>
+        <label className="rescue-master-switch">
+          <input
+            type="checkbox"
+            checked={
+              settings.enabled
+            }
+            onChange={(event) =>
+              onUpdate({
+                enabled:
+                  event.target
+                    .checked,
+              })
+            }
+          />
+          <span>
+            {settings.enabled
+              ? 'فعال'
+              : 'غیرفعال'}
+          </span>
+        </label>
       </section>
 
-      <section className="rescue-method-grid">
-        {rescueMethods.map((method) => (
-          <article
-            className="rescue-method-card"
-            key={method.name}
-          >
-            <div className="rescue-method-top">
-              <span>◇</span>
-              <small>
-                {method.status}
-              </small>
+      {connected && (
+        <div className="inline-notice">
+          اتصال فعلی با تنظیمات قبلی اجرا شده است؛
+          برای اعمال تغییرات یک‌بار قطع و وصل کن.
+        </div>
+      )}
+
+      <section className="rescue-settings-grid">
+        <article className="rescue-setting-card">
+          <div className="rescue-setting-heading">
+            <div>
+              <span className="rescue-setting-badge">
+                پیشنهادشده
+              </span>
+              <h3>
+                TLS Record Fragment
+              </h3>
             </div>
 
-            <h3>{method.name}</h3>
-            <p>{method.description}</p>
-          </article>
-        ))}
+            <label className="compact-switch">
+              <input
+                type="checkbox"
+                disabled={
+                  !settings.enabled
+                }
+                checked={
+                  settings.recordFragment
+                }
+                onChange={(event) =>
+                  onUpdate({
+                    recordFragment:
+                      event.target
+                        .checked,
+                  })
+                }
+              />
+              <span />
+            </label>
+          </div>
+
+          <p>
+            ClientHello را در چند TLS Record تقسیم
+            می‌کند. این روش سبک‌تر است و قبل از
+            Fragment کامل پیشنهاد می‌شود.
+          </p>
+        </article>
+
+        <article className="rescue-setting-card">
+          <div className="rescue-setting-heading">
+            <div>
+              <span className="rescue-setting-badge secondary">
+                پیشرفته
+              </span>
+              <h3>
+                TLS Handshake Fragment
+              </h3>
+            </div>
+
+            <label className="compact-switch">
+              <input
+                type="checkbox"
+                disabled={
+                  !settings.enabled
+                }
+                checked={
+                  settings.handshakeFragment
+                }
+                onChange={(event) =>
+                  onUpdate({
+                    handshakeFragment:
+                      event.target
+                        .checked,
+                  })
+                }
+              />
+              <span />
+            </label>
+          </div>
+
+          <p>
+            بسته‌های Handshake را در سطح TCP تقسیم
+            می‌کند. ممکن است سرعت را کاهش دهد؛ فقط
+            وقتی Record Fragment کافی نیست فعالش کن.
+          </p>
+
+          <label className="rescue-field">
+            <span>
+              تأخیر fallback
+            </span>
+            <select
+              disabled={
+                !settings.enabled ||
+                !settings.handshakeFragment
+              }
+              value={
+                settings.fragmentFallbackDelay
+              }
+              onChange={(event) =>
+                onUpdate({
+                  fragmentFallbackDelay:
+                    event.target.value,
+                })
+              }
+            >
+              <option value="100ms">
+                100 ms
+              </option>
+              <option value="250ms">
+                250 ms
+              </option>
+              <option value="500ms">
+                500 ms
+              </option>
+              <option value="1s">
+                1 ثانیه
+              </option>
+            </select>
+          </label>
+        </article>
+
+        <article className="rescue-setting-card rescue-sni-card">
+          <div className="rescue-setting-heading">
+            <div>
+              <span className="rescue-setting-badge caution">
+                اختیاری
+              </span>
+              <h3>
+                SNI سفارشی
+              </h3>
+            </div>
+          </div>
+
+          <p>
+            فقط زمانی وارد کن که سرویس‌دهنده سرور
+            یک SNI جایگزین معتبر داده باشد. مقدار
+            اشتباه باعث شکست TLS می‌شود.
+          </p>
+
+          <label className="rescue-field">
+            <span>
+              نام دامنه SNI
+            </span>
+            <input
+              type="text"
+              dir="ltr"
+              disabled={
+                !settings.enabled
+              }
+              value={
+                settings.customSni
+              }
+              placeholder="example.com"
+              onChange={(event) =>
+                onUpdate({
+                  customSni:
+                    event.target.value,
+                })
+              }
+            />
+          </label>
+        </article>
+      </section>
+
+      <section className="rescue-summary-card">
+        <div>
+          <span className="panel-kicker">
+            Current Profile
+          </span>
+          <h3>
+            وضعیت پروفایل نجات
+          </h3>
+        </div>
+
+        <div className="rescue-summary-items">
+          <span>
+            Record Fragment:
+            <strong>
+              {settings.enabled &&
+              settings.recordFragment
+                ? ' روشن'
+                : ' خاموش'}
+            </strong>
+          </span>
+
+          <span>
+            Handshake Fragment:
+            <strong>
+              {settings.enabled &&
+              settings.handshakeFragment
+                ? ' روشن'
+                : ' خاموش'}
+            </strong>
+          </span>
+
+          <span>
+            SNI:
+            <strong dir="ltr">
+              {settings.enabled &&
+              settings.customSni
+                ? ` ${settings.customSni}`
+                : ' خودکار'}
+            </strong>
+          </span>
+        </div>
+
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={onReset}
+        >
+          بازنشانی تنظیمات نجات
+        </button>
       </section>
     </div>
   )

@@ -31,6 +31,7 @@ async function createAndCheckConfig({
   enginePath,
   userDataPath,
   directDomains,
+  rescueOptions,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -68,8 +69,11 @@ async function createAndCheckConfig({
   }
 
   const outbound =
-    buildOutboundFromUri(
-      resolvedUri,
+    applyRescueOptions(
+      buildOutboundFromUri(
+        resolvedUri,
+      ),
+      rescueOptions,
     )
 
   const normalizedDirectDomains =
@@ -129,6 +133,7 @@ async function createAndCheckTunConfig({
   enginePath,
   userDataPath,
   directDomains,
+  rescueOptions,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -166,8 +171,11 @@ async function createAndCheckTunConfig({
   }
 
   const outbound =
-    buildOutboundFromUri(
-      resolvedUri,
+    applyRescueOptions(
+      buildOutboundFromUri(
+        resolvedUri,
+      ),
+      rescueOptions,
     )
 
   const normalizedDirectDomains =
@@ -1225,6 +1233,147 @@ function buildTunConfig(
       auto_detect_interface: true,
     },
   }
+}
+
+function applyRescueOptions(
+  outbound,
+  rescueOptions,
+) {
+  const options =
+    normalizeRescueOptions(
+      rescueOptions,
+    )
+
+  if (
+    !options.enabled ||
+    !outbound?.tls?.enabled
+  ) {
+    return outbound
+  }
+
+  const tls = {
+    ...outbound.tls,
+  }
+
+  if (
+    options.customSni
+  ) {
+    tls.server_name =
+      options.customSni
+  }
+
+  if (
+    options.recordFragment
+  ) {
+    tls.record_fragment =
+      true
+  }
+
+  if (
+    options.handshakeFragment
+  ) {
+    tls.fragment = true
+    tls.fragment_fallback_delay =
+      options.fragmentFallbackDelay
+  }
+
+  return {
+    ...outbound,
+    tls,
+  }
+}
+
+function normalizeRescueOptions(
+  value,
+) {
+  const enabled =
+    Boolean(
+      value?.enabled,
+    )
+
+  const customSni =
+    normalizeServerName(
+      value?.customSni,
+    )
+
+  const delay =
+    normalizeDuration(
+      value?.fragmentFallbackDelay,
+      '500ms',
+    )
+
+  return {
+    enabled,
+    recordFragment:
+      enabled &&
+      value?.recordFragment !==
+        false,
+    handshakeFragment:
+      enabled &&
+      Boolean(
+        value?.handshakeFragment,
+      ),
+    fragmentFallbackDelay:
+      delay,
+    customSni,
+  }
+}
+
+function normalizeServerName(
+  value,
+) {
+  if (
+    typeof value !== 'string'
+  ) {
+    return ''
+  }
+
+  const normalized =
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/\.$/, '')
+
+  if (!normalized) {
+    return ''
+  }
+
+  if (
+    normalized.length > 253 ||
+    !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(
+      normalized,
+    )
+  ) {
+    throw new Error(
+      'SNI سفارشی معتبر نیست.',
+    )
+  }
+
+  return normalized
+}
+
+function normalizeDuration(
+  value,
+  fallback,
+) {
+  if (
+    typeof value !== 'string'
+  ) {
+    return fallback
+  }
+
+  const normalized =
+    value.trim()
+
+  if (
+    !/^\d+(?:\.\d+)?(?:ms|s)$/.test(
+      normalized,
+    )
+  ) {
+    return fallback
+  }
+
+  return normalized
 }
 
 function normalizeDirectDomains(values) {

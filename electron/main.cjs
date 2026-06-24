@@ -834,6 +834,13 @@ function registerIpcHandlers() {
             ? input.directDomains
             : []
 
+        const rescueOptions =
+          input?.rescueOptions &&
+          typeof input.rescueOptions ===
+            'object'
+            ? input.rescueOptions
+            : null
+
         const subscriptionUrl =
           await getSubscriptionUrl(
             subscriptionId,
@@ -883,6 +890,7 @@ function registerIpcHandlers() {
                 'userData',
               ),
             directDomains,
+            rescueOptions,
           })
 
         console.log(
@@ -940,6 +948,13 @@ function registerIpcHandlers() {
             ? input.directDomains
             : []
 
+        const rescueOptions =
+          input?.rescueOptions &&
+          typeof input.rescueOptions ===
+            'object'
+            ? input.rescueOptions
+            : null
+
         const subscriptionUrl =
           await getSubscriptionUrl(
             subscriptionId,
@@ -989,6 +1004,7 @@ function registerIpcHandlers() {
                 'userData',
               ),
             directDomains,
+            rescueOptions,
           })
 
         console.log(
