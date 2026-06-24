@@ -84,6 +84,13 @@ const {
   setVirtualLocationConnected,
 } = require('./virtual-location-service.cjs')
 
+const {
+  checkLatestStable,
+  updateToLatestStable,
+  getUserEngineDirectory,
+  getUserEnginePath,
+} = require('./sing-box-updater.cjs')
+
 const execFileAsync =
   promisify(execFile)
 
@@ -136,7 +143,7 @@ console.log(
   isDevelopment,
 )
 
-function getEnginePath() {
+function getBundledEnginePath() {
   if (isDevelopment) {
     return path.join(
       __dirname,
@@ -153,6 +160,28 @@ function getEnginePath() {
     'sing-box.exe',
   )
 }
+
+function getEnginePath() {
+  if (app.isReady()) {
+    const userEnginePath =
+      getUserEnginePath(
+        app.getPath(
+          'userData',
+        ),
+      )
+
+    if (
+      fs.existsSync(
+        userEnginePath,
+      )
+    ) {
+      return userEnginePath
+    }
+  }
+
+  return getBundledEnginePath()
+}
+
 
 async function getEngineInfo() {
   const enginePath =
@@ -265,10 +294,111 @@ async function getVirtualLocationExtensionPath() {
 
 
 function registerIpcHandlers() {
+  console.log('[IPC] Registering application handlers...')
   ipcMain.handle(
     'engine:get-info',
     async () => {
       return getEngineInfo()
+    },
+  )
+
+  console.log('[IPC] Registering engine:check-for-update')
+
+  ipcMain.removeHandler(
+    'engine:check-for-update',
+  )
+
+  ipcMain.handle(
+    'engine:check-for-update',
+    async () => {
+      try {
+        const info =
+          await getEngineInfo()
+
+        return await checkLatestStable({
+          currentVersion:
+            info.version,
+        })
+      } catch (error) {
+        return {
+          success: false,
+          currentVersion: null,
+          latestVersion: null,
+          updateAvailable: false,
+          publishedAt: null,
+          releaseUrl: null,
+          assetName: null,
+          assetUrl: null,
+          assetDigest: null,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'بررسی نسخه sing-box ناموفق بود.',
+        }
+      }
+    },
+  )
+
+  console.log('[IPC] Registering engine:update-to-latest')
+
+  ipcMain.removeHandler(
+    'engine:update-to-latest',
+  )
+
+  ipcMain.handle(
+    'engine:update-to-latest',
+    async () => {
+      try {
+        const status =
+          getProcessStatus()
+
+        if (status.running) {
+          return {
+            success: false,
+            updated: false,
+            currentVersion: null,
+            latestVersion: null,
+            installedVersion: null,
+            message: null,
+            error:
+              'پیش از به‌روزرسانی sing-box اتصال را قطع کن.',
+          }
+        }
+
+        const info =
+          await getEngineInfo()
+
+        const result =
+          await updateToLatestStable({
+            currentVersion:
+              info.version,
+            targetDirectory:
+              getUserEngineDirectory(
+                app.getPath(
+                  'userData',
+                ),
+              ),
+          })
+
+        return {
+          success: true,
+          error: null,
+          ...result,
+        }
+      } catch (error) {
+        return {
+          success: false,
+          updated: false,
+          currentVersion: null,
+          latestVersion: null,
+          installedVersion: null,
+          message: null,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'به‌روزرسانی sing-box ناموفق بود.',
+        }
+      }
     },
   )
 

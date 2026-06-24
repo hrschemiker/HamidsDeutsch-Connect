@@ -1146,6 +1146,7 @@ function App() {
             <DirectSitesPage
               domains={directDomains.domains}
               onAddDomain={directDomains.addDomain}
+              onAddDomains={directDomains.addDomains}
               onRemoveDomain={directDomains.removeDomain}
               onResetDomains={directDomains.resetDomains}
             />
@@ -1221,6 +1222,20 @@ function App() {
                 window.hamidsDeutsch
                   .system
                   .openVirtualLocationExtension()
+              }
+              currentEngineVersion={
+                engine.info?.version ??
+                null
+              }
+              onCheckEngineUpdate={() =>
+                window.hamidsDeutsch
+                  .engine
+                  .checkForUpdate()
+              }
+              onInstallEngineUpdate={() =>
+                window.hamidsDeutsch
+                  .engine
+                  .updateToLatest()
               }
             />
           )}
@@ -2869,6 +2884,16 @@ type DirectSitesPageProps = {
         success: false
         error: string
       }
+  onAddDomains: (
+    rawInput: string,
+  ) => {
+    success: boolean
+    added: string[]
+    duplicates: string[]
+    invalid: string[]
+    total: number
+    error: string | null
+  }
   onRemoveDomain: (
     domain: string,
   ) => void
@@ -3035,10 +3060,14 @@ function formatInspectionDate(
 function DirectSitesPage({
   domains,
   onAddDomain,
+  onAddDomains,
   onRemoveDomain,
   onResetDomains,
 }: DirectSitesPageProps) {
   const [domainInput, setDomainInput] =
+    useState('')
+
+  const [bulkDomainInput, setBulkDomainInput] =
     useState('')
 
   const [message, setMessage] =
@@ -3072,6 +3101,59 @@ function DirectSitesPage({
     if (event.key === 'Enter') {
       handleAddDomain()
     }
+  }
+
+  function handleAddDomains() {
+    const result =
+      onAddDomains(
+        bulkDomainInput,
+      )
+
+    if (
+      result.added.length === 0
+    ) {
+      setMessage({
+        type: 'error',
+        text:
+          result.error ??
+          'هیچ دامنه جدیدی اضافه نشد.',
+      })
+      return
+    }
+
+    setBulkDomainInput('')
+
+    const details = [
+      `${result.added.length.toLocaleString(
+        'fa-IR',
+      )} دامنه اضافه شد.`,
+    ]
+
+    if (
+      result.duplicates.length > 0
+    ) {
+      details.push(
+        `${result.duplicates.length.toLocaleString(
+          'fa-IR',
+        )} مورد تکراری نادیده گرفته شد.`,
+      )
+    }
+
+    if (
+      result.invalid.length > 0
+    ) {
+      details.push(
+        `${result.invalid.length.toLocaleString(
+          'fa-IR',
+        )} مورد نامعتبر بود.`,
+      )
+    }
+
+    setMessage({
+      type: 'success',
+      text:
+        details.join(' '),
+    })
   }
 
   function handleRemoveDomain(
@@ -3143,6 +3225,59 @@ function DirectSitesPage({
           domain وارد کنی. برنامه نام دامنه را
           خودکار استخراج می‌کند.
         </p>
+
+        <div className="bulk-domain-import">
+          <div className="bulk-domain-heading">
+            <div>
+              <strong>
+                افزودن گروهی دامنه‌ها
+              </strong>
+              <span>
+                هر دامنه را در یک خط یا با ویرگول وارد کن.
+              </span>
+            </div>
+          </div>
+
+          <textarea
+            className="bulk-domain-textarea"
+            dir="ltr"
+            rows={9}
+            spellCheck={false}
+            value={
+              bulkDomainInput
+            }
+            placeholder={`domain:intrack.ir,
+domain:eghamat24.com,
+domain:aparatsport.ir,
+domain:hamidrezasaadati.com`}
+            onChange={(event) => {
+              setBulkDomainInput(
+                event.target.value,
+              )
+              setMessage(null)
+            }}
+          />
+
+          <button
+            className="secondary-button bulk-domain-button"
+            type="button"
+            disabled={
+              !bulkDomainInput.trim()
+            }
+            onClick={
+              handleAddDomains
+            }
+          >
+            افزودن همه دامنه‌های معتبر
+          </button>
+
+          <p className="field-help">
+            پیشوندهای <code>domain:</code>، آدرس کامل
+            با https، ویرگول انتهای خط و خطوط خالی
+            خودکار پاک می‌شوند. موارد تکراری دوباره
+            ثبت نخواهند شد.
+          </p>
+        </div>
 
         {message && (
           <div
@@ -3977,6 +4112,9 @@ function SettingsPage({
   connected,
   onOpenDirectSites,
   onOpenVirtualLocationExtension,
+  currentEngineVersion,
+  onCheckEngineUpdate,
+  onInstallEngineUpdate,
 }: {
   settings: {
     mode:
@@ -4005,6 +4143,32 @@ function SettingsPage({
       path: string
       error: string | null
     }>
+  currentEngineVersion:
+    | string
+    | null
+  onCheckEngineUpdate: () =>
+    Promise<{
+      success: boolean
+      currentVersion: string | null
+      latestVersion: string | null
+      updateAvailable: boolean
+      publishedAt: string | null
+      releaseUrl: string | null
+      assetName: string | null
+      assetUrl: string | null
+      assetDigest: string | null
+      error: string | null
+    }>
+  onInstallEngineUpdate: () =>
+    Promise<{
+      success: boolean
+      updated: boolean
+      currentVersion: string | null
+      latestVersion: string | null
+      installedVersion: string | null
+      message: string | null
+      error: string | null
+    }>
 }) {
   const [
     extensionMessage,
@@ -4020,6 +4184,113 @@ function SettingsPage({
     openingExtensionFolder,
     setOpeningExtensionFolder,
   ] = useState(false)
+
+  const [
+    engineUpdateState,
+    setEngineUpdateState,
+  ] = useState<{
+    checking: boolean
+    installing: boolean
+    latestVersion: string | null
+    installedVersion: string | null
+    updateAvailable: boolean
+    message: string | null
+    error: string | null
+  }>({
+    checking: false,
+    installing: false,
+    latestVersion: null,
+    installedVersion:
+      currentEngineVersion,
+    updateAvailable: false,
+    message: null,
+    error: null,
+  })
+
+  async function checkEngineUpdate() {
+    if (
+      engineUpdateState.checking ||
+      engineUpdateState.installing
+    ) {
+      return
+    }
+
+    setEngineUpdateState(
+      (current) => ({
+        ...current,
+        checking: true,
+        message: null,
+        error: null,
+      }),
+    )
+
+    const result =
+      await onCheckEngineUpdate()
+
+    setEngineUpdateState(
+      (current) => ({
+        ...current,
+        checking: false,
+        latestVersion:
+          result.latestVersion,
+        installedVersion:
+          result.currentVersion ??
+          current.installedVersion,
+        updateAvailable:
+          result.updateAvailable,
+        message:
+          result.success
+            ? result.updateAvailable
+              ? 'نسخه پایدار جدید آماده نصب است.'
+              : 'آخرین نسخه پایدار از قبل نصب است.'
+            : null,
+        error:
+          result.error,
+      }),
+    )
+  }
+
+  async function installEngineUpdate() {
+    if (
+      connected ||
+      engineUpdateState.installing
+    ) {
+      return
+    }
+
+    setEngineUpdateState(
+      (current) => ({
+        ...current,
+        installing: true,
+        message: null,
+        error: null,
+      }),
+    )
+
+    const result =
+      await onInstallEngineUpdate()
+
+    setEngineUpdateState(
+      (current) => ({
+        ...current,
+        installing: false,
+        latestVersion:
+          result.latestVersion ??
+          current.latestVersion,
+        installedVersion:
+          result.installedVersion ??
+          current.installedVersion,
+        updateAvailable:
+          result.success
+            ? false
+            : current.updateAvailable,
+        message:
+          result.message,
+        error:
+          result.error,
+      }),
+    )
+  }
 
   async function openExtensionFolder() {
     if (openingExtensionFolder) {
@@ -4198,6 +4469,107 @@ function SettingsPage({
         >
           مدیریت سایت‌های مستقیم
         </button>
+      </section>
+
+      <section className="panel-card engine-update-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">
+              Engine Update
+            </span>
+            <h3>
+              به‌روزرسانی sing-box
+            </h3>
+          </div>
+
+          <span className="count-badge">
+            Stable only
+          </span>
+        </div>
+
+        <p className="panel-description">
+          نسخه فعلی با آخرین Release پایدار رسمی
+          SagerNet مقایسه می‌شود. نسخه‌های Alpha،
+          Beta و RC نصب نخواهند شد.
+        </p>
+
+        <div className="engine-version-grid">
+          <div>
+            <span>
+              نسخه نصب‌شده
+            </span>
+            <strong dir="ltr">
+              {engineUpdateState.installedVersion ??
+              currentEngineVersion ??
+              'نامشخص'}
+            </strong>
+          </div>
+
+          <div>
+            <span>
+              آخرین نسخه پایدار
+            </span>
+            <strong dir="ltr">
+              {engineUpdateState.latestVersion ??
+              'هنوز بررسی نشده'}
+            </strong>
+          </div>
+        </div>
+
+        <div className="engine-update-actions">
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={
+              engineUpdateState.checking ||
+              engineUpdateState.installing
+            }
+            onClick={() => {
+              void checkEngineUpdate()
+            }}
+          >
+            {engineUpdateState.checking
+              ? 'در حال بررسی...'
+              : 'بررسی نسخه پایدار'}
+          </button>
+
+          <button
+            className="primary-button compact-primary"
+            type="button"
+            disabled={
+              connected ||
+              engineUpdateState.installing ||
+              !engineUpdateState.updateAvailable
+            }
+            onClick={() => {
+              void installEngineUpdate()
+            }}
+          >
+            {engineUpdateState.installing
+              ? 'در حال دانلود و نصب...'
+              : connected
+                ? 'ابتدا اتصال را قطع کن'
+                : 'دانلود و نصب نسخه جدید'}
+          </button>
+        </div>
+
+        {engineUpdateState.message && (
+          <div className="inline-notice engine-update-message">
+            {engineUpdateState.message}
+          </div>
+        )}
+
+        {engineUpdateState.error && (
+          <div className="inline-error engine-update-message">
+            {engineUpdateState.error}
+          </div>
+        )}
+
+        <p className="virtual-location-privacy">
+          فایل فقط از GitHub رسمی SagerNet دریافت
+          می‌شود، SHA-256 آن بررسی می‌گردد و در صورت
+          شکست نصب، نسخه قبلی حفظ خواهد شد.
+        </p>
       </section>
 
       <section className="panel-card virtual-location-card">

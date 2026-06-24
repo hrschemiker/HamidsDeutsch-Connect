@@ -9,6 +9,30 @@ type EngineInfo = {
   error: string | null
 }
 
+type EngineUpdateCheckResult = {
+  success: boolean
+  currentVersion: string | null
+  latestVersion: string | null
+  updateAvailable: boolean
+  publishedAt: string | null
+  releaseUrl: string | null
+  assetName: string | null
+  assetUrl: string | null
+  assetDigest: string | null
+  error: string | null
+}
+
+type EngineUpdateResult =
+  EngineUpdateCheckResult & {
+    updated: boolean
+    installedVersion:
+      | string
+      | null
+    installedPath?: string
+    verifiedSha256?: string
+    message: string | null
+  }
+
 type EngineProcessStatus = {
   running: boolean
   ready: boolean
@@ -245,6 +269,12 @@ declare global {
       engine: {
         getInfo: () =>
           Promise<EngineInfo>
+
+        checkForUpdate: () =>
+          Promise<EngineUpdateCheckResult>
+
+        updateToLatest: () =>
+          Promise<EngineUpdateResult>
 
         startLocalProxy: () =>
           Promise<EngineProcessResult>

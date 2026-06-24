@@ -42,6 +42,16 @@ contextBridge.exposeInMainWorld(
           'engine:get-info',
         ),
 
+      checkForUpdate: () =>
+        ipcRenderer.invoke(
+          'engine:check-for-update',
+        ),
+
+      updateToLatest: () =>
+        ipcRenderer.invoke(
+          'engine:update-to-latest',
+        ),
+
       startLocalProxy: () =>
         ipcRenderer.invoke(
           'engine:start-local-proxy',
