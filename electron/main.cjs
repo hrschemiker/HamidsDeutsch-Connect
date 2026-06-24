@@ -23,7 +23,7 @@ const {
 
 const {
   inspectSubscriptionUrl,
-  loadSubscriptionNodes,
+  loadSubscriptionNodeRecords,
 } = require('./subscription-inspector.cjs')
 
 const {
@@ -46,6 +46,13 @@ const {
 const {
   verifyIpChange,
 } = require('./ip-verification-service.cjs')
+
+const {
+  replaceSubscriptionNodes,
+  getSubscriptionNodeUri,
+  removeSubscriptionNodes,
+  clearSubscriptionNodeCache,
+} = require('./subscription-node-cache.cjs')
 
 const execFileAsync =
   promisify(execFile)
@@ -464,6 +471,10 @@ function registerIpcHandlers() {
           subscriptionId,
         )
 
+        removeSubscriptionNodes(
+          subscriptionId,
+        )
+
         return {
           success: true,
           error: null,
@@ -552,9 +563,16 @@ function registerIpcHandlers() {
           )
 
         const result =
-          await loadSubscriptionNodes(
+          await loadSubscriptionNodeRecords(
             subscriptionUrl,
           )
+
+        if (result.success) {
+          replaceSubscriptionNodes(
+            subscriptionId,
+            result.records,
+          )
+        }
 
         console.log(
           '[Subscriptions] Safe nodes loaded:',
@@ -562,7 +580,16 @@ function registerIpcHandlers() {
           result.nodes.length,
         )
 
-        return result
+        return {
+          success:
+            result.success,
+          checkedAt:
+            result.checkedAt,
+          nodes:
+            result.nodes,
+          error:
+            result.error,
+        }
       } catch (error) {
         console.error(
           '[Subscriptions] Loading nodes failed:',
@@ -657,10 +684,43 @@ function registerIpcHandlers() {
             subscriptionId,
           )
 
+        const cachedNodeUri =
+          getSubscriptionNodeUri(
+            subscriptionId,
+            nodeId,
+          )
+
+        if (!cachedNodeUri) {
+          const refreshed =
+            await loadSubscriptionNodeRecords(
+              subscriptionUrl,
+            )
+
+          if (refreshed.success) {
+            replaceSubscriptionNodes(
+              subscriptionId,
+              refreshed.records,
+            )
+          }
+        }
+
+        const nodeUri =
+          getSubscriptionNodeUri(
+            subscriptionId,
+            nodeId,
+          )
+
+        if (!nodeUri) {
+          throw new Error(
+            'سرور انتخاب‌شده دیگر در حافظه امن اشتراک وجود ندارد. فهرست سرورها را یک‌بار تازه‌سازی کن.',
+          )
+        }
+
         const result =
           await createAndCheckConfig({
             subscriptionUrl,
             nodeId,
+            nodeUri,
             enginePath:
               getEnginePath(),
             userDataPath:
@@ -907,6 +967,7 @@ app.on(
           'userData',
         ),
     }).finally(() => {
+      clearSubscriptionNodeCache()
       app.quit()
     })
   },

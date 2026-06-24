@@ -99,6 +99,10 @@ function App() {
   const configCheck = useServerConfigCheck()
   const ipVerification = useIpVerification()
 
+  const connectionVerified =
+    ipVerification.connected &&
+    engineProcess.status.systemProxyEnabled
+
   const automaticLatencyTestKey = useRef<string | null>(null)
 
   const fastestServer = useMemo(
@@ -165,6 +169,7 @@ function App() {
     if (!serverNodes.subscriptionId) {
       return {
         success: false as const,
+        fatal: true as const,
         error: 'اشتراک فعال برای این سرور مشخص نیست.',
       }
     }
@@ -180,6 +185,7 @@ function App() {
     if (!checkResult.success) {
       return {
         success: false as const,
+        fatal: false as const,
         error:
           checkResult.error ??
           'کانفیگ توسط sing-box تأیید نشد.',
@@ -191,35 +197,75 @@ function App() {
     if (!startResult.success) {
       return {
         success: false as const,
+        fatal: false as const,
         error: startResult.error,
       }
     }
 
-    const verificationResult =
+    const localVerification =
       await ipVerification.verify()
 
     if (
-      verificationResult.success &&
-      verificationResult.changed
+      !localVerification.success ||
+      !localVerification.changed
     ) {
-      selectedServer.selectServer(
-        toPublicServer(node),
-      )
+      await engineProcess.stop()
+      ipVerification.reset()
 
       return {
-        success: true as const,
-        error: null,
+        success: false as const,
+        fatal: false as const,
+        error:
+          localVerification.error ??
+          'این سرور ترافیک واقعی عبور نداد.',
       }
     }
 
-    await engineProcess.stop()
+    const systemProxyResult =
+      await engineProcess.enableSystemProxy()
+
+    if (!systemProxyResult.success) {
+      await engineProcess.stop()
+      ipVerification.reset()
+
+      return {
+        success: false as const,
+        fatal: true as const,
+        error:
+          systemProxyResult.error ??
+          'فعال‌سازی System Proxy ناموفق بود.',
+      }
+    }
+
     ipVerification.reset()
 
+    const finalVerification =
+      await ipVerification.verify()
+
+    if (
+      !finalVerification.success ||
+      !finalVerification.changed
+    ) {
+      await engineProcess.disableSystemProxy(false)
+      ipVerification.reset()
+
+      return {
+        success: false as const,
+        fatal: false as const,
+        error:
+          finalVerification.error ??
+          'System Proxy فعال شد، اما تغییر IP نهایی تأیید نشد.',
+      }
+    }
+
+    selectedServer.selectServer(
+      toPublicServer(node),
+    )
+
     return {
-      success: false as const,
-      error:
-        verificationResult.error ??
-        'این سرور ترافیک واقعی عبور نداد.',
+      success: true as const,
+      fatal: false as const,
+      error: null,
     }
   }
 
@@ -317,6 +363,13 @@ function App() {
 
         lastError =
           result.error ?? lastError
+
+        if (result.fatal) {
+          setConnectionActionError(
+            lastError,
+          )
+          return
+        }
       }
 
       setConnectionActionError(
@@ -350,7 +403,11 @@ function App() {
 
   async function stopLocalProxy() {
     setConnectionActionError(null)
-    const result = await engineProcess.stop()
+
+    const result =
+      engineProcess.status.systemProxyEnabled
+        ? await engineProcess.disableSystemProxy(false)
+        : await engineProcess.stop()
 
     if (!result.success) {
       setConnectionActionError(result.error)
@@ -393,7 +450,7 @@ function App() {
           <div className="engine-status">
             <span
               className={
-                ipVerification.connected
+                connectionVerified
                   ? 'engine-status-dot engine-status-dot-ready'
                   : 'engine-status-dot'
               }
@@ -401,7 +458,7 @@ function App() {
             <div>
               <strong>هسته برنامه</strong>
               <span>
-                {ipVerification.connected
+                {connectionVerified
                   ? `متصل · ${ipVerification.result.proxyIp ?? 'IP تأییدشده'}`
                   : engineProcess.status.ready
                     ? `پروکسی محلی ${engineProcess.status.localPort}`
@@ -424,7 +481,7 @@ function App() {
 
           <div
             className={
-              ipVerification.connected
+              connectionVerified
                 ? 'connection-pill connection-pill-online'
                 : 'connection-pill'
             }
@@ -437,10 +494,12 @@ function App() {
                   ? 'در حال توقف'
                   : ipVerification.checking
                     ? 'در حال بررسی IP'
-                    : ipVerification.connected
+                    : connectionVerified
                       ? 'متصل'
-                      : engineProcess.status.ready
-                        ? 'پروکسی آماده؛ IP تأیید نشده'
+                      : engineProcess.status.systemProxyEnabled
+                        ? 'System Proxy فعال؛ در حال تأیید'
+                        : engineProcess.status.ready
+                          ? 'پروکسی آماده؛ IP تأیید نشده'
                         : engineProcess.status.running
                           ? 'در حال اجرا'
                           : 'قطع'}
@@ -461,7 +520,7 @@ function App() {
               processError={connectionActionError ?? engineProcess.error}
               ipVerificationResult={ipVerification.result}
               ipVerificationChecking={ipVerification.checking}
-              isConnected={ipVerification.connected}
+              isConnected={connectionVerified}
               selectedServer={selectedServer.selectedServer}
               selectedServerLatency={selectedServerLatency}
               fastestServer={fastestServer}
@@ -593,6 +652,7 @@ type HomePageProps = {
   processStatus: {
     running: boolean
     ready: boolean
+    systemProxyEnabled: boolean
     pid: number | null
     startedAt: string | null
     stoppedAt: string | null
@@ -677,7 +737,7 @@ function HomePage({
               }
             />
             {isConnected
-              ? `اتصال با IP خروجی ${ipVerificationResult.proxyIp ?? 'تأیید شد'}`
+              ? `System Proxy فعال · IP خروجی ${ipVerificationResult.proxyIp ?? 'تأیید شد'}`
               : ipVerificationChecking
                 ? 'در حال مقایسه IP مستقیم و پروکسی'
                 : processStatus.ready
@@ -689,9 +749,9 @@ function HomePage({
 
           <h2>اینترنت آزاد،<br />ساده و قابل اعتماد</h2>
           <p>
-            سرورها خودکار به‌روزرسانی می‌شوند، کانفیگ با sing-box
-            بررسی می‌شود و وضعیت «متصل» فقط پس از تفاوت واقعی IP مستقیم
-            و IP عبوری از پروکسی نمایش داده می‌شود.
+            سرورها خودکار بررسی می‌شوند، نخستین تونل واقعاً سالم انتخاب
+            می‌شود و وضعیت «متصل» فقط پس از فعال‌شدن System Proxy ویندوز
+            و تأیید دوباره تغییر IP نمایش داده می‌شود.
           </p>
 
           <button
@@ -826,11 +886,15 @@ function HomePage({
         >
           <div>
             <span className="panel-kicker">
-              {isConnected ? 'Verified Connection' : 'Local Proxy'}
+              {isConnected
+                ? 'Windows System Proxy'
+                : processStatus.systemProxyEnabled
+                  ? 'System Proxy Verification'
+                  : 'Local Proxy'}
             </span>
             <h3>
               {isConnected
-                ? 'تغییر IP و اتصال تأیید شد'
+                ? 'System Proxy و تغییر IP تأیید شد'
                 : processStatus.ready
                   ? 'پروکسی محلی آماده است'
                   : 'sing-box در حال اجراست'}
@@ -883,7 +947,7 @@ function HomePage({
           <div className="ip-verification-heading">
             <div>
               <span className="panel-kicker">IP Verification</span>
-              <h3>اتصال به‌صورت واقعی تأیید شد</h3>
+              <h3>اتصال سراسری ویندوز تأیید شد</h3>
             </div>
             <span className="verified-connection-badge">متصل</span>
           </div>

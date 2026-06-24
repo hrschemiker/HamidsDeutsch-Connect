@@ -7,6 +7,7 @@ import {
 export type EngineProcessStatus = {
   running: boolean
   ready: boolean
+  systemProxyEnabled: boolean
   pid: number | null
   startedAt: string | null
   stoppedAt: string | null
@@ -21,6 +22,7 @@ export type EngineProcessStatus = {
 const INITIAL_STATUS: EngineProcessStatus = {
   running: false,
   ready: false,
+  systemProxyEnabled: false,
   pid: null,
   startedAt: null,
   stoppedAt: null,
@@ -30,6 +32,11 @@ const INITIAL_STATUS: EngineProcessStatus = {
   lastSignal: null,
   lastError: null,
   logTail: '',
+}
+
+type ActionResult = {
+  success: boolean
+  error: string | null
 }
 
 export function useEngineProcess() {
@@ -44,8 +51,64 @@ export function useEngineProcess() {
   const [stopping, setStopping] =
     useState(false)
 
+  const [
+    changingSystemProxy,
+    setChangingSystemProxy,
+  ] = useState(false)
+
   const [error, setError] =
     useState<string | null>(null)
+
+  const applyProcessResult =
+    useCallback(
+      (
+        result:
+          | (EngineProcessStatus & {
+              success: boolean
+              error: string | null
+            })
+          | null,
+        fallbackError: string,
+      ): ActionResult => {
+        if (!result) {
+          setError(fallbackError)
+
+          return {
+            success: false,
+            error: fallbackError,
+          }
+        }
+
+        const {
+          success,
+          error: resultError,
+          ...nextStatus
+        } = result
+
+        setStatus(nextStatus)
+
+        if (!success) {
+          const message =
+            resultError ??
+            fallbackError
+
+          setError(message)
+
+          return {
+            success: false,
+            error: message,
+          }
+        }
+
+        setError(null)
+
+        return {
+          success: true,
+          error: null,
+        }
+      },
+      [],
+    )
 
   const refreshStatus = useCallback(
     async () => {
@@ -82,7 +145,8 @@ export function useEngineProcess() {
     async () => {
       if (
         starting ||
-        stopping
+        stopping ||
+        changingSystemProxy
       ) {
         return {
           success: false as const,
@@ -100,31 +164,10 @@ export function useEngineProcess() {
             .engine
             .startLocalProxy()
 
-        const {
-          success,
-          error: resultError,
-          ...nextStatus
-        } = result
-
-        setStatus(nextStatus)
-
-        if (!success) {
-          const message =
-            resultError ??
-            'اجرای پروکسی محلی ناموفق بود.'
-
-          setError(message)
-
-          return {
-            success: false as const,
-            error: message,
-          }
-        }
-
-        return {
-          success: true as const,
-          error: null,
-        }
+        return applyProcessResult(
+          result,
+          'اجرای پروکسی محلی ناموفق بود.',
+        )
       } catch (startError) {
         const message =
           startError instanceof Error
@@ -142,16 +185,131 @@ export function useEngineProcess() {
       }
     },
     [
+      applyProcessResult,
+      changingSystemProxy,
       starting,
       stopping,
     ],
   )
 
+  const enableSystemProxy =
+    useCallback(
+      async () => {
+        if (
+          starting ||
+          stopping ||
+          changingSystemProxy
+        ) {
+          return {
+            success: false as const,
+            error:
+              'یک عملیات دیگر در حال انجام است.',
+          }
+        }
+
+        setChangingSystemProxy(true)
+        setError(null)
+
+        try {
+          const result =
+            await window.hamidsDeutsch
+              .engine
+              .activateSystemProxy()
+
+          return applyProcessResult(
+            result,
+            'فعال‌سازی System Proxy ناموفق بود.',
+          )
+        } catch (actionError) {
+          const message =
+            actionError instanceof Error
+              ? actionError.message
+              : 'فعال‌سازی System Proxy ناموفق بود.'
+
+          setError(message)
+
+          return {
+            success: false as const,
+            error: message,
+          }
+        } finally {
+          setChangingSystemProxy(
+            false,
+          )
+        }
+      },
+      [
+        applyProcessResult,
+        changingSystemProxy,
+        starting,
+        stopping,
+      ],
+    )
+
+  const disableSystemProxy =
+    useCallback(
+      async (
+        keepLocalProxy = false,
+      ) => {
+        if (
+          starting ||
+          stopping ||
+          changingSystemProxy
+        ) {
+          return {
+            success: false as const,
+            error:
+              'یک عملیات دیگر در حال انجام است.',
+          }
+        }
+
+        setChangingSystemProxy(true)
+        setError(null)
+
+        try {
+          const result =
+            await window.hamidsDeutsch
+              .engine
+              .deactivateSystemProxy(
+                keepLocalProxy,
+              )
+
+          return applyProcessResult(
+            result,
+            'غیرفعال‌سازی System Proxy ناموفق بود.',
+          )
+        } catch (actionError) {
+          const message =
+            actionError instanceof Error
+              ? actionError.message
+              : 'غیرفعال‌سازی System Proxy ناموفق بود.'
+
+          setError(message)
+
+          return {
+            success: false as const,
+            error: message,
+          }
+        } finally {
+          setChangingSystemProxy(
+            false,
+          )
+        }
+      },
+      [
+        applyProcessResult,
+        changingSystemProxy,
+        starting,
+        stopping,
+      ],
+    )
+
   const stop = useCallback(
     async () => {
       if (
         starting ||
-        stopping
+        stopping ||
+        changingSystemProxy
       ) {
         return {
           success: false as const,
@@ -169,31 +327,10 @@ export function useEngineProcess() {
             .engine
             .stopLocalProxy()
 
-        const {
-          success,
-          error: resultError,
-          ...nextStatus
-        } = result
-
-        setStatus(nextStatus)
-
-        if (!success) {
-          const message =
-            resultError ??
-            'توقف پروکسی محلی ناموفق بود.'
-
-          setError(message)
-
-          return {
-            success: false as const,
-            error: message,
-          }
-        }
-
-        return {
-          success: true as const,
-          error: null,
-        }
+        return applyProcessResult(
+          result,
+          'توقف پروکسی محلی ناموفق بود.',
+        )
       } catch (stopError) {
         const message =
           stopError instanceof Error
@@ -211,6 +348,8 @@ export function useEngineProcess() {
       }
     },
     [
+      applyProcessResult,
+      changingSystemProxy,
       starting,
       stopping,
     ],
@@ -244,11 +383,16 @@ export function useEngineProcess() {
     status,
     starting,
     stopping,
+    changingSystemProxy,
     busy:
-      starting || stopping,
+      starting ||
+      stopping ||
+      changingSystemProxy,
     error,
     start,
     stop,
+    enableSystemProxy,
+    disableSystemProxy,
     refreshStatus,
   }
 }

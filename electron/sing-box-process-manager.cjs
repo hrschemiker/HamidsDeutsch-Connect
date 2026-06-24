@@ -1,6 +1,7 @@
 const net = require('node:net')
 const path = require('node:path')
 const fs = require('node:fs')
+const fsp = require('node:fs/promises')
 const {
   spawn,
   execFile,
@@ -28,6 +29,7 @@ function createInitialState() {
   return {
     running: false,
     ready: false,
+    systemProxyEnabled: false,
     pid: null,
     startedAt: null,
     stoppedAt: null,
@@ -95,12 +97,19 @@ async function startLocalProxy({
     )
   }
 
+  const systemProxyEnabled =
+    await readSystemProxyFlag(
+      configPath,
+    )
+
   await validateConfigAgain({
     enginePath,
     configPath,
   })
 
-  resetForStart()
+  resetForStart(
+    systemProxyEnabled,
+  )
 
   const child = spawn(
     enginePath,
@@ -175,6 +184,124 @@ async function startLocalProxy({
   }
 }
 
+async function activateSystemProxy({
+  enginePath,
+  userDataPath,
+}) {
+  validatePath(
+    enginePath,
+    'مسیر sing-box معتبر نیست.',
+  )
+
+  validatePath(
+    userDataPath,
+    'مسیر داده برنامه معتبر نیست.',
+  )
+
+  const configPath =
+    getFixedConfigPath(
+      userDataPath,
+    )
+
+  if (!fs.existsSync(configPath)) {
+    throw new Error(
+      'کانفیگ تأییدشده‌ای برای فعال‌سازی System Proxy وجود ندارد.',
+    )
+  }
+
+  await setSystemProxyFlag(
+    configPath,
+    true,
+  )
+
+  await validateConfigAgain({
+    enginePath,
+    configPath,
+  })
+
+  if (
+    activeProcess &&
+    processState.running
+  ) {
+    await stopLocalProxy()
+  }
+
+  const result =
+    await startLocalProxy({
+      enginePath,
+      userDataPath,
+    })
+
+  if (
+    !result.success ||
+    !result.ready
+  ) {
+    await setSystemProxyFlag(
+      configPath,
+      false,
+    )
+
+    return {
+      ...result,
+      systemProxyEnabled: false,
+      error:
+        result.error ||
+        'فعال‌سازی System Proxy ناموفق بود.',
+    }
+  }
+
+  return {
+    ...result,
+    systemProxyEnabled: true,
+  }
+}
+
+async function deactivateSystemProxy({
+  enginePath,
+  userDataPath,
+  keepLocalProxy = false,
+}) {
+  validatePath(
+    userDataPath,
+    'مسیر داده برنامه معتبر نیست.',
+  )
+
+  const configPath =
+    getFixedConfigPath(
+      userDataPath,
+    )
+
+  if (
+    activeProcess &&
+    processState.running
+  ) {
+    await stopLocalProxy()
+  }
+
+  if (fs.existsSync(configPath)) {
+    await setSystemProxyFlag(
+      configPath,
+      false,
+    )
+  }
+
+  processState.systemProxyEnabled =
+    false
+
+  if (!keepLocalProxy) {
+    return {
+      success: true,
+      ...getProcessStatus(),
+      error: null,
+    }
+  }
+
+  return startLocalProxy({
+    enginePath,
+    userDataPath,
+  })
+}
+
 async function stopLocalProxy() {
   const child =
     activeProcess
@@ -185,6 +312,8 @@ async function stopLocalProxy() {
   ) {
     processState.running = false
     processState.ready = false
+    processState.systemProxyEnabled =
+      false
     processState.pid = null
 
     return {
@@ -198,6 +327,9 @@ async function stopLocalProxy() {
     await stopSpecificProcess(
       child,
     )
+
+    processState.systemProxyEnabled =
+      false
 
     return {
       success: true,
@@ -228,6 +360,8 @@ function getProcessStatus() {
       processState.running,
     ready:
       processState.ready,
+    systemProxyEnabled:
+      processState.systemProxyEnabled,
     pid:
       processState.pid,
     startedAt:
@@ -249,18 +383,44 @@ function getProcessStatus() {
   }
 }
 
-async function disposeProcessManager() {
+async function disposeProcessManager({
+  userDataPath,
+} = {}) {
   try {
     await stopLocalProxy()
   } catch {
     // برنامه در هر صورت باید بتواند بسته شود.
   }
+
+  if (
+    typeof userDataPath === 'string' &&
+    userDataPath.trim()
+  ) {
+    const configPath =
+      getFixedConfigPath(
+        userDataPath,
+      )
+
+    if (fs.existsSync(configPath)) {
+      try {
+        await setSystemProxyFlag(
+          configPath,
+          false,
+        )
+      } catch {
+        // پاک‌سازی فایل کانفیگ نباید خروج برنامه را متوقف کند.
+      }
+    }
+  }
 }
 
-function resetForStart() {
+function resetForStart(
+  systemProxyEnabled,
+) {
   processState = {
     ...createInitialState(),
     running: true,
+    systemProxyEnabled,
     startedAt:
       new Date().toISOString(),
   }
@@ -306,6 +466,8 @@ function attachProcessListeners(
 
       processState.running = false
       processState.ready = false
+      processState.systemProxyEnabled =
+        false
       processState.pid = null
       processState.stoppedAt =
         new Date().toISOString()
@@ -329,6 +491,128 @@ function attachProcessListeners(
           `sing-box با کد ${code} متوقف شد.`
       }
     },
+  )
+}
+
+async function readSystemProxyFlag(
+  configPath,
+) {
+  const config =
+    await readConfig(
+      configPath,
+    )
+
+  const inbound =
+    findMixedInbound(config)
+
+  return Boolean(
+    inbound.set_system_proxy,
+  )
+}
+
+async function setSystemProxyFlag(
+  configPath,
+  enabled,
+) {
+  const config =
+    await readConfig(
+      configPath,
+    )
+
+  const inbound =
+    findMixedInbound(config)
+
+  inbound.set_system_proxy =
+    Boolean(enabled)
+
+  await writeConfigAtomically(
+    configPath,
+    config,
+  )
+}
+
+async function readConfig(
+  configPath,
+) {
+  try {
+    const content =
+      await fsp.readFile(
+        configPath,
+        'utf8',
+      )
+
+    const config =
+      JSON.parse(content)
+
+    if (
+      !config ||
+      typeof config !== 'object'
+    ) {
+      throw new Error()
+    }
+
+    return config
+  } catch {
+    throw new Error(
+      'خواندن فایل کانفیگ sing-box ناموفق بود.',
+    )
+  }
+}
+
+function findMixedInbound(config) {
+  if (!Array.isArray(config.inbounds)) {
+    throw new Error(
+      'فهرست inboundهای کانفیگ معتبر نیست.',
+    )
+  }
+
+  const inbound =
+    config.inbounds.find(
+      (item) =>
+        item &&
+        item.type === 'mixed' &&
+        item.listen ===
+          LOCAL_PROXY_HOST &&
+        item.listen_port ===
+          LOCAL_PROXY_PORT,
+    )
+
+  if (!inbound) {
+    throw new Error(
+      'ورودی mixed محلی در کانفیگ پیدا نشد.',
+    )
+  }
+
+  return inbound
+}
+
+async function writeConfigAtomically(
+  configPath,
+  config,
+) {
+  const temporaryPath =
+    `${configPath}.tmp`
+
+  await fsp.writeFile(
+    temporaryPath,
+    JSON.stringify(
+      config,
+      null,
+      2,
+    ),
+    'utf8',
+  )
+
+  await fsp.rm(
+    configPath,
+    {
+      force: true,
+    },
+  )
+
+  await fsp.rename(
+    temporaryPath,
+    configPath,
   )
 }
 
@@ -551,6 +835,8 @@ async function stopSpecificProcess(
 
     processState.running = false
     processState.ready = false
+    processState.systemProxyEnabled =
+      false
     processState.pid = null
     processState.stoppedAt =
       new Date().toISOString()
@@ -612,6 +898,8 @@ async function stopSpecificProcess(
 
   processState.running = false
   processState.ready = false
+  processState.systemProxyEnabled =
+    false
   processState.pid = null
   processState.stoppedAt =
     new Date().toISOString()
@@ -713,6 +1001,8 @@ function validatePath(
 
 module.exports = {
   startLocalProxy,
+  activateSystemProxy,
+  deactivateSystemProxy,
   stopLocalProxy,
   getProcessStatus,
   disposeProcessManager,

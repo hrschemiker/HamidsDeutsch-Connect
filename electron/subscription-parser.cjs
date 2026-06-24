@@ -13,7 +13,9 @@ const SUPPORTED_PROTOCOLS = [
   'tuic://',
 ]
 
-function parseSubscriptionNodes(content) {
+function parseSubscriptionNodeRecords(
+  content,
+) {
   const normalizedContent =
     decodeSubscriptionContent(content)
 
@@ -22,14 +24,18 @@ function parseSubscriptionNodes(content) {
     .map((line) => line.trim())
     .filter(Boolean)
 
-  const nodes = []
+  const records = []
 
   for (const line of lines) {
-    const lowerLine = line.toLowerCase()
+    const lowerLine =
+      line.toLowerCase()
 
     if (
-      !SUPPORTED_PROTOCOLS.some((protocol) =>
-        lowerLine.startsWith(protocol),
+      !SUPPORTED_PROTOCOLS.some(
+        (protocol) =>
+          lowerLine.startsWith(
+            protocol,
+          ),
       )
     ) {
       continue
@@ -37,15 +43,32 @@ function parseSubscriptionNodes(content) {
 
     const node = parseNode(line)
 
-    if (node) {
-      nodes.push({
-        ...node,
-        id: createStableNodeId(line),
-      })
+    if (!node) {
+      continue
     }
+
+    const id =
+      createStableNodeId(line)
+
+    records.push({
+      id,
+      uri: line,
+      node: {
+        ...node,
+        id,
+      },
+    })
   }
 
-  return nodes
+  return records
+}
+
+function parseSubscriptionNodes(
+  content,
+) {
+  return parseSubscriptionNodeRecords(
+    content,
+  ).map((record) => record.node)
 }
 
 function decodeSubscriptionContent(content) {
@@ -575,4 +598,5 @@ function formatProtocolName(
 
 module.exports = {
   parseSubscriptionNodes,
+  parseSubscriptionNodeRecords,
 }

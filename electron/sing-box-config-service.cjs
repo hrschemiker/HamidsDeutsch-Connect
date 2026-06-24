@@ -27,6 +27,7 @@ const SUPPORTED_PROTOCOLS = [
 async function createAndCheckConfig({
   subscriptionUrl,
   nodeId,
+  nodeUri,
   enginePath,
   userDataPath,
   directDomains,
@@ -38,23 +39,37 @@ async function createAndCheckConfig({
     userDataPath,
   })
 
-  const content =
-    await downloadSubscriptionContent(
-      subscriptionUrl,
-    )
+  let resolvedUri =
+    typeof nodeUri === 'string' &&
+    nodeUri.trim()
+      ? nodeUri.trim()
+      : null
 
-  const resolvedNode =
-    resolveNodeById(content, nodeId)
+  if (!resolvedUri) {
+    const content =
+      await downloadSubscriptionContent(
+        subscriptionUrl,
+      )
 
-  if (!resolvedNode) {
-    throw new Error(
-      'سرور انتخاب‌شده در آخرین نسخه اشتراک پیدا نشد.',
-    )
+    const resolvedNode =
+      resolveNodeById(
+        content,
+        nodeId,
+      )
+
+    if (!resolvedNode) {
+      throw new Error(
+        'سرور انتخاب‌شده در نسخه فعلی اشتراک پیدا نشد.',
+      )
+    }
+
+    resolvedUri =
+      resolvedNode.uri
   }
 
   const outbound =
     buildOutboundFromUri(
-      resolvedNode.uri,
+      resolvedUri,
     )
 
   const normalizedDirectDomains =

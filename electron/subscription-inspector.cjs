@@ -2,6 +2,7 @@ const { net } = require('electron')
 
 const {
   parseSubscriptionNodes,
+  parseSubscriptionNodeRecords,
 } = require('./subscription-parser.cjs')
 
 const DOWNLOAD_TIMEOUT_MS = 20000
@@ -74,6 +75,50 @@ async function loadSubscriptionNodes(
     checkedAt:
       downloadResult.checkedAt,
     nodes,
+    error: null,
+  }
+}
+
+async function loadSubscriptionNodeRecords(
+  subscriptionUrl,
+) {
+  const downloadResult =
+    await downloadSubscriptionContent(
+      subscriptionUrl,
+    )
+
+  if (!downloadResult.success) {
+    return {
+      success: false,
+      checkedAt:
+        downloadResult.checkedAt,
+      nodes: [],
+      records: [],
+      error:
+        downloadResult.error,
+    }
+  }
+
+  const records =
+    parseSubscriptionNodeRecords(
+      downloadResult.content,
+    )
+
+  return {
+    success: true,
+    checkedAt:
+      downloadResult.checkedAt,
+    nodes:
+      records.map(
+        (record) => record.node,
+      ),
+    records:
+      records.map(
+        (record) => ({
+          id: record.id,
+          uri: record.uri,
+        }),
+      ),
     error: null,
   }
 }
@@ -311,4 +356,5 @@ function validateSubscriptionUrl(value) {
 module.exports = {
   inspectSubscriptionUrl,
   loadSubscriptionNodes,
+  loadSubscriptionNodeRecords,
 }
