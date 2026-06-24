@@ -1,60 +1,131 @@
 const { net } = require('electron')
 
+const {
+  parseSubscriptionNodes,
+} = require('./subscription-parser.cjs')
+
 const DOWNLOAD_TIMEOUT_MS = 20000
-const MAX_RESPONSE_SIZE_BYTES = 5 * 1024 * 1024
+const MAX_RESPONSE_SIZE_BYTES =
+  5 * 1024 * 1024
 
-const CONFIG_PROTOCOLS = [
-  'vmess://',
-  'vless://',
-  'trojan://',
-  'ss://',
-  'ssr://',
-  'hysteria://',
-  'hysteria2://',
-  'hy2://',
-  'tuic://',
-  'wireguard://',
-  'socks://',
-  'http://',
-  'https://',
-]
+async function inspectSubscriptionUrl(
+  subscriptionUrl,
+) {
+  const downloadResult =
+    await downloadSubscriptionContent(
+      subscriptionUrl,
+    )
 
-async function inspectSubscriptionUrl(subscriptionUrl) {
-  validateSubscriptionUrl(subscriptionUrl)
+  if (!downloadResult.success) {
+    return downloadResult
+  }
 
-  const controller = new AbortController()
+  const nodes = parseSubscriptionNodes(
+    downloadResult.content,
+  )
+
+  return {
+    success: true,
+    checkedAt:
+      downloadResult.checkedAt,
+    httpStatus:
+      downloadResult.httpStatus,
+    httpStatusText:
+      downloadResult.httpStatusText,
+    contentType:
+      downloadResult.contentType,
+    responseSize:
+      downloadResult.responseSize,
+    format:
+      detectContentFormat(
+        downloadResult.content,
+        nodes.length,
+      ),
+    configCount: nodes.length,
+    error: null,
+  }
+}
+
+async function loadSubscriptionNodes(
+  subscriptionUrl,
+) {
+  const downloadResult =
+    await downloadSubscriptionContent(
+      subscriptionUrl,
+    )
+
+  if (!downloadResult.success) {
+    return {
+      success: false,
+      checkedAt:
+        downloadResult.checkedAt,
+      nodes: [],
+      error:
+        downloadResult.error,
+    }
+  }
+
+  const nodes = parseSubscriptionNodes(
+    downloadResult.content,
+  )
+
+  return {
+    success: true,
+    checkedAt:
+      downloadResult.checkedAt,
+    nodes,
+    error: null,
+  }
+}
+
+async function downloadSubscriptionContent(
+  subscriptionUrl,
+) {
+  validateSubscriptionUrl(
+    subscriptionUrl,
+  )
+
+  const controller =
+    new AbortController()
 
   const timeout = setTimeout(() => {
     controller.abort()
   }, DOWNLOAD_TIMEOUT_MS)
 
   try {
-    const response = await net.fetch(subscriptionUrl, {
-      method: 'GET',
-      redirect: 'follow',
-      signal: controller.signal,
+    const response = await net.fetch(
+      subscriptionUrl,
+      {
+        method: 'GET',
+        redirect: 'follow',
+        signal: controller.signal,
 
-      headers: {
-        Accept:
-          'text/plain, application/json, application/octet-stream;q=0.9, */*;q=0.8',
+        headers: {
+          Accept:
+            'text/plain, application/json, application/octet-stream;q=0.9, */*;q=0.8',
 
-        'User-Agent':
-          'HamidsDeutsch-Connect/0.1.0',
+          'User-Agent':
+            'HamidsDeutsch-Connect/0.1.0',
+        },
       },
-    })
+    )
 
     const contentLengthHeader =
-      response.headers.get('content-length')
+      response.headers.get(
+        'content-length',
+      )
 
-    const declaredSize = parseContentLength(
-      contentLengthHeader,
-    )
+    const declaredSize =
+      parseContentLength(
+        contentLengthHeader,
+      )
 
     if (
       declaredSize !== null &&
-      declaredSize > MAX_RESPONSE_SIZE_BYTES
+      declaredSize >
+        MAX_RESPONSE_SIZE_BYTES
     ) {
-      throw new Error(
+      return createDownloadError(
         'حجم پاسخ اشتراک بیشتر از محدودیت ۵ مگابایت است.',
       )
     }
@@ -62,269 +133,140 @@ async function inspectSubscriptionUrl(subscriptionUrl) {
     if (!response.ok) {
       return {
         success: false,
-        checkedAt: new Date().toISOString(),
+        checkedAt:
+          new Date().toISOString(),
         httpStatus: response.status,
-        httpStatusText: response.statusText,
+        httpStatusText:
+          response.statusText,
         contentType:
-          response.headers.get('content-type'),
+          response.headers.get(
+            'content-type',
+          ),
         responseSize: declaredSize,
+        content: null,
         format: 'http-error',
         configCount: 0,
-        error: `سرور اشتراک با وضعیت HTTP ${response.status} پاسخ داد.`,
+        error:
+          `سرور اشتراک با وضعیت HTTP ${response.status} پاسخ داد.`,
       }
     }
 
-    const bodyBuffer = Buffer.from(
-      await response.arrayBuffer(),
-    )
+    const bodyBuffer =
+      Buffer.from(
+        await response.arrayBuffer(),
+      )
 
     if (
       bodyBuffer.byteLength >
       MAX_RESPONSE_SIZE_BYTES
     ) {
-      throw new Error(
+      return createDownloadError(
         'حجم پاسخ اشتراک بیشتر از محدودیت ۵ مگابایت است.',
       )
     }
 
-    const textContent = bodyBuffer
+    const content = bodyBuffer
       .toString('utf8')
       .replace(/^\uFEFF/, '')
       .trim()
 
-    if (!textContent) {
+    if (!content) {
       return {
         success: false,
-        checkedAt: new Date().toISOString(),
+        checkedAt:
+          new Date().toISOString(),
         httpStatus: response.status,
-        httpStatusText: response.statusText,
+        httpStatusText:
+          response.statusText,
         contentType:
-          response.headers.get('content-type'),
-        responseSize: bodyBuffer.byteLength,
+          response.headers.get(
+            'content-type',
+          ),
+        responseSize:
+          bodyBuffer.byteLength,
+        content: null,
         format: 'empty',
         configCount: 0,
-        error: 'پاسخ اشتراک خالی است.',
+        error:
+          'پاسخ اشتراک خالی است.',
       }
     }
-
-    const analysis = analyzeSubscriptionContent(
-      textContent,
-    )
 
     return {
       success: true,
-      checkedAt: new Date().toISOString(),
+      checkedAt:
+        new Date().toISOString(),
       httpStatus: response.status,
-      httpStatusText: response.statusText,
+      httpStatusText:
+        response.statusText,
       contentType:
-        response.headers.get('content-type'),
-      responseSize: bodyBuffer.byteLength,
-      format: analysis.format,
-      configCount: analysis.configCount,
+        response.headers.get(
+          'content-type',
+        ),
+      responseSize:
+        bodyBuffer.byteLength,
+      content,
       error: null,
     }
   } catch (error) {
-    if (error?.name === 'AbortError') {
-      return {
-        success: false,
-        checkedAt: new Date().toISOString(),
-        httpStatus: null,
-        httpStatusText: null,
-        contentType: null,
-        responseSize: null,
-        format: 'timeout',
-        configCount: 0,
-        error:
-          'زمان دریافت اشتراک بیش از ۲۰ ثانیه شد.',
-      }
+    if (
+      error?.name === 'AbortError'
+    ) {
+      return createDownloadError(
+        'زمان دریافت اشتراک بیش از ۲۰ ثانیه شد.',
+        'timeout',
+      )
     }
 
-    return {
-      success: false,
-      checkedAt: new Date().toISOString(),
-      httpStatus: null,
-      httpStatusText: null,
-      contentType: null,
-      responseSize: null,
-      format: 'network-error',
-      configCount: 0,
-      error:
-        error instanceof Error
-          ? error.message
-          : 'دریافت اشتراک با خطا مواجه شد.',
-    }
+    return createDownloadError(
+      error instanceof Error
+        ? error.message
+        : 'دریافت اشتراک با خطا مواجه شد.',
+      'network-error',
+    )
   } finally {
     clearTimeout(timeout)
   }
 }
 
-function analyzeSubscriptionContent(content) {
-  const directUriCount =
-    countConfigurationUris(content)
-
-  if (directUriCount > 0) {
-    return {
-      format: 'uri-list',
-      configCount: directUriCount,
-    }
+function detectContentFormat(
+  content,
+  nodeCount,
+) {
+  if (nodeCount === 0) {
+    return 'unknown'
   }
 
-  const jsonResult = analyzeJsonContent(content)
+  const trimmed = content.trim()
 
-  if (jsonResult) {
-    return jsonResult
-  }
-
-  const decodedBase64 =
-    tryDecodeBase64(content)
-
-  if (decodedBase64) {
-    const decodedUriCount =
-      countConfigurationUris(decodedBase64)
-
-    if (decodedUriCount > 0) {
-      return {
-        format: 'base64-uri-list',
-        configCount: decodedUriCount,
-      }
-    }
-
-    const decodedJson =
-      analyzeJsonContent(decodedBase64)
-
-    if (decodedJson) {
-      return {
-        format: 'base64-json',
-        configCount: decodedJson.configCount,
-      }
-    }
-
-    return {
-      format: 'base64-unknown',
-      configCount: 0,
-    }
-  }
-
-  return {
-    format: 'unknown',
-    configCount: 0,
-  }
-}
-
-function analyzeJsonContent(content) {
-  if (
-    !content.startsWith('{') &&
-    !content.startsWith('[')
-  ) {
-    return null
-  }
-
-  try {
-    const parsed = JSON.parse(content)
-
-    return {
-      format: 'json',
-      configCount:
-        estimateJsonConfigurationCount(parsed),
-    }
-  } catch {
-    return null
-  }
-}
-
-function estimateJsonConfigurationCount(value) {
-  if (Array.isArray(value)) {
-    return value.length
-  }
-
-  if (
-    value &&
-    typeof value === 'object'
-  ) {
-    const possibleArrays = [
-      value.outbounds,
-      value.proxies,
-      value.servers,
-      value.nodes,
-      value.configs,
-    ]
-
-    for (const possibleArray of possibleArrays) {
-      if (Array.isArray(possibleArray)) {
-        return possibleArray.length
-      }
-    }
-
-    return 1
-  }
-
-  return 0
-}
-
-function countConfigurationUris(content) {
-  const lines = content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-
-  return lines.filter((line) =>
-    CONFIG_PROTOCOLS.some((protocol) =>
-      line
-        .toLowerCase()
-        .startsWith(protocol),
-    ),
-  ).length
-}
-
-function tryDecodeBase64(content) {
-  const compactContent = content.replace(
-    /\s+/g,
-    '',
-  )
-
-  if (
-    compactContent.length < 8 ||
-    !/^[A-Za-z0-9+/_=-]+$/.test(
-      compactContent,
+  const containsDirectUri =
+    /(?:^|\r?\n)(?:vmess|vless|trojan|ss|hysteria2?|hy2|tuic):\/\//i.test(
+      trimmed,
     )
-  ) {
-    return null
+
+  if (containsDirectUri) {
+    return 'uri-list'
   }
 
-  try {
-    const normalized = compactContent
-      .replace(/-/g, '+')
-      .replace(/_/g, '/')
+  return 'base64-uri-list'
+}
 
-    const paddingLength =
-      (4 - (normalized.length % 4)) % 4
-
-    const padded =
-      normalized + '='.repeat(paddingLength)
-
-    const decoded = Buffer.from(
-      padded,
-      'base64',
-    ).toString('utf8')
-
-    if (!decoded.trim()) {
-      return null
-    }
-
-    const replacementCharacterCount = (
-      decoded.match(/\uFFFD/g) ?? []
-    ).length
-
-    if (
-      replacementCharacterCount >
-      Math.max(2, decoded.length * 0.02)
-    ) {
-      return null
-    }
-
-    return decoded.trim()
-  } catch {
-    return null
+function createDownloadError(
+  error,
+  format = 'network-error',
+) {
+  return {
+    success: false,
+    checkedAt:
+      new Date().toISOString(),
+    httpStatus: null,
+    httpStatusText: null,
+    contentType: null,
+    responseSize: null,
+    content: null,
+    format,
+    configCount: 0,
+    error,
   }
 }
 
@@ -333,16 +275,16 @@ function parseContentLength(value) {
     return null
   }
 
-  const parsedValue = Number(value)
+  const parsed = Number(value)
 
   if (
-    !Number.isFinite(parsedValue) ||
-    parsedValue < 0
+    !Number.isFinite(parsed) ||
+    parsed < 0
   ) {
     return null
   }
 
-  return parsedValue
+  return parsed
 }
 
 function validateSubscriptionUrl(value) {
@@ -368,4 +310,5 @@ function validateSubscriptionUrl(value) {
 
 module.exports = {
   inspectSubscriptionUrl,
+  loadSubscriptionNodes,
 }
