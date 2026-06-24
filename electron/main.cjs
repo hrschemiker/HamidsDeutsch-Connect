@@ -10,6 +10,12 @@ const fs = require('node:fs')
 const { execFile } = require('node:child_process')
 const { promisify } = require('node:util')
 
+const {
+  addSubscription,
+  listSubscriptions,
+  removeSubscription,
+} = require('./subscription-store.cjs')
+
 const execFileAsync = promisify(execFile)
 
 const isDevelopment = !app.isPackaged
@@ -108,9 +114,82 @@ async function getEngineInfo() {
 }
 
 function registerIpcHandlers() {
-  ipcMain.handle('engine:get-info', async () => {
-    return getEngineInfo()
-  })
+  ipcMain.handle(
+    'engine:get-info',
+    async () => {
+      return getEngineInfo()
+    },
+  )
+
+  ipcMain.handle(
+    'subscriptions:list',
+    async () => {
+      return listSubscriptions()
+    },
+  )
+
+  ipcMain.handle(
+    'subscriptions:add',
+    async (_event, input) => {
+      try {
+        const subscription =
+          await addSubscription(input)
+
+        return {
+          success: true,
+          subscription,
+          error: null,
+        }
+      } catch (error) {
+        console.error(
+          '[Subscriptions] Add failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return {
+          success: false,
+          subscription: null,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'ثبت اشتراک با خطا مواجه شد.',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'subscriptions:remove',
+    async (_event, subscriptionId) => {
+      try {
+        await removeSubscription(
+          subscriptionId,
+        )
+
+        return {
+          success: true,
+          error: null,
+        }
+      } catch (error) {
+        console.error(
+          '[Subscriptions] Remove failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return {
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'حذف اشتراک با خطا مواجه شد.',
+        }
+      }
+    },
+  )
 }
 
 function createMainWindow() {

@@ -9,6 +9,41 @@ type EngineInfo = {
   error: string | null
 }
 
+type SubscriptionSummary = {
+  id: string
+  name: string
+  host: string
+  createdAt: string
+  updatedAt: string
+}
+
+type AddSubscriptionInput = {
+  name: string
+  url: string
+}
+
+type AddSubscriptionResult =
+  | {
+      success: true
+      subscription: SubscriptionSummary
+      error: null
+    }
+  | {
+      success: false
+      subscription: null
+      error: string
+    }
+
+type RemoveSubscriptionResult =
+  | {
+      success: true
+      error: null
+    }
+  | {
+      success: false
+      error: string
+    }
+
 declare global {
   interface Window {
     hamidsDeutsch: {
@@ -17,6 +52,20 @@ declare global {
 
       engine: {
         getInfo: () => Promise<EngineInfo>
+      }
+
+      subscriptions: {
+        list: () => Promise<
+          SubscriptionSummary[]
+        >
+
+        add: (
+          input: AddSubscriptionInput,
+        ) => Promise<AddSubscriptionResult>
+
+        remove: (
+          subscriptionId: string,
+        ) => Promise<RemoveSubscriptionResult>
       }
     }
   }
