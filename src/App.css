@@ -1307,3 +1307,136 @@ button {
     );
   }
 }
+
+.load-servers-button {
+  padding: 6px 10px;
+  border: 1px solid rgba(54, 179, 126, 0.25);
+  border-radius: 7px;
+  background: var(--green-soft);
+  color: var(--green);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.load-servers-button:hover {
+  border-color: rgba(54, 179, 126, 0.48);
+}
+
+.load-servers-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.server-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    2,
+    minmax(0, 1fr)
+  );
+  gap: 14px;
+}
+
+.server-card {
+  padding: 17px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface);
+}
+
+.server-card-invalid {
+  opacity: 0.65;
+  border-color: rgba(212, 70, 70, 0.24);
+}
+
+.server-card-header {
+  display: grid;
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 11px;
+  margin-bottom: 15px;
+}
+
+.server-protocol-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--gold-soft);
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.server-title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.server-title strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-title span {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.server-valid-badge,
+.server-invalid-badge {
+  padding: 5px 7px;
+  border-radius: 999px;
+  font-size: 8px;
+}
+
+.server-valid-badge {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.server-invalid-badge {
+  background: var(--red-soft);
+  color: #ef7777;
+}
+
+.server-information {
+  display: flex;
+  flex-direction: column;
+}
+
+.server-information-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.server-information-row:last-child {
+  border-bottom: 0;
+}
+
+.server-information-row span {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.server-information-row strong {
+  overflow: hidden;
+  max-width: 68%;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .server-grid {
+    grid-template-columns: 1fr;
+  }
+}

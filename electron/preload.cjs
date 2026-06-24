@@ -39,6 +39,12 @@ contextBridge.exposeInMainWorld(
           'subscriptions:inspect',
           subscriptionId,
         ),
+
+      loadNodes: (subscriptionId) =>
+        ipcRenderer.invoke(
+          'subscriptions:load-nodes',
+          subscriptionId,
+        ),
     },
   },
 )

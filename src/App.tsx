@@ -5,6 +5,7 @@ import {
 import { useDirectDomains } from './domain/use-direct-domains'
 import { useEngineInfo } from './engine/use-engine-info'
 import { useSubscriptions } from './subscriptions/use-subscriptions'
+import { useServerNodes } from './servers/use-server-nodes'
 import './App.css'
 
 type PageId =
@@ -51,6 +52,7 @@ function App() {
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
   const subscriptions = useSubscriptions()
+  const serverNodes = useServerNodes()
 
   function toggleConnection() {
     setIsConnected((currentValue) => !currentValue)
@@ -147,31 +149,51 @@ function App() {
           )}
 
           {activePage === 'servers' && (
-            <EmptyPage
-              icon="◉"
-              title="هنوز سروری اضافه نشده است"
-              description="بعداً در این بخش سرورها، کیفیت اتصال، تأخیر و وضعیت واقعی آن‌ها نمایش داده می‌شود."
-              actionLabel="افزودن اشتراک"
-              onAction={() => setActivePage('subscriptions')}
-            />
-          )}
-
-          {activePage === 'subscriptions' && (
-  <SubscriptionsPage
-    loading={subscriptions.loading}
-    subscriptions={subscriptions.subscriptions}
-    loadError={subscriptions.error}
-    onAddSubscription={
-      subscriptions.addSubscription
+  <ServersPage
+    loading={serverNodes.loading}
+    nodes={serverNodes.nodes}
+    error={serverNodes.error}
+    onOpenSubscriptions={() =>
+      setActivePage('subscriptions')
     }
-    onRemoveSubscription={
-      subscriptions.removeSubscription
-    }
-    onInspectSubscription={
-  subscriptions.inspectSubscription
-}
   />
 )}
+
+          {activePage === 'subscriptions' && (
+            <SubscriptionsPage
+              loading={subscriptions.loading}
+              subscriptions={subscriptions.subscriptions}
+              loadError={subscriptions.error}
+              onAddSubscription={
+                subscriptions.addSubscription
+              }
+              onRemoveSubscription={
+                subscriptions.removeSubscription
+              }
+              onInspectSubscription={
+                subscriptions.inspectSubscription
+              }
+              onLoadServers={async (
+                subscriptionId,
+              ) => {
+                const result =
+                  await serverNodes.loadFromSubscription(
+                    subscriptionId,
+                  )
+
+                if (result.success) {
+                  setActivePage('servers')
+                }
+
+                return result
+              }}
+              loadingServerSubscriptionId={
+                serverNodes.loading
+                  ? serverNodes.subscriptionId
+                  : null
+              }
+            />
+          )}
 
           {activePage === 'direct-sites' && (
             <DirectSitesPage
@@ -541,6 +563,22 @@ type SubscriptionsPageProps = {
     subscriptionId: string,
   ) => Promise<SubscriptionInspection>
 
+  onLoadServers: (
+    subscriptionId: string,
+  ) => Promise<
+    | {
+        success: true
+        error: null
+      }
+    | {
+        success: false
+        error: string
+      }
+  >
+
+  loadingServerSubscriptionId:
+    string | null
+
 }
 
 function SubscriptionsPage({
@@ -550,6 +588,8 @@ function SubscriptionsPage({
   onAddSubscription,
   onRemoveSubscription,
   onInspectSubscription,
+  onLoadServers,
+  loadingServerSubscriptionId,
 }: SubscriptionsPageProps) {
   const [nameInput, setNameInput] =
     useState('')
@@ -563,7 +603,7 @@ function SubscriptionsPage({
   const [removingId, setRemovingId] =
     useState<string | null>(null)
 
-    const [inspectingId, setInspectingId] =
+  const [inspectingId, setInspectingId] =
     useState<string | null>(null)
 
   const [
@@ -648,7 +688,7 @@ function SubscriptionsPage({
     })
   }
 
-    async function handleInspectSubscription(
+  async function handleInspectSubscription(
     subscriptionId: string,
   ) {
     if (inspectingId) {
@@ -688,6 +728,24 @@ function SubscriptionsPage({
       text:
         'اشتراک با موفقیت دریافت و تحلیل شد.',
     })
+  }
+
+  async function handleLoadServers(
+    subscriptionId: string,
+  ) {
+    setMessage(null)
+
+    const result =
+      await onLoadServers(
+        subscriptionId,
+      )
+
+    if (!result.success) {
+      setMessage({
+        type: 'error',
+        text: result.error,
+      })
+    }
   }
 
   function handleUrlKeyDown(
@@ -848,6 +906,25 @@ function SubscriptionsPage({
                     </span>
 
                     <button
+  className="load-servers-button"
+  type="button"
+  disabled={
+    loadingServerSubscriptionId ===
+    subscription.id
+  }
+  onClick={() => {
+    void handleLoadServers(
+      subscription.id,
+    )
+  }}
+>
+  {loadingServerSubscriptionId ===
+  subscription.id
+    ? 'در حال دریافت...'
+    : 'مشاهده سرورها'}
+</button>
+
+                    <button
   className="inspect-subscription-button"
   type="button"
   disabled={
@@ -915,6 +992,260 @@ function SubscriptionsPage({
       </section>
     </div>
   )
+}
+
+type ServerNodeItem = {
+  id: string
+  name: string
+  protocol: string
+  host: string | null
+  port: number | null
+  transport: string | null
+  tls: boolean
+  security: string | null
+  valid: boolean
+}
+
+function ServersPage({
+  loading,
+  nodes,
+  error,
+  onOpenSubscriptions,
+}: {
+  loading: boolean
+  nodes: ServerNodeItem[]
+  error: string | null
+  onOpenSubscriptions: () => void
+}) {
+  if (loading) {
+    return (
+      <section className="empty-state">
+        <div className="empty-state-icon">
+          ◌
+        </div>
+
+        <h2>
+          در حال دریافت سرورها
+        </h2>
+
+        <p>
+          محتوای اشتراک در بخش امن برنامه
+          دریافت و تحلیل می‌شود.
+        </p>
+      </section>
+    )
+  }
+
+  if (error) {
+    return (
+      <section className="empty-state">
+        <div className="empty-state-icon">
+          !
+        </div>
+
+        <h2>
+          دریافت سرورها ناموفق بود
+        </h2>
+
+        <p>{error}</p>
+
+        <button
+          className="primary-button"
+          type="button"
+          onClick={onOpenSubscriptions}
+        >
+          بازگشت به اشتراک‌ها
+        </button>
+      </section>
+    )
+  }
+
+  if (nodes.length === 0) {
+    return (
+      <EmptyPage
+        icon="◉"
+        title="هنوز سروری بارگذاری نشده است"
+        description="به صفحه اشتراک‌ها برو و روی دکمه مشاهده سرورها بزن."
+        actionLabel="رفتن به اشتراک‌ها"
+        onAction={onOpenSubscriptions}
+      />
+    )
+  }
+
+  const validNodes = nodes.filter(
+    (node) => node.valid,
+  )
+
+  return (
+    <div className="page-stack">
+      <section className="panel-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">
+              Subscription Nodes
+            </span>
+
+            <h3>سرورهای استخراج‌شده</h3>
+          </div>
+
+          <span className="count-badge">
+            {validNodes.length} سرور معتبر
+          </span>
+        </div>
+
+        <p className="field-help">
+          فقط اطلاعات عمومی نمایش داده
+          می‌شوند. UUID، رمزها و کلیدهای
+          اتصال در رابط قابل مشاهده نیستند.
+        </p>
+      </section>
+
+      <section className="server-grid">
+        {nodes.map((node) => (
+          <article
+            className={
+              node.valid
+                ? 'server-card'
+                : 'server-card server-card-invalid'
+            }
+            key={node.id}
+          >
+            <div className="server-card-header">
+              <div className="server-protocol-icon">
+                {formatProtocolShortName(
+                  node.protocol,
+                )}
+              </div>
+
+              <div className="server-title">
+                <strong>
+                  {node.name}
+                </strong>
+
+                <span>
+                  {formatProtocolNameForUi(
+                    node.protocol,
+                  )}
+                </span>
+              </div>
+
+              <span
+                className={
+                  node.valid
+                    ? 'server-valid-badge'
+                    : 'server-invalid-badge'
+                }
+              >
+                {node.valid
+                  ? 'آماده بررسی'
+                  : 'ناقص'}
+              </span>
+            </div>
+
+            <div className="server-information">
+              <ServerInformationRow
+                label="آدرس"
+                value={
+                  node.host ?? 'نامشخص'
+                }
+                leftToRight
+              />
+
+              <ServerInformationRow
+                label="پورت"
+                value={
+                  node.port
+                    ? String(node.port)
+                    : 'نامشخص'
+                }
+              />
+
+              <ServerInformationRow
+                label="انتقال"
+                value={
+                  node.transport ??
+                  'نامشخص'
+                }
+              />
+
+              <ServerInformationRow
+                label="امنیت"
+                value={
+                  node.tls
+                    ? node.security ??
+                      'TLS'
+                    : 'بدون TLS'
+                }
+              />
+            </div>
+          </article>
+        ))}
+      </section>
+    </div>
+  )
+}
+
+function ServerInformationRow({
+  label,
+  value,
+  leftToRight = false,
+}: {
+  label: string
+  value: string
+  leftToRight?: boolean
+}) {
+  return (
+    <div className="server-information-row">
+      <span>{label}</span>
+
+      <strong
+        dir={
+          leftToRight
+            ? 'ltr'
+            : undefined
+        }
+      >
+        {value}
+      </strong>
+    </div>
+  )
+}
+
+function formatProtocolShortName(
+  protocol: string,
+) {
+  const names: Record<string, string> = {
+    vmess: 'VM',
+    vless: 'VL',
+    trojan: 'TR',
+    ss: 'SS',
+    hysteria: 'HY',
+    hysteria2: 'H2',
+    hy2: 'H2',
+    tuic: 'TU',
+  }
+
+  return (
+    names[protocol] ??
+    protocol.slice(0, 2).toUpperCase()
+  )
+}
+
+function formatProtocolNameForUi(
+  protocol: string,
+) {
+  const names: Record<string, string> = {
+    vmess: 'VMess',
+    vless: 'VLESS',
+    trojan: 'Trojan',
+    ss: 'Shadowsocks',
+    hysteria: 'Hysteria',
+    hysteria2: 'Hysteria 2',
+    hy2: 'Hysteria 2',
+    tuic: 'TUIC',
+  }
+
+  return names[protocol] ?? protocol
 }
 
 type DirectSitesPageProps = {

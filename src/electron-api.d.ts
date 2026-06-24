@@ -56,6 +56,32 @@ type SubscriptionInspectionResult = {
   error: string | null
 }
 
+type SafeServerNode = {
+  id: string
+  name: string
+  protocol: string
+  host: string | null
+  port: number | null
+  transport: string | null
+  tls: boolean
+  security: string | null
+  valid: boolean
+}
+
+type LoadSubscriptionNodesResult =
+  | {
+      success: true
+      checkedAt: string
+      nodes: SafeServerNode[]
+      error: null
+    }
+  | {
+      success: false
+      checkedAt: string
+      nodes: []
+      error: string
+    }
+
 declare global {
   interface Window {
     hamidsDeutsch: {
@@ -82,6 +108,10 @@ declare global {
         inspect: (
           subscriptionId: string,
         ) => Promise<SubscriptionInspectionResult>
+
+        loadNodes: (
+          subscriptionId: string,
+        ) => Promise<LoadSubscriptionNodesResult>
       }
     }
   }

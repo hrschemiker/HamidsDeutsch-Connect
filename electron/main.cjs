@@ -19,6 +19,7 @@ const {
 
 const {
   inspectSubscriptionUrl,
+  loadSubscriptionNodes,
 } = require('./subscription-inspector.cjs')
 
 const execFileAsync = promisify(execFile)
@@ -238,6 +239,49 @@ function registerIpcHandlers() {
             error instanceof Error
               ? error.message
               : 'بررسی اشتراک با خطا مواجه شد.',
+        }
+      }
+    },
+  )
+
+    ipcMain.handle(
+    'subscriptions:load-nodes',
+    async (_event, subscriptionId) => {
+      try {
+        const subscriptionUrl =
+          await getSubscriptionUrl(
+            subscriptionId,
+          )
+
+        const result =
+          await loadSubscriptionNodes(
+            subscriptionUrl,
+          )
+
+        console.log(
+          '[Subscriptions] Safe nodes loaded:',
+          subscriptionId,
+          result.nodes.length,
+        )
+
+        return result
+      } catch (error) {
+        console.error(
+          '[Subscriptions] Loading nodes failed:',
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+        )
+
+        return {
+          success: false,
+          checkedAt:
+            new Date().toISOString(),
+          nodes: [],
+          error:
+            error instanceof Error
+              ? error.message
+              : 'دریافت سرورها با خطا مواجه شد.',
         }
       }
     },
