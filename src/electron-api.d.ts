@@ -81,6 +81,255 @@ type CurrentIpResult = {
   error: string | null
 }
 
+type BpbType =
+  | 'normal'
+  | 'fragment'
+  | 'raw'
+  | 'warp'
+
+type BpbProfile = {
+  id: string
+  name: string
+  normalUrl: string
+  fragmentUrl: string
+  rawUrl: string
+  warpUrl: string
+  panelUrl: string
+  subPath: string
+  panelVersion: string | null
+  chainEnabled: boolean
+  optimizerEnabled: boolean
+  optimizerAutoRefreshDays: number
+  activeType: BpbType
+  lastSuccessfulNodeId: string | null
+  lastSuccessfulNodeName: string | null
+  lastSuccessfulType: BpbType | null
+  updatedAt: string | null
+}
+
+type BpbProfileResult = {
+  success: boolean
+  profile:
+    | BpbProfile
+    | null
+  error: string | null
+}
+
+type BpbStatus = {
+  running: boolean
+  ready: boolean
+  connected: boolean
+  pid: number | null
+  startedAt: string | null
+  stoppedAt: string | null
+  localHost: string
+  localPort: number
+  profileType:
+    | BpbType
+    | null
+  nodeId: string | null
+  nodeName: string | null
+  lastError: string | null
+  logTail: string
+}
+
+type BpbSourceMode =
+  | 'uri-list'
+  | 'sing-box-json'
+
+type BpbLoadNodesResult = {
+  success: boolean
+  checkedAt: string
+  type: BpbType
+  mode:
+    | BpbSourceMode
+    | null
+  nodes: SafeServerNode[]
+  error: string | null
+}
+
+type BpbConnectInput = {
+  type: BpbType
+  nodeId:
+    | string
+    | null
+  nodeUri?: string | null
+  nodeName?: string | null
+  directDomains: string[]
+  rescueOptions?: RescueOptions
+}
+
+type BpbConnectResult = {
+  success: boolean
+  status: BpbStatus
+  verification:
+    | IpVerificationResult
+    | null
+  configPath: string | null
+  error: string | null
+}
+
+type BpbDisconnectResult = {
+  success: boolean
+  status: BpbStatus
+  error: string | null
+}
+
+type BpbWizardStatus = {
+  running: boolean
+  ready: boolean
+  pid: number | null
+  version: string | null
+  executablePath: string | null
+  startedAt: string | null
+  stoppedAt: string | null
+  exitCode: number | null
+  lastError: string | null
+  output: string
+  panelUrl: string | null
+  phase:
+    | 'idle'
+    | 'checking'
+    | 'downloading'
+    | 'ready'
+    | 'running'
+    | 'finished'
+    | 'stopped'
+    | 'error'
+}
+
+type BpbWizardEvent = {
+  type:
+    | 'status'
+    | 'output'
+    | 'input'
+    | 'panel-url'
+  at: string
+  text?: string
+  stream?: string
+  panelUrl?: string
+  status?: BpbWizardStatus
+}
+
+type BpbWizardEnsureResult = {
+  success: boolean
+  downloaded: boolean
+  version: string | null
+  executablePath: string | null
+  error: string | null
+}
+
+type BpbWizardActionResult = {
+  success: boolean
+  status: BpbWizardStatus
+  error: string | null
+}
+
+type BpbWizardInputResult = {
+  success: boolean
+  error: string | null
+}
+
+type BpbWizardOpenPanelResult = {
+  success: boolean
+  panelUrl: string | null
+  error: string | null
+}
+
+type BpbAutoDiscoveryResult = {
+  success: boolean
+  panelUrl: string | null
+  normalUrl: string
+  fragmentUrl: string
+  rawUrl: string
+  warpUrl: string
+  subPath: string | null
+  panelVersion: string | null
+  chainEnabled: boolean
+  normalMode:
+    | BpbSourceMode
+    | null
+  fragmentMode:
+    | BpbSourceMode
+    | null
+  rawMode:
+    | BpbSourceMode
+    | null
+  warpMode:
+    | BpbSourceMode
+    | null
+  candidateCount?: number
+  profile: BpbProfile | null
+  error: string | null
+}
+
+type BpbQuickConnectResult = {
+  success: boolean
+  status: BpbStatus
+  verification:
+    | IpVerificationResult
+    | null
+  configPath: string | null
+  selectedType:
+    | BpbType
+    | null
+  selectedNodeId: string | null
+  selectedNodeName: string | null
+  error: string | null
+}
+
+type BpbOptimizerEndpoint = {
+  id: string
+  ip: string
+  family: 4 | 6
+  port: number
+  latencyMs: number | null
+  downloadMbps: number | null
+  score: number | null
+  colo: string | null
+  testedAt: string
+}
+
+type BpbOptimizerState = {
+  enabled: boolean
+  scannedAt: string | null
+  panelHost: string | null
+  bestEndpoint:
+    | BpbOptimizerEndpoint
+    | null
+  results: BpbOptimizerEndpoint[]
+  source: 'cloudflare-official-ranges'
+  error: string | null
+}
+
+type BpbOptimizerScanResult = {
+  success: boolean
+  state: BpbOptimizerState
+  error: string | null
+}
+
+type BpbOptimizerActionResult = {
+  success: boolean
+  state: BpbOptimizerState
+  error: string | null
+}
+
+type BpbOptimizerProgress = {
+  running: boolean
+  phase:
+    | 'idle'
+    | 'ranges'
+    | 'latency'
+    | 'speed'
+    | 'done'
+    | 'error'
+  tested: number
+  total: number
+  reachable: number
+  message: string
+  at: string
+}
+
 type SubscriptionSummary = {
   id: string
   name: string
@@ -130,6 +379,7 @@ type SubscriptionInspectionResult = {
 
 type SafeServerNode = {
   id: string
+  uri?: string
   name: string
   protocol: string
   host: string | null
@@ -302,6 +552,49 @@ declare global {
 
         getCurrentIp: () =>
           Promise<CurrentIpResult>
+      }
+
+      bpb: {
+        getProfile: () =>
+          Promise<BpbProfileResult>
+
+        saveProfile: (
+          input: BpbProfile,
+        ) => Promise<BpbProfileResult>
+
+        loadNodes: (
+          type: BpbType,
+        ) => Promise<BpbLoadNodesResult>
+
+        connect: (
+          input: BpbConnectInput,
+        ) => Promise<BpbConnectResult>
+
+        disconnect: () =>
+          Promise<BpbDisconnectResult>
+
+        getStatus: () =>
+          Promise<BpbStatus>
+
+        autoDiscover: (
+          panelUrl?: string,
+        ) => Promise<BpbAutoDiscoveryResult>
+
+        quickConnect: (
+          input?: {
+            panelUrl?: string
+            directDomains?: string[]
+            rescueOptions?: RescueSettings | null
+          },
+        ) => Promise<BpbQuickConnectResult>
+
+        cloudflare: {
+          getStatus: () => Promise<{ connected: boolean; accountName: string | null; deployed: boolean; panelUrl: string | null; projectName: string | null }>
+          login: () => Promise<{ success: boolean; accountId: string | null; accountName: string | null; error: string | null }>
+          deploy: () => Promise<{ success: boolean; profile: BpbProfile | null; deployment: { projectName: string; kvId: string; panelUrl: string; workerSha256: string } | null; error: string | null }>
+          updatePanel: () => Promise<{ success: boolean; panelUrl: string | null; error: string | null }>
+          onProgress: (callback: (progress: { stage: string; message: string; at: string; panelUrl?: string }) => void) => () => void
+        }
       }
 
       subscriptions: {

@@ -98,6 +98,71 @@ contextBridge.exposeInMainWorld(
         ),
     },
 
+    bpb: {
+      getProfile: () =>
+        ipcRenderer.invoke(
+          'bpb:get-profile',
+        ),
+
+      saveProfile: (input) =>
+        ipcRenderer.invoke(
+          'bpb:save-profile',
+          input,
+        ),
+
+      loadNodes: (type) =>
+        ipcRenderer.invoke(
+          'bpb:load-nodes',
+          {
+            type,
+          },
+        ),
+
+      connect: (input) =>
+        ipcRenderer.invoke(
+          'bpb:connect',
+          input,
+        ),
+
+      disconnect: () =>
+        ipcRenderer.invoke(
+          'bpb:disconnect',
+        ),
+
+      getStatus: () =>
+        ipcRenderer.invoke(
+          'bpb:get-status',
+        ),
+
+      autoDiscover: (
+        panelUrl,
+      ) =>
+        ipcRenderer.invoke(
+          'bpb:auto-discover',
+          panelUrl,
+        ),
+
+      quickConnect: (
+        input,
+      ) =>
+        ipcRenderer.invoke(
+          'bpb:quick-connect',
+          input,
+        ),
+
+      cloudflare: {
+        getStatus: () => ipcRenderer.invoke('bpb-cloudflare:get-status'),
+        login: () => ipcRenderer.invoke('bpb-cloudflare:login'),
+        deploy: () => ipcRenderer.invoke('bpb-cloudflare:deploy'),
+        updatePanel: () => ipcRenderer.invoke('bpb-cloudflare:update-panel'),
+        onProgress: (callback) => {
+          const listener = (_event, payload) => callback(payload)
+          ipcRenderer.on('bpb-cloudflare:progress', listener)
+          return () => ipcRenderer.removeListener('bpb-cloudflare:progress', listener)
+        },
+      },
+    },
+
     subscriptions: {
       list: () =>
         ipcRenderer.invoke(

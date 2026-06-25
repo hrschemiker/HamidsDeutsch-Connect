@@ -22,6 +22,7 @@ import { useWindowsElevation } from './system/use-windows-elevation'
 import { useRescueSettings } from './rescue/use-rescue-settings'
 import { useConnectionSettings } from './settings/use-connection-settings'
 import { useConnectionDiagnostics } from './diagnostics/use-connection-diagnostics'
+import { BpbPage } from './bpb/BpbPage'
 import './App.css'
 
 type PageId =
@@ -29,6 +30,7 @@ type PageId =
   | 'servers'
   | 'subscriptions'
   | 'direct-sites'
+  | 'bpb'
   | 'rescue'
   | 'statistics'
   | 'logs'
@@ -64,6 +66,7 @@ const navigationItems: NavigationItem[] = [
   { id: 'home', label: 'خانه', icon: '⌂' },
   { id: 'servers', label: 'سرورها', icon: '◉' },
   { id: 'subscriptions', label: 'اشتراک‌ها', icon: '↧' },
+  { id: 'bpb', label: 'اتصال BPB', icon: '◈' },
   { id: 'direct-sites', label: 'سایت‌های مستقیم', icon: '↗' },
   { id: 'rescue', label: 'مرکز نجات', icon: '✦' },
   { id: 'statistics', label: 'آمار', icon: '▥' },
@@ -75,6 +78,7 @@ const pageTitles: Record<PageId, string> = {
   home: 'خانه',
   servers: 'سرورها',
   subscriptions: 'اشتراک‌ها',
+  bpb: 'اتصال مستقل BPB',
   'direct-sites': 'سایت‌های مستقیم',
   rescue: 'مرکز نجات اتصال',
   statistics: 'آمار اتصال',
@@ -1138,6 +1142,21 @@ function App() {
               }}
               loadingServerSubscriptionId={
                 serverNodes.refreshingSubscriptionId
+              }
+            />
+          )}
+
+          {activePage === 'bpb' && (
+            <BpbPage
+              mainConnected={
+                connectionVerified ||
+                engineProcess.status.running
+              }
+              directDomains={
+                directDomains.domains
+              }
+              rescueSettings={
+                rescueSettings.settings
               }
             />
           )}

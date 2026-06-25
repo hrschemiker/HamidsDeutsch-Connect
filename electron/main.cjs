@@ -7,6 +7,7 @@ const {
 
 const path = require('node:path')
 const fs = require('node:fs')
+const crypto = require('node:crypto')
 const {
   execFile,
 } = require('node:child_process')
@@ -91,6 +92,45 @@ const {
   getUserEnginePath,
 } = require('./sing-box-updater.cjs')
 
+const {
+  loadBpbProfile,
+  saveBpbProfile,
+} = require('./bpb-profile-store.cjs')
+
+const {
+  startBpbProxy,
+  stopBpbProxy,
+  getBpbStatus,
+  markBpbConnected,
+} = require('./bpb-process-manager.cjs')
+
+const {
+  inspectBpbSource,
+  importBpbJsonConfig,
+} = require('./bpb-source-service.cjs')
+
+const {
+  discoverBpbPanel,
+} = require('./bpb-panel-controller.cjs')
+
+const {
+  scanCloudflareEndpoints,
+  getOptimizerState,
+  setOptimizerEnabled,
+  clearOptimizerState,
+  getPreferredEndpoint,
+  applyPreferredEndpointToUri,
+  setOptimizerProgressListener,
+} = require('./bpb-cloudflare-optimizer.cjs')
+
+const {
+  loginCloudflare,
+  deployBpbPanel,
+  updateBpbPanel,
+  getCloudflareBpbStatus,
+  setCloudflareBpbProgressListener,
+} = require('./cloudflare-bpb-manager.cjs')
+
 const execFileAsync =
   promisify(execFile)
 
@@ -98,8 +138,114 @@ const isDevelopment =
   !app.isPackaged
 
 let mainWindow = null
+let bpbPanelWindow = null
 let isQuitting = false
 let fatalCleanupStarted = false
+
+function getProductionLogPath() {
+  return path.join(
+    app.getPath(
+      'userData',
+    ),
+    'production-renderer.log',
+  )
+}
+
+function appendProductionLog(
+  message,
+) {
+  try {
+    const line =
+      `[${new Date().toISOString()}] ${message}\n`
+
+    fs.appendFileSync(
+      getProductionLogPath(),
+      line,
+      'utf8',
+    )
+  } catch {
+    // Logging must never crash the application.
+  }
+}
+
+function createProductionErrorHtml(
+  title,
+  details,
+) {
+  const safeTitle =
+    String(title)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+
+  const safeDetails =
+    String(details)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+
+  return `<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  >
+  <title>${safeTitle}</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #0b1120;
+      color: #f8fafc;
+      font-family: Tahoma, Arial, sans-serif;
+    }
+
+    main {
+      width: min(720px, calc(100% - 40px));
+      border: 1px solid #334155;
+      background: #111827;
+      padding: 28px;
+    }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: 22px;
+    }
+
+    p {
+      color: #cbd5e1;
+      line-height: 1.9;
+    }
+
+    pre {
+      direction: ltr;
+      text-align: left;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #020617;
+      border: 1px solid #1e293b;
+      padding: 14px;
+      color: #fca5a5;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${safeTitle}</h1>
+    <p>
+      رابط برنامه بارگیری نشد. متن زیر را برای
+      بررسی نگه دار:
+    </p>
+    <pre>${safeDetails}</pre>
+  </main>
+</body>
+</html>`
+}
 
 async function handleFatalProcessError(
   label,
@@ -290,6 +436,581 @@ async function getVirtualLocationExtensionPath() {
       'userData',
     ),
   )
+}
+
+
+function getBpbUrlByType(
+  profile,
+  type,
+) {
+  const mapping = {
+    normal:
+      profile?.normalUrl,
+    fragment:
+      profile?.fragmentUrl,
+    raw:
+      profile?.rawUrl,
+    warp:
+      profile?.warpUrl,
+  }
+
+  const url =
+    mapping[type]
+
+  if (
+    typeof url !==
+      'string' ||
+    !url.trim()
+  ) {
+    throw new Error(
+      'لینک اشتراک انتخاب‌شده BPB ثبت نشده است.',
+    )
+  }
+
+  return url.trim()
+}
+
+function assertBpbInactive() {
+  const status =
+    getBpbStatus()
+
+  if (
+    status.running ||
+    status.ready ||
+    status.connected
+  ) {
+    throw new Error(
+      'ابتدا اتصال مستقل BPB را قطع کن.',
+    )
+  }
+}
+
+
+
+function normalizeBpbPanelUrl(
+  value,
+) {
+  try {
+    const url =
+      new URL(
+        String(value),
+      )
+
+    if (
+      url.protocol !== 'https:'
+    ) {
+      throw new Error(
+        'پنل BPB باید با HTTPS باز شود.',
+      )
+    }
+
+    if (
+      !/(\.pages\.dev|\.workers\.dev)$/i.test(
+        url.hostname,
+      )
+    ) {
+      throw new Error(
+        'دامنه پنل BPB معتبر نیست.',
+      )
+    }
+
+    if (
+      !url.pathname ||
+      url.pathname === '/'
+    ) {
+      url.pathname =
+        '/panel'
+    }
+
+    return url.toString()
+  } catch (error) {
+    throw new Error(
+      error instanceof Error
+        ? error.message
+        : 'آدرس پنل BPB معتبر نیست.',
+    )
+  }
+}
+
+function openBpbPanelWindow(
+  rawUrl,
+) {
+  const panelUrl =
+    normalizeBpbPanelUrl(
+      rawUrl,
+    )
+
+  if (
+    bpbPanelWindow &&
+    !bpbPanelWindow.isDestroyed()
+  ) {
+    void bpbPanelWindow.loadURL(
+      panelUrl,
+    )
+    bpbPanelWindow.show()
+    bpbPanelWindow.focus()
+    return panelUrl
+  }
+
+  bpbPanelWindow =
+    new BrowserWindow({
+      width: 1180,
+      height: 820,
+      minWidth: 860,
+      minHeight: 620,
+      show: false,
+      autoHideMenuBar: true,
+      backgroundColor: '#0b1120',
+      title:
+        'BPB Panel — HamidsDeutsch Connect',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        webSecurity: true,
+        allowRunningInsecureContent:
+          false,
+      },
+    })
+
+  bpbPanelWindow.webContents.setWindowOpenHandler(
+    ({ url }) => {
+      try {
+        const parsed =
+          new URL(url)
+
+        if (
+          parsed.protocol === 'https:' ||
+          parsed.protocol === 'http:'
+        ) {
+          void shell.openExternal(url)
+        }
+      } catch {
+        // Ignore invalid URLs.
+      }
+
+      return {
+        action: 'deny',
+      }
+    },
+  )
+
+  bpbPanelWindow.webContents.on(
+    'will-navigate',
+    (event, url) => {
+      try {
+        const parsed =
+          new URL(url)
+
+        if (
+          parsed.protocol !== 'https:'
+        ) {
+          event.preventDefault()
+        }
+      } catch {
+        event.preventDefault()
+      }
+    },
+  )
+
+  bpbPanelWindow.once(
+    'ready-to-show',
+    () => {
+      bpbPanelWindow?.show()
+    },
+  )
+
+  bpbPanelWindow.on(
+    'closed',
+    () => {
+      bpbPanelWindow = null
+    },
+  )
+
+  void bpbPanelWindow.loadURL(
+    panelUrl,
+  )
+
+  return panelUrl
+}
+
+
+
+async function connectBpbAutomatically({
+  panelUrl,
+  directDomains = [],
+  rescueOptions = null,
+}) {
+  const mainStatus =
+    getProcessStatus()
+
+  if (
+    mainStatus.running ||
+    mainStatus.ready
+  ) {
+    throw new Error(
+      'ابتدا اتصال اصلی برنامه را قطع کن.',
+    )
+  }
+
+  const currentBpbStatus =
+    getBpbStatus()
+
+  if (
+    currentBpbStatus.running
+  ) {
+    await stopBpbProxy({
+      userDataPath:
+        app.getPath(
+          'userData',
+        ),
+    })
+  }
+
+  const profileResult =
+    await loadBpbProfile(
+      app.getPath(
+        'userData',
+      ),
+    )
+
+  const currentProfile =
+    profileResult.success
+      ? profileResult.profile
+      : {
+          id: '',
+          name:
+            'BPB شخصی',
+          normalUrl: '',
+          fragmentUrl: '',
+          rawUrl: '',
+          panelUrl: '',
+          activeType:
+            'normal',
+          updatedAt: null,
+        }
+
+  const wizardStatus =
+    await getWizardStatus()
+
+  const effectivePanelUrl =
+    typeof panelUrl ===
+      'string' &&
+    panelUrl.trim()
+      ? panelUrl.trim()
+      : (
+          currentProfile.panelUrl ||
+          wizardStatus.panelUrl ||
+          ''
+        )
+
+  if (!effectivePanelUrl) {
+    throw new Error(
+      'آدرس پنل BPB هنوز ثبت نشده است. ابتدا پنل را با Wizard بساز.',
+    )
+  }
+
+  let normalUrl =
+    currentProfile.normalUrl
+
+  let fragmentUrl =
+    currentProfile.fragmentUrl
+
+  let rawUrl =
+    currentProfile.rawUrl
+
+  if (!normalUrl) {
+    const discovered =
+      await discoverBpbPanel({
+        panelUrl:
+          effectivePanelUrl,
+      })
+
+    normalUrl =
+      discovered.normalUrl
+
+    fragmentUrl =
+      discovered.fragmentUrl
+
+    rawUrl =
+      discovered.rawUrl
+
+    const saved =
+      await saveBpbProfile(
+        app.getPath(
+          'userData',
+        ),
+        {
+          ...currentProfile,
+          ...discovered,
+          panelUrl:
+            discovered.panelUrl,
+          normalUrl,
+          fragmentUrl,
+          rawUrl,
+          warpUrl:
+            discovered.warpUrl,
+          activeType:
+            rawUrl
+              ? 'raw'
+              : normalUrl
+                ? 'normal'
+                : fragmentUrl
+                  ? 'fragment'
+                  : 'warp',
+        },
+      )
+
+    if (!saved.success) {
+      throw new Error(
+        saved.error ||
+        'ذخیره خودکار لینک‌های BPB ناموفق بود.',
+      )
+    }
+  }
+
+  const type =
+    normalUrl
+      ? 'normal'
+      : fragmentUrl
+        ? 'fragment'
+        : rawUrl
+          ? 'raw'
+          : null
+
+  const url =
+    type === 'normal'
+      ? normalUrl
+      : type === 'fragment'
+        ? fragmentUrl
+        : rawUrl
+
+  if (
+    !type ||
+    !url
+  ) {
+    throw new Error(
+      'هیچ اشتراک قابل اتصال BPB پیدا نشد.',
+    )
+  }
+
+  const source =
+    await inspectBpbSource(
+      url,
+    )
+
+  const preferredEndpoint =
+    type === 'warp'
+      ? null
+      : await getPreferredEndpoint({
+          userDataPath:
+            app.getPath(
+              'userData',
+            ),
+        })
+
+  let configPath
+  let selectedNodeId = null
+  let selectedNodeName =
+    `BPB ${type.toUpperCase()} Best Ping`
+
+  if (
+    source.mode ===
+      'sing-box-json'
+  ) {
+    const imported =
+      await importBpbJsonConfig({
+        url,
+        enginePath:
+          getEnginePath(),
+        userDataPath:
+          app.getPath(
+            'userData',
+          ),
+        type,
+        localPort: 2081,
+        preferredEndpoint,
+      })
+
+    configPath =
+      imported.configPath
+  } else {
+    const loaded =
+      await loadSubscriptionNodeRecords(
+        url,
+      )
+
+    if (
+      !loaded.success ||
+      !Array.isArray(
+        loaded.nodes,
+      ) ||
+      loaded.nodes.length ===
+        0
+    ) {
+      throw new Error(
+        loaded.error ||
+        'اشتراک BPB هیچ سرور معتبری ندارد.',
+      )
+    }
+
+    const latencyResult =
+      await testServerBatch(
+        loaded.nodes,
+      )
+
+    const fastestId =
+      latencyResult.fastestServerId
+
+    const node =
+      loaded.nodes.find(
+        (item) =>
+          item.id ===
+          fastestId,
+      ) ??
+      loaded.nodes[0]
+
+    const record =
+      loaded.records.find(
+        (item) =>
+          item.id ===
+          node.id,
+      )
+
+    if (
+      !record ||
+      !node
+    ) {
+      throw new Error(
+        'سریع‌ترین سرور BPB در اشتراک پیدا نشد.',
+      )
+    }
+
+    const configResult =
+      await createAndCheckConfig({
+        subscriptionUrl:
+          url,
+        nodeId:
+          record.id,
+        nodeUri:
+          applyPreferredEndpointToUri(
+            record.uri,
+            preferredEndpoint,
+          ),
+        enginePath:
+          getEnginePath(),
+        userDataPath:
+          app.getPath(
+            'userData',
+          ),
+        directDomains:
+          Array.isArray(
+            directDomains,
+          )
+            ? directDomains
+            : [],
+        rescueOptions:
+          rescueOptions &&
+          typeof rescueOptions ===
+            'object'
+            ? rescueOptions
+            : null,
+        runtimeDirectoryName:
+          'bpb-runtime',
+        configFileName:
+          'bpb-auto-config.json',
+        localPort: 2081,
+        setSystemProxy: true,
+      })
+
+    if (
+      !configResult.success
+    ) {
+      throw new Error(
+        configResult.error ||
+        'ساخت کانفیگ سریع BPB ناموفق بود.',
+      )
+    }
+
+    configPath =
+      configResult.configPath
+    selectedNodeId =
+      node.id
+    selectedNodeName =
+      node.name
+  }
+
+  const started =
+    await startBpbProxy({
+      enginePath:
+        getEnginePath(),
+      userDataPath:
+        app.getPath(
+          'userData',
+        ),
+      configPath,
+      profileType:
+        type,
+      nodeId:
+        selectedNodeId,
+      nodeName:
+        selectedNodeName,
+    })
+
+  if (
+    !started.success ||
+    !started.ready
+  ) {
+    throw new Error(
+      started.error ||
+      'پروکسی سریع BPB آماده نشد.',
+    )
+  }
+
+  const verification =
+    await verifyIpChange({
+      proxyHost:
+        '127.0.0.1',
+      proxyPort: 2081,
+    })
+
+  if (
+    !verification.success ||
+    !verification.changed
+  ) {
+    await stopBpbProxy({
+      userDataPath:
+        app.getPath(
+          'userData',
+        ),
+    })
+
+    throw new Error(
+      verification.error ||
+      'IP خروجی BPB تغییر نکرد.',
+    )
+  }
+
+  await markBpbConnected(
+    true,
+  )
+
+  setVirtualLocationConnected(
+    true,
+  )
+
+  return {
+    success: true,
+    status:
+      getBpbStatus(),
+    verification,
+    configPath,
+    selectedType:
+      type,
+    selectedNodeId,
+    selectedNodeName,
+    error: null,
+  }
 }
 
 
@@ -524,6 +1245,7 @@ function registerIpcHandlers() {
     'engine:start-local-proxy',
     async () => {
       try {
+        assertBpbInactive()
         const result =
           await startLocalProxy({
             enginePath:
@@ -560,6 +1282,7 @@ function registerIpcHandlers() {
     'engine:start-tun',
     async () => {
       try {
+        assertBpbInactive()
         const privilege =
           await getWindowsPrivilegeStatus()
 
@@ -611,6 +1334,7 @@ function registerIpcHandlers() {
     'engine:activate-system-proxy',
     async () => {
       try {
+        assertBpbInactive()
         const result =
           await activateSystemProxy({
             enginePath:
@@ -815,6 +1539,843 @@ function registerIpcHandlers() {
               : 'دریافت IP فعلی ناموفق بود.',
         }
       }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb-cloudflare:get-status',
+    async () => getCloudflareBpbStatus({ userDataPath: app.getPath('userData') }),
+  )
+
+  ipcMain.handle(
+    'bpb-cloudflare:login',
+    async () => {
+      try {
+        return await loginCloudflare({ userDataPath: app.getPath('userData') })
+      } catch (error) {
+        return { success: false, accountId: null, accountName: null, error: error instanceof Error ? error.message : 'اتصال حساب Cloudflare ناموفق بود.' }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb-cloudflare:deploy',
+    async () => {
+      try {
+        const deployed = await deployBpbPanel({ userDataPath: app.getPath('userData') })
+        if (!deployed.success) return deployed
+        const current = await loadBpbProfile(app.getPath('userData'))
+        const saved = await saveBpbProfile(app.getPath('userData'), { ...current.profile, ...deployed.profile })
+        return { ...deployed, profile: saved.profile }
+      } catch (error) {
+        return { success: false, profile: null, deployment: null, error: error instanceof Error ? error.message : 'ساخت پنل BPB ناموفق بود.' }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb-cloudflare:update-panel',
+    async () => {
+      try {
+        return await updateBpbPanel({ userDataPath: app.getPath('userData') })
+      } catch (error) {
+        return { success: false, panelUrl: null, error: error instanceof Error ? error.message : 'به‌روزرسانی پنل BPB ناموفق بود.' }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb-optimizer:get-state',
+    async () => {
+      return getOptimizerState({
+        userDataPath:
+          app.getPath(
+            'userData',
+          ),
+      })
+    },
+  )
+
+  ipcMain.handle(
+    'bpb-optimizer:scan',
+    async (
+      _event,
+      input,
+    ) => {
+      try {
+        const profileResult =
+          await loadBpbProfile(
+            app.getPath(
+              'userData',
+            ),
+          )
+
+        const panelUrl =
+          typeof input?.panelUrl ===
+            'string' &&
+          input.panelUrl.trim()
+            ? input.panelUrl.trim()
+            : profileResult
+                .profile
+                .panelUrl
+
+        if (!panelUrl) {
+          throw new Error(
+            'ابتدا پنل BPB را بساز یا شناسایی کن.',
+          )
+        }
+
+        return await scanCloudflareEndpoints({
+          userDataPath:
+            app.getPath(
+              'userData',
+            ),
+          panelUrl,
+          sampleCount:
+            input?.sampleCount,
+        })
+      } catch (error) {
+        return {
+          success: false,
+          state:
+            await getOptimizerState({
+              userDataPath:
+                app.getPath(
+                  'userData',
+                ),
+            }),
+          error:
+            error instanceof Error
+              ? error.message
+              : 'اسکن Cloudflare ناموفق بود.',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb-optimizer:set-enabled',
+    async (
+      _event,
+      enabled,
+    ) => {
+      try {
+        const state =
+          await setOptimizerEnabled({
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+            enabled:
+              enabled === true,
+          })
+
+        const profileResult =
+          await loadBpbProfile(
+            app.getPath(
+              'userData',
+            ),
+          )
+
+        if (
+          profileResult.success
+        ) {
+          await saveBpbProfile(
+            app.getPath(
+              'userData',
+            ),
+            {
+              ...profileResult.profile,
+              optimizerEnabled:
+                enabled === true,
+            },
+          )
+        }
+
+        return {
+          success: true,
+          state,
+          error: null,
+        }
+      } catch (error) {
+        return {
+          success: false,
+          state:
+            await getOptimizerState({
+              userDataPath:
+                app.getPath(
+                  'userData',
+                ),
+            }),
+          error:
+            error instanceof Error
+              ? error.message
+              : 'تغییر وضعیت بهینه‌ساز ناموفق بود.',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb-optimizer:clear',
+    async () => {
+      try {
+        return {
+          success: true,
+          state:
+            await clearOptimizerState({
+              userDataPath:
+                app.getPath(
+                  'userData',
+                ),
+            }),
+          error: null,
+        }
+      } catch (error) {
+        return {
+          success: false,
+          state:
+            await getOptimizerState({
+              userDataPath:
+                app.getPath(
+                  'userData',
+                ),
+            }),
+          error:
+            error instanceof Error
+              ? error.message
+              : 'پاک‌کردن نتایج بهینه‌ساز ناموفق بود.',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb:auto-discover',
+    async (
+      _event,
+      panelUrl,
+    ) => {
+      try {
+        const profileResult =
+          await loadBpbProfile(
+            app.getPath(
+              'userData',
+            ),
+          )
+
+        const effectivePanelUrl =
+          typeof panelUrl ===
+            'string' &&
+          panelUrl.trim()
+            ? panelUrl.trim()
+            : profileResult
+                .profile
+                .panelUrl
+
+        const discovered =
+          await discoverBpbPanel({
+            panelUrl:
+              effectivePanelUrl,
+          })
+
+        const activeType =
+          discovered.rawUrl
+            ? 'raw'
+            : discovered.normalUrl
+              ? 'normal'
+              : discovered.fragmentUrl
+                ? 'fragment'
+                : 'warp'
+
+        const saved =
+          await saveBpbProfile(
+            app.getPath(
+              'userData',
+            ),
+            {
+              ...profileResult.profile,
+              ...discovered,
+              activeType,
+            },
+          )
+
+        return {
+          ...discovered,
+          profile:
+            saved.profile,
+        }
+      } catch (error) {
+        return {
+          success: false,
+          panelUrl: null,
+          subPath: null,
+          panelVersion: null,
+          chainEnabled: false,
+          normalUrl: '',
+          fragmentUrl: '',
+          rawUrl: '',
+          warpUrl: '',
+          normalMode: null,
+          fragmentMode: null,
+          rawMode: null,
+          warpMode: null,
+          profile: null,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'خواندن مستقیم تنظیمات پنل BPB ناموفق بود.',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb:quick-connect',
+    async (
+      _event,
+      input,
+    ) => {
+      try {
+        return await connectBpbAutomatically({
+          panelUrl:
+            input?.panelUrl,
+          directDomains:
+            input?.directDomains,
+          rescueOptions:
+            input?.rescueOptions,
+        })
+      } catch (error) {
+        try {
+          await stopBpbProxy({
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+          })
+        } catch {
+          // Best effort cleanup.
+        }
+
+        setVirtualLocationConnected(
+          false,
+        )
+
+        return {
+          success: false,
+          status:
+            getBpbStatus(),
+          verification: null,
+          configPath: null,
+          selectedType: null,
+          selectedNodeId: null,
+          selectedNodeName: null,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'اتصال سریع BPB ناموفق بود.',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb:get-profile',
+    async () => {
+      return loadBpbProfile(
+        app.getPath(
+          'userData',
+        ),
+      )
+    },
+  )
+
+  ipcMain.handle(
+    'bpb:save-profile',
+    async (
+      _event,
+      input,
+    ) => {
+      try {
+        return await saveBpbProfile(
+          app.getPath(
+            'userData',
+          ),
+          input,
+        )
+      } catch (error) {
+        return {
+          success: false,
+          profile: null,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'ذخیره تنظیمات BPB ناموفق بود.',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb:load-nodes',
+    async (
+      _event,
+      input,
+    ) => {
+      try {
+        const profileResult =
+          await loadBpbProfile(
+            app.getPath(
+              'userData',
+            ),
+          )
+
+        if (
+          !profileResult.success
+        ) {
+          throw new Error(
+            profileResult.error ||
+            'خواندن پروفایل BPB ناموفق بود.',
+          )
+        }
+
+        const type =
+          [
+            'normal',
+            'fragment',
+            'raw',
+            'warp',
+          ].includes(
+            input?.type,
+          )
+            ? input.type
+            : profileResult
+                .profile
+                .activeType
+
+        const url =
+          getBpbUrlByType(
+            profileResult.profile,
+            type,
+          )
+
+        const source =
+          await inspectBpbSource(
+            url,
+          )
+
+        if (
+          source.mode ===
+            'sing-box-json'
+        ) {
+          return {
+            success: true,
+            checkedAt:
+              new Date().toISOString(),
+            type,
+            mode:
+              'sing-box-json',
+            nodes: [],
+            error: null,
+          }
+        }
+
+        const result =
+          await loadSubscriptionNodeRecords(
+            url,
+          )
+
+        return {
+          success:
+            result.success,
+          checkedAt:
+            result.checkedAt,
+          type,
+          mode:
+            'uri-list',
+          nodes:
+            result.nodes.map(
+              (node) => ({
+                ...node,
+                uri: result.records.find(
+                  (record) => record.id === node.id,
+                )?.uri ?? '',
+              }),
+            ),
+          error:
+            result.error,
+        }
+      } catch (error) {
+        return {
+          success: false,
+          checkedAt:
+            new Date().toISOString(),
+          type:
+            typeof input?.type ===
+              'string'
+              ? input.type
+              : 'normal',
+          mode: null,
+          nodes: [],
+          error:
+            error instanceof Error
+              ? error.message
+              : 'بارگیری سرورهای BPB ناموفق بود.',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb:connect',
+    async (
+      _event,
+      input,
+    ) => {
+      try {
+        const mainStatus =
+          getProcessStatus()
+
+        if (
+          mainStatus.running ||
+          mainStatus.ready
+        ) {
+          throw new Error(
+            'ابتدا اتصال اصلی برنامه را قطع کن.',
+          )
+        }
+
+        const currentBpbStatus =
+          getBpbStatus()
+
+        if (
+          currentBpbStatus.running
+        ) {
+          await stopBpbProxy({
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+          })
+        }
+
+        const profileResult =
+          await loadBpbProfile(
+            app.getPath(
+              'userData',
+            ),
+          )
+
+        if (
+          !profileResult.success
+        ) {
+          throw new Error(
+            profileResult.error ||
+            'خواندن پروفایل BPB ناموفق بود.',
+          )
+        }
+
+        const type =
+          [
+            'normal',
+            'fragment',
+            'raw',
+            'warp',
+          ].includes(
+            input?.type,
+          )
+            ? input.type
+            : profileResult
+                .profile
+                .activeType
+
+        const url =
+          getBpbUrlByType(
+            profileResult.profile,
+            type,
+          )
+
+        const source =
+          await inspectBpbSource(
+            url,
+          )
+
+        const preferredEndpoint =
+          type === 'warp'
+            ? null
+            : await getPreferredEndpoint({
+                userDataPath:
+                  app.getPath(
+                    'userData',
+                  ),
+              })
+
+        let configPath
+        let selectedNodeId = null
+        let selectedNodeName =
+          type === 'warp' ? 'BPB Warp Best Ping' : `${type.toUpperCase()} BPB`
+
+        if (
+          source.mode ===
+            'sing-box-json'
+        ) {
+          const imported =
+            await importBpbJsonConfig({
+              url,
+              enginePath:
+                getEnginePath(),
+              userDataPath:
+                app.getPath(
+                  'userData',
+                ),
+              type,
+              localPort: 2081,
+              runtimeDirectoryName:
+                type === 'warp'
+                  ? 'bpb-warp-runtime'
+                  : 'bpb-runtime',
+              preferredEndpoint,
+            })
+
+          configPath =
+            imported.configPath
+        } else {
+          let record = null
+          let node = null
+
+          if (typeof input?.nodeUri === 'string' && input.nodeUri.trim()) {
+            record = { id: input?.nodeId || crypto.randomUUID(), uri: input.nodeUri.trim() }
+            node = { id: record.id, name: input?.nodeName || 'BPB Server' }
+          } else {
+            const loaded = await loadSubscriptionNodeRecords(url)
+            if (!loaded.success) {
+              throw new Error(loaded.error || 'دریافت اشتراک BPB ناموفق بود.')
+            }
+            record = loaded.records.find((item) => item.id === input?.nodeId)
+            node = loaded.nodes.find((item) => item.id === input?.nodeId)
+          }
+
+          if (!record || !node) {
+            throw new Error('کانفیگ ذخیره‌شده این سرور پیدا نشد؛ دکمه به‌روزرسانی کانفیگ‌ها را بزن.')
+          }
+
+          const configResult =
+            await createAndCheckConfig({
+              subscriptionUrl:
+                url,
+              nodeId:
+                record.id,
+              nodeUri:
+                applyPreferredEndpointToUri(
+                  record.uri,
+                  preferredEndpoint,
+                ),
+              enginePath:
+                getEnginePath(),
+              userDataPath:
+                app.getPath(
+                  'userData',
+                ),
+              directDomains:
+                Array.isArray(
+                  input?.directDomains,
+                )
+                  ? input.directDomains
+                  : [],
+              rescueOptions:
+                input?.rescueOptions &&
+                typeof input.rescueOptions ===
+                  'object'
+                  ? input.rescueOptions
+                  : null,
+              runtimeDirectoryName:
+                'bpb-runtime',
+              configFileName:
+                'bpb-config.json',
+              localPort: 2081,
+              setSystemProxy: true,
+            })
+
+          if (
+            !configResult.success
+          ) {
+            throw new Error(
+              configResult.error ||
+              'کانفیگ BPB معتبر نبود.',
+            )
+          }
+
+          configPath =
+            configResult.configPath
+          selectedNodeId =
+            node.id
+          selectedNodeName =
+            node.name
+        }
+
+        const started =
+          await startBpbProxy({
+            enginePath:
+              getEnginePath(),
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+            configPath,
+            profileType:
+              type,
+            nodeId:
+              selectedNodeId,
+            nodeName:
+              selectedNodeName,
+          })
+
+        if (
+          !started.success ||
+          !started.ready
+        ) {
+          throw new Error(
+            started.error ||
+            'پروکسی BPB آماده نشد.',
+          )
+        }
+
+        const verification =
+          await verifyIpChange({
+            proxyHost:
+              '127.0.0.1',
+            proxyPort: 2081,
+          })
+
+        if (
+          !verification.success ||
+          !verification.changed
+        ) {
+          await stopBpbProxy({
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+          })
+
+          throw new Error(
+            verification.error ||
+            'IP خروجی BPB تغییر نکرد.',
+          )
+        }
+
+        await markBpbConnected(
+          true,
+        )
+
+        setVirtualLocationConnected(
+          true,
+        )
+
+        if (
+          selectedNodeId
+        ) {
+          try {
+            await saveBpbProfile(
+              app.getPath(
+                'userData',
+              ),
+              {
+                ...profileResult.profile,
+                activeType:
+                  type,
+                lastSuccessfulNodeId:
+                  selectedNodeId,
+                lastSuccessfulNodeName:
+                  selectedNodeName,
+                lastSuccessfulType:
+                  type,
+              },
+            )
+          } catch {
+            // Connection success must not depend on history persistence.
+          }
+        }
+
+        return {
+          success: true,
+          status:
+            getBpbStatus(),
+          verification,
+          configPath,
+          error: null,
+        }
+      } catch (error) {
+        try {
+          await stopBpbProxy({
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+          })
+        } catch {
+          // Best effort cleanup.
+        }
+
+        setVirtualLocationConnected(
+          false,
+        )
+
+        return {
+          success: false,
+          status:
+            getBpbStatus(),
+          verification: null,
+          configPath: null,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'اتصال BPB ناموفق بود.',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb:disconnect',
+    async () => {
+      try {
+        const result =
+          await stopBpbProxy({
+            userDataPath:
+              app.getPath(
+                'userData',
+              ),
+          })
+
+        setVirtualLocationConnected(
+          false,
+        )
+
+        return {
+          success: true,
+          status:
+            result,
+          error: null,
+        }
+      } catch (error) {
+        return {
+          success: false,
+          status:
+            getBpbStatus(),
+          error:
+            error instanceof Error
+              ? error.message
+              : 'قطع اتصال BPB ناموفق بود.',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'bpb:get-status',
+    async () => {
+      return getBpbStatus()
     },
   )
 
@@ -1372,12 +2933,20 @@ function createMainWindow() {
         details,
       )
 
-      void disposeProcessManager({
-        userDataPath:
-          app.getPath(
-            'userData',
-          ),
-      }).catch((error) => {
+      void Promise.allSettled([
+        disposeProcessManager({
+          userDataPath:
+            app.getPath(
+              'userData',
+            ),
+        }),
+        stopBpbProxy({
+          userDataPath:
+            app.getPath(
+              'userData',
+            ),
+        }),
+      ]).catch((error) => {
         console.error(
           '[Engine] Renderer crash cleanup failed:',
           error instanceof Error
@@ -1385,6 +2954,85 @@ function createMainWindow() {
             : 'Unknown error',
         )
       })
+    },
+  )
+
+  mainWindow.webContents.on(
+    'console-message',
+    (
+      _event,
+      level,
+      message,
+      line,
+      sourceId,
+    ) => {
+      const entry =
+        `[Renderer:${level}] ${message} (${sourceId}:${line})`
+
+      console.log(entry)
+
+      if (!isDevelopment) {
+        appendProductionLog(
+          entry,
+        )
+      }
+    },
+  )
+
+  mainWindow.webContents.on(
+    'did-fail-load',
+    (
+      _event,
+      errorCode,
+      errorDescription,
+      validatedURL,
+      isMainFrame,
+    ) => {
+      if (!isMainFrame) {
+        return
+      }
+
+      const details = [
+        `Code: ${errorCode}`,
+        `Description: ${errorDescription}`,
+        `URL: ${validatedURL}`,
+      ].join('\n')
+
+      console.error(
+        '[Electron] Production page failed to load:',
+        details,
+      )
+
+      appendProductionLog(
+        `did-fail-load\n${details}`,
+      )
+
+      const html =
+        createProductionErrorHtml(
+          'خطا در بارگیری رابط برنامه',
+          details,
+        )
+
+      void mainWindow.loadURL(
+        `data:text/html;charset=utf-8,${encodeURIComponent(
+          html,
+        )}`,
+      )
+    },
+  )
+
+  mainWindow.webContents.on(
+    'did-finish-load',
+    () => {
+      console.log(
+        '[Electron] Renderer finished loading',
+      )
+
+      if (!isDevelopment) {
+        appendProductionLog(
+          'Renderer finished loading.',
+        )
+      }
     },
   )
 
@@ -1427,30 +3075,104 @@ function createMainWindow() {
   )
 
   if (isDevelopment) {
+    const developmentUrl =
+      process.env.ELECTRON_START_URL ||
+      'http://localhost:5173'
+
     console.log(
-      '[Electron] Loading http://localhost:5173',
+      '[Electron] Loading:',
+      developmentUrl,
     )
 
-    void mainWindow.loadURL(
-      'http://localhost:5173',
-    )
+    void mainWindow
+      .loadURL(
+        developmentUrl,
+      )
+      .catch((error) => {
+        console.error(
+          '[Electron] Development page failed:',
+          error,
+        )
+      })
   } else {
     const productionFile =
       path.join(
-        __dirname,
-        '..',
+        app.getAppPath(),
         'dist',
         'index.html',
       )
 
     console.log(
-      '[Electron] Loading:',
+      '[Electron] Loading production file:',
       productionFile,
     )
 
-    void mainWindow.loadFile(
-      productionFile,
+    appendProductionLog(
+      `App path: ${app.getAppPath()}`,
     )
+
+    appendProductionLog(
+      `Production file: ${productionFile}`,
+    )
+
+    appendProductionLog(
+      `Production file exists: ${fs.existsSync(
+        productionFile,
+      )}`,
+    )
+
+    if (
+      !fs.existsSync(
+        productionFile,
+      )
+    ) {
+      const details =
+        `dist/index.html پیدا نشد:\n${productionFile}`
+
+      appendProductionLog(
+        details,
+      )
+
+      const html =
+        createProductionErrorHtml(
+          'فایل رابط برنامه پیدا نشد',
+          details,
+        )
+
+      void mainWindow.loadURL(
+        `data:text/html;charset=utf-8,${encodeURIComponent(
+          html,
+        )}`,
+      )
+    } else {
+      void mainWindow
+        .loadFile(
+          productionFile,
+        )
+        .catch((error) => {
+          const details =
+            error instanceof Error
+              ? error.stack ||
+                error.message
+              : String(error)
+
+          appendProductionLog(
+            `loadFile rejected:\n${details}`,
+          )
+
+          const html =
+            createProductionErrorHtml(
+              'خطا در اجرای رابط برنامه',
+              details,
+            )
+
+          void mainWindow.loadURL(
+            `data:text/html;charset=utf-8,${encodeURIComponent(
+              html,
+            )}`,
+          )
+        })
+    }
   }
 
   mainWindow.on(
@@ -1577,6 +3299,28 @@ app.whenReady().then(async () => {
     )
   }
 
+  setOptimizerProgressListener(
+    (progress) => {
+      if (
+        mainWindow &&
+        !mainWindow.isDestroyed()
+      ) {
+        mainWindow.webContents.send(
+          'bpb-optimizer:progress',
+          progress,
+        )
+      }
+    },
+  )
+
+  setCloudflareBpbProgressListener(
+    (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('bpb-cloudflare:progress', progress)
+      }
+    },
+  )
+
   registerIpcHandlers()
   createMainWindow()
 
@@ -1604,12 +3348,20 @@ app.on(
     event.preventDefault()
     isQuitting = true
 
-    void disposeProcessManager({
-      userDataPath:
-        app.getPath(
-          'userData',
-        ),
-    }).finally(() => {
+    void Promise.allSettled([
+      disposeProcessManager({
+        userDataPath:
+          app.getPath(
+            'userData',
+          ),
+      }),
+      stopBpbProxy({
+        userDataPath:
+          app.getPath(
+            'userData',
+          ),
+      }),
+    ]).finally(() => {
       void stopVirtualLocationService()
         .catch(() => {
           // Best effort during shutdown.

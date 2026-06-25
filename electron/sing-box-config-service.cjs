@@ -32,6 +32,10 @@ async function createAndCheckConfig({
   userDataPath,
   directDomains,
   rescueOptions,
+  runtimeDirectoryName = 'runtime',
+  configFileName = 'config.json',
+  localPort = 2080,
+  setSystemProxy = false,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -84,17 +88,19 @@ async function createAndCheckConfig({
   const config = buildConfig(
     outbound,
     normalizedDirectDomains,
+    localPort,
+    setSystemProxy,
   )
 
   const runtimeDirectory = path.join(
     userDataPath,
     'HamidsDeutsch-Connect',
-    'runtime',
+    runtimeDirectoryName,
   )
 
   const configPath = path.join(
     runtimeDirectory,
-    'config.json',
+    configFileName,
   )
 
   await writeConfigAtomically(
@@ -134,6 +140,10 @@ async function createAndCheckTunConfig({
   userDataPath,
   directDomains,
   rescueOptions,
+  runtimeDirectoryName = 'runtime',
+  configFileName = 'tun-config.json',
+  localPort = 2080,
+  setSystemProxy = false,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -187,17 +197,19 @@ async function createAndCheckTunConfig({
     buildTunConfig(
       outbound,
       normalizedDirectDomains,
+      localPort,
+      setSystemProxy,
     )
 
   const runtimeDirectory = path.join(
     userDataPath,
     'HamidsDeutsch-Connect',
-    'runtime',
+    runtimeDirectoryName,
   )
 
   const configPath = path.join(
     runtimeDirectory,
-    'tun-config.json',
+    configFileName,
   )
 
   await writeConfigAtomically(
@@ -1124,6 +1136,8 @@ function buildTransportConfig(params) {
 function buildConfig(
   proxyOutbound,
   directDomains,
+  localPort = 2080,
+  setSystemProxy = false,
 ) {
   const rules = []
 
@@ -1147,8 +1161,9 @@ function buildConfig(
         type: 'mixed',
         tag: 'mixed-in',
         listen: '127.0.0.1',
-        listen_port: 2080,
-        set_system_proxy: false,
+        listen_port: localPort,
+        set_system_proxy:
+          setSystemProxy,
       },
     ],
 
@@ -1171,6 +1186,8 @@ function buildConfig(
 function buildTunConfig(
   proxyOutbound,
   directDomains,
+  localPort = 2080,
+  setSystemProxy = false,
 ) {
   const rules = [
     {
@@ -1214,8 +1231,9 @@ function buildTunConfig(
         type: 'mixed',
         tag: 'mixed-in',
         listen: '127.0.0.1',
-        listen_port: 2080,
-        set_system_proxy: false,
+        listen_port: localPort,
+        set_system_proxy:
+          setSystemProxy,
       },
     ],
 
