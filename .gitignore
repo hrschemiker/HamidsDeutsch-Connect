@@ -26,3 +26,8 @@ dist-ssr
 # Network engine binaries
 resources/sing-box/*.exe
 resources/sing-box/*.dll
+
+# Build output / release artifacts
+release/
+release-reports/
+backup-*/
