@@ -36,6 +36,8 @@ const STOP_TIMEOUT_MS =
 
 let activeProcess = null
 
+let pendingStop = false
+
 let state =
   createInitialState()
 
@@ -205,12 +207,16 @@ async function stopBpbProxy({
   const child =
     activeProcess
 
+  // Signal the exit handler to skip its own restore — stopBpbProxy owns it.
+  pendingStop = true
+
   if (child) {
     await terminateChild(
       child,
     )
   }
 
+  pendingStop = false
   activeProcess = null
 
   if (
@@ -307,7 +313,8 @@ function attachListeners(
 
       if (
         typeof userDataPath ===
-          'string'
+          'string' &&
+        !pendingStop
       ) {
         void restoreWindowsProxyState(
           userDataPath,

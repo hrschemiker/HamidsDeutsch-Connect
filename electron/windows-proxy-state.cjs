@@ -278,6 +278,7 @@ async function writeWindowsProxyState(
 
   const script = `
 $ErrorActionPreference = 'Stop'
+$WarningPreference = 'SilentlyContinue'
 $path = 'Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'
 $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($path)
 $json = [Text.Encoding]::UTF8.GetString(
@@ -328,7 +329,9 @@ foreach ($property in $values.PSObject.Properties) {
 
 $key.Close()
 
-Add-Type @'
+try {
+  if (-not ([System.Management.Automation.PSTypeName]'WinInetRefresh').Type) {
+    Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public static class WinInetRefresh {
@@ -340,21 +343,11 @@ public static class WinInetRefresh {
     int dwBufferLength
   );
 }
-'@
-
-[WinInetRefresh]::InternetSetOption(
-  [IntPtr]::Zero,
-  39,
-  [IntPtr]::Zero,
-  0
-) | Out-Null
-
-[WinInetRefresh]::InternetSetOption(
-  [IntPtr]::Zero,
-  37,
-  [IntPtr]::Zero,
-  0
-) | Out-Null
+'@ -WarningAction SilentlyContinue
+  }
+  [WinInetRefresh]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
+  [WinInetRefresh]::InternetSetOption([IntPtr]::Zero, 37, [IntPtr]::Zero, 0) | Out-Null
+} catch {}
 `
 
   await runPowerShell(
@@ -365,6 +358,7 @@ public static class WinInetRefresh {
 async function forceDisableLocalManualProxy() {
   const script = `
 $ErrorActionPreference = 'Stop'
+$WarningPreference = 'SilentlyContinue'
 $path = 'Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'
 $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($path)
 
@@ -386,7 +380,9 @@ if ($isLocalHamidsProxy) {
 
 $key.Close()
 
-Add-Type @'
+try {
+  if (-not ([System.Management.Automation.PSTypeName]'WinInetRefresh').Type) {
+    Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public static class WinInetRefresh {
@@ -398,21 +394,11 @@ public static class WinInetRefresh {
     int dwBufferLength
   );
 }
-'@
-
-[WinInetRefresh]::InternetSetOption(
-  [IntPtr]::Zero,
-  39,
-  [IntPtr]::Zero,
-  0
-) | Out-Null
-
-[WinInetRefresh]::InternetSetOption(
-  [IntPtr]::Zero,
-  37,
-  [IntPtr]::Zero,
-  0
-) | Out-Null
+'@ -WarningAction SilentlyContinue
+  }
+  [WinInetRefresh]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
+  [WinInetRefresh]::InternetSetOption([IntPtr]::Zero, 37, [IntPtr]::Zero, 0) | Out-Null
+} catch {}
 `
 
   await runPowerShell(
@@ -504,17 +490,6 @@ async function runPowerShell(
         shell: false,
       },
     )
-
-    const stderrText =
-      String(
-        stderr ?? '',
-      ).trim()
-
-    if (stderrText) {
-      throw new Error(
-        stderrText,
-      )
-    }
 
     return String(
       stdout ?? '',

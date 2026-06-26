@@ -550,6 +550,13 @@ async function stopLocalProxy({
     typeof userDataPath === 'string' &&
     userDataPath.trim()
 
+  // Clear systemProxyEnabled before killing the process so the exit handler
+  // (which fires during stopSpecificProcess) skips its own restore attempt.
+  // stopLocalProxy owns the restore when it has userDataPath.
+  if (shouldRestoreWindowsProxy) {
+    processState.systemProxyEnabled = false
+  }
+
   if (
     !child ||
     !processState.running

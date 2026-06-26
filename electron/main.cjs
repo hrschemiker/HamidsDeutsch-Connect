@@ -69,6 +69,7 @@ const {
 
 const {
   recoverStaleWindowsProxyState,
+  backupWindowsProxyState,
 } = require('./windows-proxy-state.cjs')
 
 const {
@@ -228,6 +229,27 @@ async function testFreeNodes(records) {
   return result.results
 }
 
+async function testProxyConnectivity(port = 2080, timeoutMs = 6000) {
+  return new Promise((resolve) => {
+    const net = require('node:net')
+    const socket = new net.Socket()
+    const request = `CONNECT cloudflare.com:443 HTTP/1.1\r\nHost: cloudflare.com:443\r\n\r\n`
+    let resolved = false
+    const done = (ok) => {
+      if (!resolved) { resolved = true; socket.destroy(); resolve(ok) }
+    }
+    socket.setTimeout(timeoutMs)
+    socket.connect(port, '127.0.0.1', () => {
+      socket.write(request)
+    })
+    socket.once('data', (chunk) => {
+      done(chunk.toString().startsWith('HTTP/1') && chunk.toString().includes('200'))
+    })
+    socket.on('timeout', () => done(false))
+    socket.on('error', () => done(false))
+  })
+}
+
 async function tryConnectFreeNode(record, directDomains, rescueOptions) {
   const enginePath = getEnginePath()
   const userDataPath = app.getPath('userData')
@@ -247,8 +269,18 @@ async function tryConnectFreeNode(record, directDomains, rescueOptions) {
     })
     if (!configResult.success) return null
 
+    // Backup Windows proxy state BEFORE sing-box sets the system proxy
+    await backupWindowsProxyState(userDataPath).catch(() => {})
+
     const started = await startLocalProxy({ enginePath, userDataPath, configPath: configResult.configPath })
     if (!started.success) return null
+
+    // Verify that the proxy can actually tunnel traffic (not just reachable via TCP)
+    const proxyWorks = await testProxyConnectivity(2080)
+    if (!proxyWorks) {
+      await stopLocalProxy({ userDataPath }).catch(() => {})
+      return null
+    }
 
     return configResult.configPath
   } catch {
