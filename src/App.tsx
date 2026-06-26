@@ -1,4 +1,6 @@
 import {
+  createContext,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -24,6 +26,181 @@ import { useConnectionSettings } from './settings/use-connection-settings'
 import { useConnectionDiagnostics } from './diagnostics/use-connection-diagnostics'
 import { BpbPage } from './bpb/BpbPage'
 import './App.css'
+
+// ── Theme & Language ─────────────────────────────────────────────────────────
+
+type Theme = 'dark' | 'light'
+type Lang = 'fa' | 'en'
+
+const ThemeCtx = createContext<{ theme: Theme; setTheme: (t: Theme) => void }>({
+  theme: 'dark',
+  setTheme: () => {},
+})
+
+const LangCtx = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({
+  lang: 'fa',
+  setLang: () => {},
+})
+
+const TR: Record<Lang, Record<string, string>> = {
+  fa: {
+    'nav.home': 'خانه',
+    'nav.servers': 'سرورها',
+    'nav.subscriptions': 'اشتراک‌ها',
+    'nav.bpb': 'اتصال BPB',
+    'nav.directSites': 'سایت‌های مستقیم',
+    'nav.rescue': 'مرکز نجات',
+    'nav.statistics': 'آمار',
+    'nav.logs': 'گزارش',
+    'nav.settings': 'تنظیمات',
+    'page.home': 'خانه',
+    'page.servers': 'سرورها',
+    'page.subscriptions': 'اشتراک‌ها',
+    'page.bpb': 'اتصال مستقل BPB',
+    'page.directSites': 'سایت‌های مستقیم',
+    'page.rescue': 'مرکز نجات اتصال',
+    'page.statistics': 'آمار اتصال',
+    'page.logs': 'گزارش برنامه',
+    'page.settings': 'تنظیمات',
+    'status.connected': 'متصل',
+    'status.disconnected': 'قطع',
+    'status.connecting': 'در حال راه‌اندازی',
+    'status.stopping': 'در حال توقف',
+    'status.checkingIp': 'در حال بررسی IP',
+    'status.findingServer': 'در حال یافتن سرور سالم',
+    'status.recovering': 'در حال بازیابی خودکار',
+    'status.verifying': 'System Proxy فعال؛ در حال تأیید',
+    'status.proxyReady': 'پروکسی آماده؛ IP تأیید نشده',
+    'status.running': 'در حال اجرا',
+    'status.tunConnected': 'متصل با TUN',
+    'btn.connect': 'اتصال با سریع‌ترین سرور',
+    'btn.disconnect': 'قطع اتصال',
+    'btn.processing': 'در حال انجام عملیات...',
+    'btn.verifyingIp': 'در حال تأیید تغییر IP...',
+    'settings.appearance': 'ظاهر برنامه',
+    'settings.appearanceKicker': 'Appearance',
+    'settings.themeLabel': 'پوسته برنامه',
+    'settings.dark': 'تاریک (پیش‌فرض)',
+    'settings.light': 'روشن',
+    'settings.language': 'زبان',
+    'settings.languageKicker': 'Language',
+    'settings.langFa': 'فارسی (پیش‌فرض)',
+    'settings.langEn': 'English',
+    'settings.appearanceNote': 'تغییر پوسته و زبان بلافاصله اعمال می‌شود.',
+    'toggle.themeToDark': 'حالت تاریک',
+    'toggle.themeToLight': 'حالت روشن',
+    'toggle.lang': 'تغییر زبان',
+    'engineCore': 'هسته برنامه',
+    'version': 'نسخه ۰.۱.۰',
+  },
+  en: {
+    'nav.home': 'Home',
+    'nav.servers': 'Servers',
+    'nav.subscriptions': 'Subscriptions',
+    'nav.bpb': 'BPB Connect',
+    'nav.directSites': 'Direct Sites',
+    'nav.rescue': 'Rescue Center',
+    'nav.statistics': 'Statistics',
+    'nav.logs': 'Logs',
+    'nav.settings': 'Settings',
+    'page.home': 'Home',
+    'page.servers': 'Servers',
+    'page.subscriptions': 'Subscriptions',
+    'page.bpb': 'BPB Independent Connect',
+    'page.directSites': 'Direct Sites',
+    'page.rescue': 'Connection Rescue',
+    'page.statistics': 'Statistics',
+    'page.logs': 'Application Logs',
+    'page.settings': 'Settings',
+    'status.connected': 'Connected',
+    'status.disconnected': 'Disconnected',
+    'status.connecting': 'Starting up',
+    'status.stopping': 'Stopping',
+    'status.checkingIp': 'Verifying IP',
+    'status.findingServer': 'Finding best server',
+    'status.recovering': 'Auto-recovering',
+    'status.verifying': 'System Proxy active — verifying',
+    'status.proxyReady': 'Proxy ready — IP not confirmed',
+    'status.running': 'Running',
+    'status.tunConnected': 'Connected via TUN',
+    'btn.connect': 'Connect to fastest server',
+    'btn.disconnect': 'Disconnect',
+    'btn.processing': 'Processing...',
+    'btn.verifyingIp': 'Verifying IP change...',
+    'settings.appearance': 'Appearance',
+    'settings.appearanceKicker': 'Appearance',
+    'settings.themeLabel': 'App theme',
+    'settings.dark': 'Dark (default)',
+    'settings.light': 'Light',
+    'settings.language': 'Language',
+    'settings.languageKicker': 'Language',
+    'settings.langFa': 'فارسی (default)',
+    'settings.langEn': 'English',
+    'settings.appearanceNote': 'Theme and language changes apply immediately.',
+    'toggle.themeToDark': 'Dark mode',
+    'toggle.themeToLight': 'Light mode',
+    'toggle.lang': 'Change language',
+    'engineCore': 'Engine Core',
+    'version': 'Version 0.1.0',
+  },
+}
+
+function useT() {
+  const { lang } = useContext(LangCtx)
+  return (key: string, fallback?: string) => TR[lang][key] ?? fallback ?? key
+}
+
+// ── InfoButton — hides description by default, shown on click ────────────────
+
+function InfoButton({ fa, en }: { fa: string; en: string }) {
+  const { lang } = useContext(LangCtx)
+  const [open, setOpen] = useState(false)
+  const text = lang === 'en' ? en : fa
+  return (
+    <span className="info-btn-wrap">
+      <button
+        className="info-btn"
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        title={lang === 'en' ? 'Info' : 'توضیحات'}
+      >
+        ?
+      </button>
+      {open && (
+        <span className="info-panel" role="note">
+          {text}
+        </span>
+      )}
+    </span>
+  )
+}
+
+// ── Navigation items (with i18n keys) ────────────────────────────────────────
+
+const NAV_I18N: Record<string, string> = {
+  home: 'nav.home',
+  servers: 'nav.servers',
+  subscriptions: 'nav.subscriptions',
+  bpb: 'nav.bpb',
+  'direct-sites': 'nav.directSites',
+  rescue: 'nav.rescue',
+  statistics: 'nav.statistics',
+  logs: 'nav.logs',
+  settings: 'nav.settings',
+}
+
+const PAGE_I18N: Record<string, string> = {
+  home: 'page.home',
+  servers: 'page.servers',
+  subscriptions: 'page.subscriptions',
+  bpb: 'page.bpb',
+  'direct-sites': 'page.directSites',
+  rescue: 'page.rescue',
+  statistics: 'page.statistics',
+  logs: 'page.logs',
+  settings: 'page.settings',
+}
 
 type PageId =
   | 'home'
@@ -87,6 +264,25 @@ const pageTitles: Record<PageId, string> = {
 }
 
 function App() {
+  const [theme, setThemeState] = useState<Theme>(
+    () => (localStorage.getItem('hd-theme') as Theme) || 'dark',
+  )
+  const [lang, setLangState] = useState<Lang>(
+    () => (localStorage.getItem('hd-lang') as Lang) || 'fa',
+  )
+
+  function setTheme(t: Theme) {
+    setThemeState(t)
+    localStorage.setItem('hd-theme', t)
+  }
+
+  function setLang(l: Lang) {
+    setLangState(l)
+    localStorage.setItem('hd-lang', l)
+  }
+
+  const t = (key: string, fallback?: string) => TR[lang][key] ?? fallback ?? key
+
   const [activePage, setActivePage] = useState<PageId>('home')
   const [connectionActionError, setConnectionActionError] =
     useState<string | null>(null)
@@ -973,7 +1169,9 @@ function App() {
   ])
 
   return (
-    <div className="application-shell">
+    <ThemeCtx.Provider value={{ theme, setTheme }}>
+      <LangCtx.Provider value={{ lang, setLang }}>
+    <div className="application-shell" data-theme={theme}>
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark"><span>H</span></div>
@@ -983,7 +1181,7 @@ function App() {
           </div>
         </div>
 
-        <nav className="navigation" aria-label="منوی اصلی">
+        <nav className="navigation" aria-label={t('nav.settings')}>
           {navigationItems.map((item) => (
             <button
               className={
@@ -996,7 +1194,7 @@ function App() {
               onClick={() => setActivePage(item.id)}
             >
               <span className="navigation-icon">{item.icon}</span>
-              <span>{item.label}</span>
+              <span>{t(NAV_I18N[item.id], item.label)}</span>
             </button>
           ))}
         </nav>
@@ -1011,19 +1209,19 @@ function App() {
               }
             />
             <div>
-              <strong>هسته برنامه</strong>
+              <strong>{t('engineCore', 'هسته برنامه')}</strong>
               <span>
                 {connectionVerified
-                  ? `متصل · ${ipVerification.result.proxyIp ?? 'IP تأییدشده'}`
+                  ? `${t('status.connected')} · ${ipVerification.result.proxyIp ?? 'IP'}`
                   : engineProcess.status.ready
-                    ? `پروکسی محلی ${engineProcess.status.localPort}`
+                    ? `Proxy ${engineProcess.status.localPort}`
                     : engine.info?.healthy
                       ? `sing-box ${engine.info.version}`
-                      : 'در دسترس نیست'}
+                      : lang === 'en' ? 'Unavailable' : 'در دسترس نیست'}
               </span>
             </div>
           </div>
-          <div className="version">نسخه 0.1.0</div>
+          <div className="version">{t('version', 'نسخه ۰.۱.۰')}</div>
         </div>
       </aside>
 
@@ -1031,7 +1229,28 @@ function App() {
         <header className="topbar">
           <div>
             <p className="topbar-eyebrow">HamidsDeutsch Connect</p>
-            <h1>{pageTitles[activePage]}</h1>
+            <h1>{t(PAGE_I18N[activePage], pageTitles[activePage])}</h1>
+          </div>
+
+          <div className="topbar-controls">
+            <button
+              className="topbar-icon-btn"
+              type="button"
+              title={theme === 'dark' ? t('toggle.themeToLight') : t('toggle.themeToDark')}
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              aria-label={theme === 'dark' ? t('toggle.themeToLight') : t('toggle.themeToDark')}
+            >
+              {theme === 'dark' ? '☀' : '☽'}
+            </button>
+            <button
+              className="topbar-icon-btn"
+              type="button"
+              title={t('toggle.lang', 'تغییر زبان')}
+              onClick={() => setLang(lang === 'fa' ? 'en' : 'fa')}
+              aria-label={t('toggle.lang', 'تغییر زبان')}
+            >
+              🌐
+            </button>
           </div>
 
           <div
@@ -1044,26 +1263,26 @@ function App() {
             <span className="connection-pill-dot" />
             <span>
               {connectionWatchdogMessage
-                ? 'در حال بازیابی خودکار'
+                ? t('status.recovering')
                 : automaticConnectionRunning
-                  ? 'در حال یافتن سرور سالم'
+                  ? t('status.findingServer')
                   : engineProcess.starting
-                  ? 'در حال راه‌اندازی'
+                  ? t('status.connecting')
                 : engineProcess.stopping
-                  ? 'در حال توقف'
+                  ? t('status.stopping')
                   : ipVerification.checking
-                    ? 'در حال بررسی IP'
+                    ? t('status.checkingIp')
                     : connectionVerified
                       ? engineProcess.status.connectionMode === 'tun'
-                        ? 'متصل با TUN'
-                        : 'متصل'
+                        ? t('status.tunConnected')
+                        : t('status.connected')
                       : engineProcess.status.systemProxyEnabled
-                        ? 'System Proxy فعال؛ در حال تأیید'
+                        ? t('status.verifying')
                         : engineProcess.status.ready
-                          ? 'پروکسی آماده؛ IP تأیید نشده'
+                          ? t('status.proxyReady')
                         : engineProcess.status.running
-                          ? 'در حال اجرا'
-                          : 'قطع'}
+                          ? t('status.running')
+                          : t('status.disconnected')}
             </span>
           </div>
         </header>
@@ -1330,6 +1549,8 @@ function App() {
         </main>
       </section>
     </div>
+      </LangCtx.Provider>
+    </ThemeCtx.Provider>
   )
 }
 
@@ -1654,15 +1875,16 @@ function HomePage({
             <span className="panel-kicker">GitHub Codespace</span>
             <h3>اتصال از طریق GitHub</h3>
           </div>
-          {codespaceConnected && codespaceHost && (
-            <span className="codespace-host-badge" dir="ltr">{codespaceHost}</span>
-          )}
+          <div className="codespace-header-end">
+            {codespaceConnected && codespaceHost && (
+              <span className="codespace-host-badge" dir="ltr">{codespaceHost}</span>
+            )}
+            <InfoButton
+              fa="یک سرور پروکسی موقت روی زیرساخت GitHub می‌سازد و از طریق پروتکل VLESS + WebSocket متصل می‌شود. نیازی به سرور اختصاصی نیست. توکن GitHub باید در تنظیمات وارد شده باشد."
+              en="Spins up a temporary proxy server on GitHub's infrastructure and connects via VLESS + WebSocket. No dedicated server needed. A GitHub PAT must be configured in Settings."
+            />
+          </div>
         </div>
-
-        <p className="codespace-description">
-          یک سرور پروکسی موقت روی زیرساخت GitHub می‌سازد و از طریق پروتکل VLESS متصل می‌شود.
-          نیازی به سرور اختصاصی نیست.
-        </p>
 
         {codespaceProgress && (
           <div className="codespace-progress">{codespaceProgress}</div>
@@ -2324,9 +2546,15 @@ function SubscriptionsPage({
             <h3>افزودن اشتراک امن</h3>
           </div>
 
-          <span className="count-badge">
-            {subscriptions.length} اشتراک
-          </span>
+          <div className="heading-end-row">
+            <span className="count-badge">
+              {subscriptions.length} اشتراک
+            </span>
+            <InfoButton
+              fa="لینک اشتراک در فایل داده برنامه به‌صورت رمزگذاری‌شده ذخیره می‌شود. اصل لینک پس از ذخیره در این صفحه نمایش داده نخواهد شد."
+              en="The subscription URL is stored encrypted in the app data folder. The original link will not be shown on this page after saving."
+            />
+          </div>
         </div>
 
         <label
@@ -2389,13 +2617,6 @@ function SubscriptionsPage({
               : 'افزودن'}
           </button>
         </div>
-
-        <p className="field-help">
-          لینک اشتراک در فایل داده برنامه
-          به‌صورت رمزگذاری‌شده ذخیره می‌شود.
-          اصل لینک پس از ذخیره در این صفحه
-          نمایش داده نخواهد شد.
-        </p>
 
         {message && (
           <div
@@ -2778,14 +2999,13 @@ function ServersPage({
                 لغو انتخاب
               </button>
             )}
+
+            <InfoButton
+              fa="سرورهای همه اشتراک‌ها باهم بررسی و از سریع‌ترین به کندترین مرتب می‌شوند. برای دیدن اشتراک، آدرس، پورت و سایر جزئیات روی هر ردیف بزن."
+              en="All subscription servers are tested together and sorted fastest to slowest. Tap a row to see subscription, address, port, and other details."
+            />
           </div>
         </div>
-
-        <p className="field-help">
-          سرورهای همه اشتراک‌ها باهم بررسی و از سریع‌ترین به کندترین
-          مرتب می‌شوند. برای دیدن اشتراک، آدرس، پورت و سایر جزئیات روی هر
-          ردیف بزن.
-        </p>
 
         {latencyError && (
           <div className="form-message form-message-error">
@@ -3382,14 +3602,12 @@ function DirectSitesPage({
           >
             افزودن
           </button>
-        </div>
 
-        <p className="field-help">
-          می‌توانی آدرس را با https، بدون
-          https، همراه مسیر کامل یا با پیشوند
-          domain وارد کنی. برنامه نام دامنه را
-          خودکار استخراج می‌کند.
-        </p>
+          <InfoButton
+            fa="می‌توانی آدرس را با https، بدون https، همراه مسیر کامل یا با پیشوند domain وارد کنی. برنامه نام دامنه را خودکار استخراج می‌کند."
+            en="You can enter the address with or without https, as a full URL, or with a domain: prefix. The app automatically extracts the domain name."
+          />
+        </div>
 
         <div className="bulk-domain-import">
           <div className="bulk-domain-heading">
@@ -3423,25 +3641,24 @@ domain:hamidrezasaadati.com`}
             }}
           />
 
-          <button
-            className="secondary-button bulk-domain-button"
-            type="button"
-            disabled={
-              !bulkDomainInput.trim()
-            }
-            onClick={
-              handleAddDomains
-            }
-          >
-            افزودن همه دامنه‌های معتبر
-          </button>
-
-          <p className="field-help">
-            پیشوندهای <code>domain:</code>، آدرس کامل
-            با https، ویرگول انتهای خط و خطوط خالی
-            خودکار پاک می‌شوند. موارد تکراری دوباره
-            ثبت نخواهند شد.
-          </p>
+          <div className="bulk-footer-row">
+            <button
+              className="secondary-button bulk-domain-button"
+              type="button"
+              disabled={
+                !bulkDomainInput.trim()
+              }
+              onClick={
+                handleAddDomains
+              }
+            >
+              افزودن همه دامنه‌های معتبر
+            </button>
+            <InfoButton
+              fa="پیشوندهای domain:، آدرس کامل با https، ویرگول انتهای خط و خطوط خالی خودکار پاک می‌شوند. موارد تکراری دوباره ثبت نخواهند شد."
+              en="domain: prefixes, full https URLs, trailing commas, and blank lines are stripped automatically. Duplicates are ignored."
+            />
+          </div>
         </div>
 
         {message && (
@@ -4056,6 +4273,11 @@ function LogsPage({
         </div>
 
         <div className="log-actions">
+          <InfoButton
+            fa="این گزارش شامل URI، UUID، رمز، کلید یا نشانی اشتراک نیست و فقط وضعیت عملیاتی اتصال را نگه می‌دارد."
+            en="This log contains no URIs, UUIDs, passwords, keys, or subscription URLs — only operational connection status is recorded."
+          />
+
           <button
             className="secondary-button"
             type="button"
@@ -4083,12 +4305,6 @@ function LogsPage({
           </button>
         </div>
       </div>
-
-      <p className="panel-description">
-        این گزارش شامل URI، UUID، رمز، کلید یا
-        نشانی اشتراک نیست و فقط وضعیت عملیاتی اتصال
-        را نگه می‌دارد.
-      </p>
 
       {events.length === 0 ? (
         <EmptyPage
@@ -4496,8 +4712,78 @@ function SettingsPage({
     }
   }
 
+  const t = useT()
+  const { theme, setTheme } = useContext(ThemeCtx)
+  const { lang, setLang } = useContext(LangCtx)
+
   return (
     <div className="page-stack">
+
+      {/* ── Appearance ─────────────────────────────────────────────── */}
+      <section className="panel-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">{t('settings.appearanceKicker')}</span>
+            <h3>{t('settings.appearance')}</h3>
+          </div>
+        </div>
+
+        <div className="appearance-options">
+          <label className="appearance-option">
+            <input
+              type="radio"
+              name="theme"
+              value="dark"
+              checked={theme === 'dark'}
+              onChange={() => setTheme('dark')}
+            />
+            <span className="appearance-option-icon">☽</span>
+            <span>{t('settings.dark')}</span>
+          </label>
+          <label className="appearance-option">
+            <input
+              type="radio"
+              name="theme"
+              value="light"
+              checked={theme === 'light'}
+              onChange={() => setTheme('light')}
+            />
+            <span className="appearance-option-icon">☀</span>
+            <span>{t('settings.light')}</span>
+          </label>
+        </div>
+
+        <div className="appearance-options" style={{ marginTop: '16px' }}>
+          <label className="appearance-option">
+            <input
+              type="radio"
+              name="lang"
+              value="fa"
+              checked={lang === 'fa'}
+              onChange={() => setLang('fa')}
+            />
+            <span className="appearance-option-icon">🌐</span>
+            <span>{t('settings.langFa')}</span>
+          </label>
+          <label className="appearance-option">
+            <input
+              type="radio"
+              name="lang"
+              value="en"
+              checked={lang === 'en'}
+              onChange={() => setLang('en')}
+            />
+            <span className="appearance-option-icon">🌐</span>
+            <span>{t('settings.langEn')}</span>
+          </label>
+        </div>
+
+        <p className="inline-notice" style={{ marginTop: '12px' }}>
+          {t('settings.appearanceNote')}
+        </p>
+      </section>
+
+      {/* ── Connection routing ──────────────────────────────────────── */}
       <section className="panel-card">
         <div className="panel-heading">
           <div>
@@ -4613,17 +4899,16 @@ function SettingsPage({
             </h3>
           </div>
 
-          <span className="count-badge">
-            {directDomainCount} دامنه
-          </span>
+          <div className="heading-end-row">
+            <span className="count-badge">
+              {directDomainCount} دامنه
+            </span>
+            <InfoButton
+              fa="دامنه‌های این فهرست از خروجی مستقیم اینترنت باز می‌شوند و وارد تونل نمی‌شوند. این قانون هم در TUN و هم در System Proxy اعمال می‌شود."
+              en="Domains in this list bypass the VPN tunnel and connect directly. This rule applies in both TUN and System Proxy modes."
+            />
+          </div>
         </div>
-
-        <p className="panel-description">
-          دامنه‌های این فهرست از خروجی مستقیم
-          اینترنت باز می‌شوند و وارد تونل
-          نمی‌شوند. این قانون هم در TUN و هم در
-          System Proxy اعمال می‌شود.
-        </p>
 
         <button
           className="primary-button compact-primary"
@@ -4647,16 +4932,16 @@ function SettingsPage({
             </h3>
           </div>
 
-          <span className="count-badge">
-            Stable only
-          </span>
+          <div className="heading-end-row">
+            <span className="count-badge">
+              Stable only
+            </span>
+            <InfoButton
+              fa="نسخه فعلی با آخرین Release پایدار رسمی SagerNet مقایسه می‌شود. نسخه‌های Alpha، Beta و RC نصب نخواهند شد."
+              en="The current version is compared against the latest stable SagerNet release. Alpha, Beta, and RC versions will not be installed."
+            />
+          </div>
         </div>
-
-        <p className="panel-description">
-          نسخه فعلی با آخرین Release پایدار رسمی
-          SagerNet مقایسه می‌شود. نسخه‌های Alpha،
-          Beta و RC نصب نخواهند شد.
-        </p>
 
         <div className="engine-version-grid">
           <div>
@@ -4730,11 +5015,6 @@ function SettingsPage({
           </div>
         )}
 
-        <p className="virtual-location-privacy">
-          فایل فقط از GitHub رسمی SagerNet دریافت
-          می‌شود، SHA-256 آن بررسی می‌گردد و در صورت
-          شکست نصب، نسخه قبلی حفظ خواهد شد.
-        </p>
       </section>
 
       <section className="panel-card virtual-location-card">
@@ -4748,18 +5028,16 @@ function SettingsPage({
             </h3>
           </div>
 
-          <span className="count-badge">
-            Chrome / Edge
-          </span>
+          <div className="heading-end-row">
+            <span className="count-badge">
+              Chrome / Edge
+            </span>
+            <InfoButton
+              fa="افزونه همراه فقط هنگام اتصال تأییدشده HamidsDeutsch فعال می‌شود و مختصات HTML5 Geolocation را با کشور و شهر IP خروجی هماهنگ می‌کند. با قطع برنامه یا استفاده از VPN دیگر، خودکار غیرفعال می‌شود."
+              en="The bundled extension activates only on a verified HamidsDeutsch connection, aligning HTML5 Geolocation coordinates with the exit IP country and city. It deactivates automatically when the app disconnects or another VPN is used."
+            />
+          </div>
         </div>
-
-        <p className="panel-description">
-          افزونه همراه فقط هنگام اتصال تأییدشده
-          HamidsDeutsch فعال می‌شود و مختصات HTML5
-          Geolocation را با کشور و شهر IP خروجی
-          هماهنگ می‌کند. با قطع برنامه یا استفاده
-          از VPN دیگر، خودکار غیرفعال می‌شود.
-        </p>
 
         <div className="virtual-location-steps">
           <span>
@@ -4801,11 +5079,6 @@ function SettingsPage({
           </div>
         )}
 
-        <p className="virtual-location-privacy">
-          نصب افزونه در مرورگر فقط یک‌بار است؛
-          روشن و خاموش‌شدن آن پس از آن کاملاً خودکار
-          و وابسته به وضعیت همین برنامه خواهد بود.
-        </p>
       </section>
 
       <GitHubSection />
@@ -4900,13 +5173,11 @@ function GitHubSection() {
         {status?.hasToken && (
           <span className="count-badge">متصل</span>
         )}
+        <InfoButton
+          fa="برای استفاده از اتصال Codespace، یک Personal Access Token با دسترسی‌های codespace و repo وارد کن. توکن به‌صورت رمزگذاری‌شده ذخیره می‌شود و هیچ‌گاه به‌صورت متن ساده نگهداری نخواهد شد."
+          en="To use Codespace connection, enter a Personal Access Token with codespace and repo scopes. The token is stored encrypted and never kept in plain text."
+        />
       </div>
-
-      <p className="panel-description">
-        برای استفاده از اتصال Codespace، یک Personal Access Token با دسترسی‌های{' '}
-        <strong>codespace</strong> و <strong>repo</strong> وارد کن.
-        توکن رمزگذاری‌شده ذخیره می‌شود.
-      </p>
 
       {status?.hasToken ? (
         <div className="github-status-grid">

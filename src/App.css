@@ -14,6 +14,67 @@
   --red-soft: rgba(212, 70, 70, 0.14);
   --green: #36b37e;
   --green-soft: rgba(54, 179, 126, 0.14);
+  --sidebar-bg: rgba(10, 11, 15, 0.92);
+}
+
+[data-theme="light"] {
+  --background: #f4f4f2;
+  --surface: #ffffff;
+  --surface-soft: #f0f0ee;
+  --surface-hover: #e8e8e5;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.16);
+  --text: #18181a;
+  --text-soft: #52525a;
+  --text-muted: #8a8a8e;
+  --gold-soft: rgba(230, 184, 79, 0.18);
+  --red-soft: rgba(212, 70, 70, 0.12);
+  --green-soft: rgba(54, 179, 126, 0.12);
+  --sidebar-bg: rgba(242, 242, 240, 0.96);
+}
+
+[data-theme="light"] .application-shell {
+  background:
+    radial-gradient(
+      circle at 90% 5%,
+      rgba(230, 184, 79, 0.07),
+      transparent 28%
+    ),
+    var(--background);
+}
+
+[data-theme="light"] .sidebar {
+  background: var(--sidebar-bg);
+}
+
+[data-theme="light"] .brand-mark {
+  background:
+    linear-gradient(145deg, rgba(230, 184, 79, 0.28), transparent),
+    #fdfbf5;
+}
+
+[data-theme="light"] .hero-card {
+  background: linear-gradient(
+    135deg,
+    var(--surface-soft) 0%,
+    var(--surface) 100%
+  ) !important;
+  border-color: var(--border-strong);
+}
+
+[data-theme="light"] .connection-orbit {
+  border-color: var(--border-strong);
+  background: var(--surface-soft);
+}
+
+[data-theme="light"] .connection-orbit-middle {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+[data-theme="light"] .connection-orbit-core {
+  background: linear-gradient(145deg, var(--surface-soft), var(--surface));
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
 }
 
 * {
@@ -49,7 +110,7 @@ button {
   min-height: 100vh;
   padding: 24px 18px;
   border-left: 1px solid var(--border);
-  background: rgba(10, 11, 15, 0.9);
+  background: var(--sidebar-bg);
 }
 
 .brand {
@@ -193,6 +254,10 @@ button {
   backdrop-filter: blur(16px);
 }
 
+[data-theme="light"] .topbar {
+  background: rgba(244, 244, 242, 0.82);
+}
+
 .topbar-eyebrow {
   margin: 0 0 3px;
   color: var(--text-muted);
@@ -203,6 +268,37 @@ button {
 .topbar h1 {
   margin: 0;
   font-size: 21px;
+}
+
+.topbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 16px;
+  transition:
+    background 160ms,
+    border-color 160ms,
+    color 160ms,
+    transform 120ms;
+}
+
+.topbar-icon-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: var(--gold-soft);
+  transform: scale(1.06);
 }
 
 .connection-pill {
@@ -3395,4 +3491,128 @@ button {
 .github-section-actions {
   display: flex;
   gap: 10px;
+}
+
+/* ── InfoButton ──────────────────────────────────────────────────────────── */
+
+.info-btn-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.info-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-muted);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+  transition:
+    border-color 160ms,
+    color 160ms,
+    background 160ms,
+    transform 120ms;
+}
+
+.info-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: var(--gold-soft);
+  transform: scale(1.1);
+}
+
+.info-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 200;
+  min-width: 240px;
+  max-width: 320px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.65;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  cursor: default;
+}
+
+[data-theme="light"] .info-panel {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+}
+
+/* When in RTL layout, open towards right so it doesn't clip off-screen */
+.panel-heading .info-btn-wrap .info-panel,
+.heading-end-row .info-panel {
+  left: auto;
+  right: 0;
+}
+
+/* ── Heading helpers ─────────────────────────────────────────────────────── */
+
+.heading-end-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.codespace-header-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bulk-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Appearance / Language options ───────────────────────────────────────── */
+
+.appearance-options {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.appearance-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-soft);
+  transition:
+    border-color 160ms,
+    background 160ms,
+    color 160ms;
+}
+
+.appearance-option:has(input:checked) {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+  color: var(--text);
+}
+
+.appearance-option input[type="radio"] {
+  display: none;
+}
+
+.appearance-option-icon {
+  font-size: 16px;
 }
