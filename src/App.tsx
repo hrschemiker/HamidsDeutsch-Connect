@@ -54,7 +54,7 @@ type FreePoolServer = {
 // ── Theme & Language ─────────────────────────────────────────────────────────
 
 type Theme = 'dark' | 'light'
-type Lang = 'fa' | 'en'
+type Lang = 'fa' | 'en' | 'de'
 
 const ThemeCtx = createContext<{ theme: Theme; setTheme: (t: Theme) => void }>({
   theme: 'dark',
@@ -67,6 +67,59 @@ const LangCtx = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({
 })
 
 const TR: Record<Lang, Record<string, string>> = {
+  de: {
+    'nav.home': 'Startseite',
+    'nav.servers': 'Server',
+    'nav.subscriptions': 'Abonnements',
+    'nav.bpb': 'BPB Verbindung',
+    'nav.directSites': 'Direkte Seiten',
+    'nav.rescue': 'Rettungszentrum',
+    'nav.statistics': 'Statistiken',
+    'nav.logs': 'Protokolle',
+    'nav.guide': 'Anleitung',
+    'nav.settings': 'Einstellungen',
+    'page.home': 'Startseite',
+    'page.servers': 'Server',
+    'page.subscriptions': 'Abonnements',
+    'page.bpb': 'BPB Unabhängige Verbindung',
+    'page.directSites': 'Direkte Seiten',
+    'page.rescue': 'Verbindungsrettung',
+    'page.statistics': 'Statistiken',
+    'page.logs': 'Anwendungsprotokoll',
+    'page.guide': 'Verbindungsanleitung',
+    'page.settings': 'Einstellungen',
+    'status.connected': 'Verbunden',
+    'status.disconnected': 'Getrennt',
+    'status.connecting': 'Verbinde...',
+    'status.stopping': 'Trenne...',
+    'status.checkingIp': 'IP wird geprüft',
+    'status.findingServer': 'Bester Server wird gesucht',
+    'status.recovering': 'Automatische Wiederherstellung',
+    'status.verifying': 'System-Proxy aktiv – wird verifiziert',
+    'status.proxyReady': 'Proxy bereit – IP nicht bestätigt',
+    'status.running': 'Läuft',
+    'status.tunConnected': 'Verbunden via TUN',
+    'btn.connect': 'Mit schnellstem Server verbinden',
+    'btn.disconnect': 'Trennen',
+    'btn.processing': 'Verarbeitung...',
+    'btn.verifyingIp': 'IP-Änderung wird verifiziert...',
+    'settings.appearance': 'Erscheinungsbild',
+    'settings.appearanceKicker': 'Appearance',
+    'settings.themeLabel': 'App-Design',
+    'settings.dark': 'Dunkel (Standard)',
+    'settings.light': 'Hell',
+    'settings.language': 'Sprache',
+    'settings.languageKicker': 'Language',
+    'settings.langFa': 'فارسی',
+    'settings.langEn': 'English',
+    'settings.langDe': 'Deutsch (Standard)',
+    'settings.appearanceNote': 'Design- und Sprachänderungen werden sofort übernommen.',
+    'toggle.themeToDark': 'Dunkelmodus',
+    'toggle.themeToLight': 'Hellmodus',
+    'toggle.lang': 'Sprache wechseln',
+    'engineCore': 'Kern',
+    'version': 'Version 0.1.0',
+  },
   fa: {
     'nav.home': 'خانه',
     'nav.servers': 'سرورها',
@@ -112,6 +165,7 @@ const TR: Record<Lang, Record<string, string>> = {
     'settings.languageKicker': 'Language',
     'settings.langFa': 'فارسی (پیش‌فرض)',
     'settings.langEn': 'English',
+    'settings.langDe': 'Deutsch',
     'settings.appearanceNote': 'تغییر پوسته و زبان بلافاصله اعمال می‌شود.',
     'toggle.themeToDark': 'حالت تاریک',
     'toggle.themeToLight': 'حالت روشن',
@@ -162,8 +216,9 @@ const TR: Record<Lang, Record<string, string>> = {
     'settings.light': 'Light',
     'settings.language': 'Language',
     'settings.languageKicker': 'Language',
-    'settings.langFa': 'فارسی (default)',
-    'settings.langEn': 'English',
+    'settings.langFa': 'فارسی',
+    'settings.langEn': 'English (default)',
+    'settings.langDe': 'Deutsch',
     'settings.appearanceNote': 'Theme and language changes apply immediately.',
     'toggle.themeToDark': 'Dark mode',
     'toggle.themeToLight': 'Light mode',
@@ -214,7 +269,7 @@ function ConfirmDialog({
 function InfoButton({ fa, en }: { fa: string; en: string }) {
   const { lang } = useContext(LangCtx)
   const [open, setOpen] = useState(false)
-  const text = lang === 'en' ? en : fa
+  const text = lang === 'fa' ? fa : en
   return (
     <span className="info-btn-wrap">
       <button
@@ -222,7 +277,7 @@ function InfoButton({ fa, en }: { fa: string; en: string }) {
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        title={lang === 'en' ? 'Info' : 'توضیحات'}
+        title={lang === 'fa' ? 'توضیحات' : 'Info'}
       >
         ?
       </button>
@@ -332,7 +387,10 @@ function App() {
     () => (localStorage.getItem('hd-theme') as Theme) || 'dark',
   )
   const [lang, setLangState] = useState<Lang>(
-    () => (localStorage.getItem('hd-lang') as Lang) || 'fa',
+    () => {
+      const saved = localStorage.getItem('hd-lang') as Lang | null
+      return (saved === 'fa' || saved === 'en' || saved === 'de') ? saved : 'fa'
+    },
   )
 
   function setTheme(t: Theme) {
@@ -1294,7 +1352,7 @@ function App() {
   return (
     <ThemeCtx.Provider value={{ theme, setTheme }}>
       <LangCtx.Provider value={{ lang, setLang }}>
-    <div className="application-shell" data-theme={theme}>
+    <div className="application-shell" data-theme={theme} dir={lang === 'fa' ? 'rtl' : 'ltr'}>
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark"><span>H</span></div>
@@ -1370,11 +1428,11 @@ function App() {
               className="topbar-lang-btn"
               type="button"
               title={t('toggle.lang', 'تغییر زبان')}
-              onClick={() => setLang(lang === 'fa' ? 'en' : 'fa')}
+              onClick={() => setLang(lang === 'fa' ? 'en' : lang === 'en' ? 'de' : 'fa')}
               aria-label={t('toggle.lang', 'تغییر زبان')}
             >
-              {lang === 'fa' ? '🇮🇷' : '🇬🇧'}
-              <span className="topbar-lang-label">{lang === 'fa' ? 'FA' : 'EN'}</span>
+              {lang === 'fa' ? '🇮🇷' : lang === 'en' ? '🇬🇧' : '🇩🇪'}
+              <span className="topbar-lang-label">{lang === 'fa' ? 'FA' : lang === 'en' ? 'EN' : 'DE'}</span>
             </button>
           </div>
 
@@ -1457,7 +1515,11 @@ function App() {
               latencyTesting={latency.testing}
               latencyError={latency.error}
               onMainAction={() => {
-                if (engineProcess.status.running) {
+                if (codespaceConnected) {
+                  void disconnectCodespace()
+                } else if (freePhase === 'connected') {
+                  void disconnectFreeConfig()
+                } else if (engineProcess.status.running) {
                   void stopLocalProxy()
                 } else {
                   void connectToFirstHealthyServer()
@@ -1870,7 +1932,7 @@ function HomePage({
   onFreeDisconnect,
 }: HomePageProps) {
   const mainActionAvailable = Boolean(
-    processStatus.running || fastestServer || selectedServer,
+    processStatus.running || codespaceConnected || freePhase === 'connected' || fastestServer || selectedServer,
   )
 
   const [switchConfirm, setSwitchConfirm] = useState<{
@@ -1930,6 +1992,9 @@ function HomePage({
 
   const freeConnected = freePhase === 'connected'
   const otherMethodActive = processStatus.running || codespaceConnected || freeConnected
+  const heroConnected = isConnected || codespaceConnected || freeConnected
+  const activeMethod: 'codespace' | 'free' | 'subscription' | null =
+    codespaceConnected ? 'codespace' : freeConnected ? 'free' : processStatus.running ? 'subscription' : null
 
   return (
     <div className="home-layout">
@@ -1938,22 +2003,26 @@ function HomePage({
           <div className="status-label">
             <span
               className={
-                isConnected
+                heroConnected
                   ? 'status-label-dot status-label-dot-online'
                   : 'status-label-dot'
               }
             />
-            {isConnected
-              ? processStatus.connectionMode === 'tun'
-                ? `TUN فعال · IP خروجی ${tunCurrentIp ?? 'تأیید شد'}`
-                : `System Proxy فعال · IP خروجی ${ipVerificationResult.proxyIp ?? 'تأیید شد'}`
-              : ipVerificationChecking
-                ? 'در حال مقایسه IP مستقیم و پروکسی'
-                : processStatus.ready
-                  ? `پروکسی محلی آماده است؛ تغییر IP هنوز تأیید نشده`
-                  : processStatus.running
-                    ? 'فرایند sing-box در حال اجراست'
-                    : 'اتصال برقرار نیست'}
+            {activeMethod === 'codespace'
+              ? `GitHub Codespace متصل${codespaceHost ? ` · ${codespaceHost}` : ''}${isConnected ? ` · IP ${ipVerificationResult.proxyIp ?? 'تأیید شد'}` : ''}`
+              : activeMethod === 'free'
+                ? `سرور رایگان متصل${freeNodeName ? ` · ${freeNodeName}` : ''}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}${isConnected ? ` · IP ${ipVerificationResult.proxyIp ?? 'تأیید شد'}` : ''}`
+                : isConnected
+                  ? processStatus.connectionMode === 'tun'
+                    ? `TUN فعال · IP خروجی ${tunCurrentIp ?? 'تأیید شد'}`
+                    : `System Proxy فعال · IP خروجی ${ipVerificationResult.proxyIp ?? 'تأیید شد'}`
+                  : ipVerificationChecking
+                    ? 'در حال مقایسه IP مستقیم و پروکسی'
+                    : processStatus.ready
+                      ? `پروکسی محلی آماده است؛ تغییر IP هنوز تأیید نشده`
+                      : processStatus.running
+                        ? 'فرایند sing-box در حال اجراست'
+                        : 'اتصال برقرار نیست'}
           </div>
 
           {!administratorAvailable && !processStatus.running && (
@@ -1985,16 +2054,16 @@ function HomePage({
 
           <button
             className={
-              isConnected
+              heroConnected
                 ? 'connect-button connect-button-active'
                 : 'connect-button'
             }
             type="button"
-            disabled={processBusy || ipVerificationChecking || !mainActionAvailable}
+            disabled={processBusy || ipVerificationChecking || (!activeMethod && !mainActionAvailable)}
             onClick={onMainAction}
           >
             <span className="connect-button-icon">
-              {processBusy || ipVerificationChecking ? '…' : processStatus.running ? '■' : '▶'}
+              {processBusy || ipVerificationChecking ? '…' : activeMethod ? '■' : '▶'}
             </span>
             <span>
               <strong>
@@ -2002,18 +2071,26 @@ function HomePage({
                   ? 'در حال انجام عملیات...'
                   : ipVerificationChecking
                     ? 'در حال تأیید تغییر IP...'
-                    : processStatus.running
-                      ? 'قطع اتصال'
-                      : 'اتصال با سریع‌ترین سرور'}
+                    : activeMethod === 'codespace'
+                      ? 'قطع اتصال GitHub'
+                      : activeMethod === 'free'
+                        ? 'قطع اتصال سرور رایگان'
+                        : activeMethod === 'subscription'
+                          ? 'قطع اتصال'
+                          : 'اتصال با سریع‌ترین سرور'}
               </strong>
               <small>
-                {isConnected
-                  ? processStatus.connectionMode === 'tun'
-                    ? `IP مبنا ${tunBaselineIp ?? '—'} ← IP خروجی ${tunCurrentIp ?? '—'}`
-                    : `IP مستقیم ${ipVerificationResult.directIp ?? '—'} ← IP خروجی ${ipVerificationResult.proxyIp ?? '—'}`
-                  : processStatus.ready
-                    ? 'پروکسی آماده است؛ می‌توانی بررسی IP را دوباره اجرا کنی'
-                    : 'کانفیگ بررسی، sing-box اجرا و تغییر IP تأیید می‌شود'}
+                {activeMethod === 'codespace'
+                  ? `GitHub Codespace${codespaceHost ? ` · ${codespaceHost}` : ''}`
+                  : activeMethod === 'free'
+                    ? `${freeNodeName ?? 'سرور رایگان'}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}`
+                    : isConnected
+                      ? processStatus.connectionMode === 'tun'
+                        ? `IP مبنا ${tunBaselineIp ?? '—'} ← IP خروجی ${tunCurrentIp ?? '—'}`
+                        : `IP مستقیم ${ipVerificationResult.directIp ?? '—'} ← IP خروجی ${ipVerificationResult.proxyIp ?? '—'}`
+                      : processStatus.ready
+                        ? 'پروکسی آماده است؛ می‌توانی بررسی IP را دوباره اجرا کنی'
+                        : 'کانفیگ بررسی، sing-box اجرا و تغییر IP تأیید می‌شود'}
               </small>
             </span>
           </button>
@@ -2022,14 +2099,14 @@ function HomePage({
         <div className="hero-visual" aria-hidden="true">
           <div
             className={
-              isConnected
+              heroConnected
                 ? 'connection-orbit connection-orbit-online'
                 : 'connection-orbit'
             }
           >
             <div className="connection-orbit-middle">
               <div className="connection-orbit-core">
-                <span>{isConnected ? '✓' : 'H'}</span>
+                <span>{heroConnected ? '✓' : 'H'}</span>
               </div>
             </div>
           </div>
@@ -5199,7 +5276,7 @@ function SettingsPage({
               checked={lang === 'fa'}
               onChange={() => setLang('fa')}
             />
-            <span className="appearance-option-icon">🌐</span>
+            <span className="appearance-option-icon">🇮🇷</span>
             <span>{t('settings.langFa')}</span>
           </label>
           <label className="appearance-option">
@@ -5210,8 +5287,19 @@ function SettingsPage({
               checked={lang === 'en'}
               onChange={() => setLang('en')}
             />
-            <span className="appearance-option-icon">🌐</span>
+            <span className="appearance-option-icon">🇬🇧</span>
             <span>{t('settings.langEn')}</span>
+          </label>
+          <label className="appearance-option">
+            <input
+              type="radio"
+              name="lang"
+              value="de"
+              checked={lang === 'de'}
+              onChange={() => setLang('de')}
+            />
+            <span className="appearance-option-icon">🇩🇪</span>
+            <span>{t('settings.langDe', 'Deutsch')}</span>
           </label>
         </div>
 

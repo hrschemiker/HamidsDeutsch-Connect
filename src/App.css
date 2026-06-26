@@ -139,7 +139,7 @@ button {
   flex-direction: column;
   min-height: 100vh;
   padding: 24px 18px;
-  border-left: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border);
   background: var(--sidebar-bg);
 }
 
