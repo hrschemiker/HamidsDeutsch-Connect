@@ -221,6 +221,29 @@ contextBridge.exposeInMainWorld(
         ),
     },
 
+    free: {
+      fetchAndConnect: (input) =>
+        ipcRenderer.invoke('free:fetch-and-connect', input),
+
+      connectFromPool: (input) =>
+        ipcRenderer.invoke('free:connect-from-pool', input),
+
+      disconnect: () =>
+        ipcRenderer.invoke('free:disconnect'),
+
+      getStatus: () =>
+        ipcRenderer.invoke('free:get-status'),
+
+      getPool: () =>
+        ipcRenderer.invoke('free:get-pool'),
+
+      onProgress: (callback) => {
+        const listener = (_event, payload) => callback(payload)
+        ipcRenderer.on('free:progress', listener)
+        return () => ipcRenderer.removeListener('free:progress', listener)
+      },
+    },
+
     codespace: {
       getStatus: () =>
         ipcRenderer.invoke(

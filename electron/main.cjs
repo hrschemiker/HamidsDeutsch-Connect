@@ -45,7 +45,15 @@ const {
   getProcessStatus,
   disposeProcessManager,
   emergencyDispose,
+  setProcessExitCallback,
 } = require('./sing-box-process-manager.cjs')
+
+const {
+  mergeServers: mergeFreeServers,
+  markStartupFailure,
+  markSuccess: markFreeSuccess,
+  getPool: getFreePool,
+} = require('./free-config-store.cjs')
 
 const {
   verifyIpChange,
@@ -156,6 +164,223 @@ let mainWindow = null
 let bpbPanelWindow = null
 let isQuitting = false
 let fatalCleanupStarted = false
+
+// ── Free Config State ──────────────────────────────────────────────────────
+
+const FREE_CONFIG_SOURCE = 'https://raw.githubusercontent.com/MohammadBahemmat/V2ray-Collector/main/all_servers.txt'
+const FREE_FETCH_LINES = 200
+const FREE_TEST_TIMEOUT = 3500
+const FREE_CONNECT_ATTEMPTS = 5
+
+let freeConfigState = {
+  phase: 'idle',
+  nodeId: null,
+  nodeName: null,
+  latencyMs: null,
+  error: null,
+  userDisconnected: false,
+}
+
+function sendFreeProgress(text, phase) {
+  if (phase) freeConfigState.phase = phase
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('free:progress', { text, phase: freeConfigState.phase })
+  }
+}
+
+async function fetchFreeConfigContent() {
+  const { net } = require('electron')
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 20000)
+  try {
+    const res = await net.fetch(FREE_CONFIG_SOURCE, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'HamidsDeutsch-Connect/1.0' },
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const text = await res.text()
+    return text
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function parseLastNLines(content, n) {
+  const { parseSubscriptionNodeRecords } = require('./subscription-parser.cjs')
+  const SUPPORTED = ['vmess://', 'vless://', 'trojan://', 'ss://']
+  const lines = content
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => SUPPORTED.some((p) => l.toLowerCase().startsWith(p)))
+  const candidates = lines.slice(-n)
+  return parseSubscriptionNodeRecords(candidates.join('\n'))
+}
+
+async function testFreeNodes(records) {
+  const { testServerBatch } = require('./server-latency.cjs')
+  const inputs = records
+    .filter((r) => r.node.valid && r.node.host && r.node.port)
+    .map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
+  if (inputs.length === 0) return []
+  const result = await testServerBatch(inputs)
+  return result.results
+}
+
+async function tryConnectFreeNode(record, directDomains, rescueOptions) {
+  const enginePath = getEnginePath()
+  const userDataPath = app.getPath('userData')
+  try {
+    const configResult = await createAndCheckConfig({
+      subscriptionUrl: FREE_CONFIG_SOURCE,
+      nodeId: record.id,
+      nodeUri: record.uri,
+      enginePath,
+      userDataPath,
+      directDomains: directDomains ?? [],
+      rescueOptions: rescueOptions ?? null,
+      runtimeDirectoryName: 'free-runtime',
+      configFileName: 'free-config.json',
+      localPort: 2080,
+      setSystemProxy: true,
+    })
+    if (!configResult.success) return null
+
+    const started = await startLocalProxy({ enginePath, userDataPath, configPath: configResult.configPath })
+    if (!started.success) return null
+
+    return configResult.configPath
+  } catch {
+    return null
+  }
+}
+
+async function runFreeConnect({ directDomains, rescueOptions, fetchFresh }) {
+  freeConfigState.userDisconnected = false
+
+  try {
+    assertBpbInactive()
+  } catch (err) {
+    return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: err.message }
+  }
+
+  const mainStatus = getProcessStatus()
+  if (mainStatus.running) {
+    try {
+      await stopLocalProxy({ userDataPath: app.getPath('userData') })
+    } catch {
+      // Best-effort stop.
+    }
+  }
+
+  let records = []
+
+  if (fetchFresh) {
+    sendFreeProgress('در حال دریافت فهرست سرورهای رایگان از GitHub...', 'fetching')
+    try {
+      const content = await fetchFreeConfigContent()
+      records = parseLastNLines(content, FREE_FETCH_LINES)
+    } catch (err) {
+      sendFreeProgress('دریافت ناموفق بود. استفاده از مخزن ذخیره‌شده...', 'fetching')
+    }
+  }
+
+  if (records.length === 0) {
+    const pool = await getFreePool()
+    records = pool.map((s) => ({ id: s.id, uri: s.uri, node: { valid: true, host: s.host, port: s.port, name: s.name, protocol: s.protocol, transport: null, tls: false, security: null } }))
+    if (records.length === 0) {
+      freeConfigState.phase = 'error'
+      freeConfigState.error = 'هیچ سرور رایگانی در دسترس نیست. اتصال به اینترنت را بررسی کن.'
+      return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: freeConfigState.error }
+    }
+  }
+
+  sendFreeProgress(`در حال بررسی پینگ ${records.length} سرور...`, 'testing')
+  const latencyResults = await testFreeNodes(records)
+  const latencyMap = new Map(latencyResults.map((r) => [r.id, r]))
+
+  const reachable = records
+    .filter((r) => {
+      const lr = latencyMap.get(r.id)
+      return lr && lr.reachable && typeof lr.latencyMs === 'number'
+    })
+    .sort((a, b) => {
+      const la = latencyMap.get(a.id)?.latencyMs ?? 999999
+      const lb = latencyMap.get(b.id)?.latencyMs ?? 999999
+      return la - lb
+    })
+
+  if (reachable.length > 0) {
+    const now = new Date().toISOString()
+    const toStore = reachable.slice(0, 100).map((r) => ({
+      id: r.id,
+      uri: r.uri,
+      name: r.node.name ?? r.node.protocol,
+      protocol: r.node.protocol,
+      host: r.node.host,
+      port: r.node.port,
+      latencyMs: latencyMap.get(r.id)?.latencyMs ?? null,
+      lastTestedAt: now,
+      addedAt: now,
+    }))
+    await mergeFreeServers(toStore).catch(() => {})
+  }
+
+  const candidates = reachable.slice(0, FREE_CONNECT_ATTEMPTS)
+  sendFreeProgress(`در حال اتصال به سریع‌ترین سرور...`, 'connecting')
+
+  for (const record of candidates) {
+    const lr = latencyMap.get(record.id)
+    sendFreeProgress(`اتصال به ${record.node.name ?? record.id} (${lr?.latencyMs ?? '?'} ms)...`, 'connecting')
+
+    const configPath = await tryConnectFreeNode(record, directDomains, rescueOptions)
+    if (configPath) {
+      const nodeName = record.node.name ?? record.node.protocol
+      const latencyMs = lr?.latencyMs ?? null
+
+      freeConfigState.phase = 'connected'
+      freeConfigState.nodeId = record.id
+      freeConfigState.nodeName = nodeName
+      freeConfigState.latencyMs = latencyMs
+      freeConfigState.error = null
+
+      await markFreeSuccess(record.id).catch(() => {})
+      setVirtualLocationConnected(true)
+
+      sendFreeProgress(`متصل شد: ${nodeName}`, 'connected')
+
+      return { success: true, nodeId: record.id, nodeName, latencyMs, error: null }
+    }
+  }
+
+  freeConfigState.phase = 'error'
+  freeConfigState.error = 'هیچ‌کدام از سرورهای آزمایش‌شده قابل اتصال نبودند.'
+  sendFreeProgress(freeConfigState.error, 'error')
+  return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: freeConfigState.error }
+}
+
+// Register auto-reconnect on unexpected engine exit
+setProcessExitCallback(({ code }) => {
+  if (freeConfigState.userDisconnected) return
+  if (freeConfigState.phase !== 'connected') return
+  if (code === 0) return
+
+  freeConfigState.phase = 'reconnecting'
+  sendFreeProgress('اتصال قطع شد. جستجوی خودکار سرور جایگزین...', 'reconnecting')
+
+  setTimeout(() => {
+    runFreeConnect({
+      directDomains: [],
+      rescueOptions: null,
+      fetchFresh: false,
+    }).catch(() => {
+      freeConfigState.phase = 'error'
+      freeConfigState.error = 'اتصال مجدد ناموفق بود.'
+      sendFreeProgress('اتصال مجدد ناموفق بود.', 'error')
+    })
+  }, 1500)
+})
 
 function getProductionLogPath() {
   return path.join(
@@ -3003,6 +3228,52 @@ function registerIpcHandlers() {
         success: false,
         error: error instanceof Error ? error.message : 'قطع اتصال Codespace ناموفق بود.',
       }
+    }
+  })
+
+  // ── Free Config handlers ──────────────────────────────────────────────────
+
+  ipcMain.handle('free:get-pool', async () => {
+    try {
+      return { success: true, servers: await getFreePool(), error: null }
+    } catch (err) {
+      return { success: false, servers: [], error: err?.message ?? 'خواندن مخزن سرورهای رایگان ناموفق بود.' }
+    }
+  })
+
+  ipcMain.handle('free:get-status', () => {
+    return { ...freeConfigState }
+  })
+
+  ipcMain.handle('free:fetch-and-connect', async (_event, input) => {
+    return runFreeConnect({
+      directDomains: Array.isArray(input?.directDomains) ? input.directDomains : [],
+      rescueOptions: input?.rescueOptions ?? null,
+      fetchFresh: true,
+    })
+  })
+
+  ipcMain.handle('free:connect-from-pool', async (_event, input) => {
+    return runFreeConnect({
+      directDomains: Array.isArray(input?.directDomains) ? input.directDomains : [],
+      rescueOptions: input?.rescueOptions ?? null,
+      fetchFresh: false,
+    })
+  })
+
+  ipcMain.handle('free:disconnect', async () => {
+    freeConfigState.userDisconnected = true
+    freeConfigState.phase = 'idle'
+    freeConfigState.nodeId = null
+    freeConfigState.nodeName = null
+    freeConfigState.latencyMs = null
+    freeConfigState.error = null
+    try {
+      await stopLocalProxy({ userDataPath: app.getPath('userData') })
+      setVirtualLocationConnected(false)
+      return { success: true, error: null }
+    } catch (err) {
+      return { success: false, error: err?.message ?? 'قطع اتصال سرور رایگان ناموفق بود.' }
     }
   })
 }

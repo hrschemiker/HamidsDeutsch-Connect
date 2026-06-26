@@ -38,6 +38,12 @@ let activeEnginePath = null
 let activeConfigPath = null
 let processState = createInitialState()
 
+let processExitCallback = null
+
+function setProcessExitCallback(fn) {
+  processExitCallback = typeof fn === 'function' ? fn : null
+}
+
 function createInitialState() {
   return {
     running: false,
@@ -835,6 +841,14 @@ function attachProcessListeners(
         processState.lastError =
           `sing-box با کد ${code} متوقف شد.`
       }
+
+      if (typeof processExitCallback === 'function') {
+        try {
+          processExitCallback({ code, signal })
+        } catch {
+          // Exit callbacks must never crash the process manager.
+        }
+      }
     },
   )
 }
@@ -1403,4 +1417,5 @@ module.exports = {
   getProcessStatus,
   disposeProcessManager,
   emergencyDispose,
+  setProcessExitCallback,
 }

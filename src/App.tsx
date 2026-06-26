@@ -27,6 +27,30 @@ import { useConnectionDiagnostics } from './diagnostics/use-connection-diagnosti
 import { BpbPage } from './bpb/BpbPage'
 import './App.css'
 
+// ── Free Config types ────────────────────────────────────────────────────────
+
+type FreeConfigPhase =
+  | 'idle'
+  | 'fetching'
+  | 'testing'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'error'
+
+type FreePoolServer = {
+  id: string
+  uri: string
+  name: string
+  protocol: string
+  host: string | null
+  port: number | null
+  latencyMs: number | null
+  failCount: number
+  lastTestedAt: string | null
+  addedAt: string
+}
+
 // ── Theme & Language ─────────────────────────────────────────────────────────
 
 type Theme = 'dark' | 'light'
@@ -351,6 +375,13 @@ function App() {
   const [codespaceError, setCodespaceError] = useState<string | null>(null)
   const [codespaceHost, setCodespaceHost] = useState<string | null>(null)
 
+  const [freePhase, setFreePhase] = useState<FreeConfigPhase>('idle')
+  const [freeNodeName, setFreeNodeName] = useState<string | null>(null)
+  const [freeLatencyMs, setFreeLatencyMs] = useState<number | null>(null)
+  const [freeProgress, setFreeProgress] = useState<string | null>(null)
+  const [freeError, setFreeError] = useState<string | null>(null)
+  const [freePool, setFreePool] = useState<FreePoolServer[]>([])
+
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
   const engineProcess = useEngineProcess()
@@ -396,6 +427,58 @@ function App() {
       setCodespaceProgress(message)
     })
   }, [])
+
+  useEffect(() => {
+    void window.hamidsDeutsch.free.getPool().then((r) => {
+      if (r.success) setFreePool(r.servers)
+    })
+    return window.hamidsDeutsch.free.onProgress(({ text, phase }) => {
+      setFreeProgress(text)
+      setFreePhase(phase)
+    })
+  }, [])
+
+  async function connectFreeConfig() {
+    setFreePhase('fetching')
+    setFreeProgress('در حال آماده‌سازی...')
+    setFreeError(null)
+    setFreeNodeName(null)
+    setFreeLatencyMs(null)
+    try {
+      const result = await window.hamidsDeutsch.free.fetchAndConnect({
+        directDomains: directDomains.domains,
+      })
+      if (result.success) {
+        setFreeNodeName(result.nodeName)
+        setFreeLatencyMs(result.latencyMs)
+        setFreePhase('connected')
+        setFreeError(null)
+        void window.hamidsDeutsch.free.getPool().then((r) => {
+          if (r.success) setFreePool(r.servers)
+        })
+      } else {
+        setFreePhase('error')
+        setFreeError(result.error ?? 'اتصال ناموفق بود.')
+      }
+    } catch (err) {
+      setFreePhase('error')
+      setFreeError(err instanceof Error ? err.message : 'خطای ناشناخته')
+    } finally {
+      setFreeProgress(null)
+    }
+  }
+
+  async function disconnectFreeConfig() {
+    try {
+      await window.hamidsDeutsch.free.disconnect()
+      setFreePhase('idle')
+      setFreeNodeName(null)
+      setFreeLatencyMs(null)
+      setFreeError(null)
+    } catch {
+      // ignore
+    }
+  }
 
   async function connectViaCodespace() {
     if (codespaceConnecting || engineProcess.status.running) return
@@ -1403,6 +1486,13 @@ function App() {
               onCodespaceDisconnect={() => void disconnectCodespace()}
               onOpenSettings={() => setActivePage('settings')}
               onOpenBpb={() => setActivePage('bpb')}
+              freePhase={freePhase}
+              freeNodeName={freeNodeName}
+              freeLatencyMs={freeLatencyMs}
+              freeProgress={freeProgress}
+              freeError={freeError}
+              onFreeConnect={() => void connectFreeConfig()}
+              onFreeDisconnect={() => void disconnectFreeConfig()}
             />
           )}
 
@@ -1438,6 +1528,33 @@ function App() {
               onSelectServer={selectedServer.selectServer}
               onClearSelectedServer={selectedServer.clearSelectedServer}
               onOpenSubscriptions={() => setActivePage('subscriptions')}
+              freePool={freePool}
+              freePhase={freePhase}
+              onConnectFreeNode={async (server) => {
+                setFreePhase('connecting')
+                setFreeProgress(`اتصال به ${server.name}...`)
+                setFreeError(null)
+                try {
+                  const result = await window.hamidsDeutsch.free.connectFromPool({
+                    directDomains: directDomains.domains,
+                  })
+                  if (result.success) {
+                    setFreePhase('connected')
+                    setFreeNodeName(result.nodeName)
+                    setFreeLatencyMs(result.latencyMs)
+                    setFreeError(null)
+                    setActivePage('home')
+                  } else {
+                    setFreePhase('error')
+                    setFreeError(result.error ?? 'اتصال ناموفق بود.')
+                  }
+                } catch (err) {
+                  setFreePhase('error')
+                  setFreeError(err instanceof Error ? err.message : 'خطا')
+                } finally {
+                  setFreeProgress(null)
+                }
+              }}
             />
           )}
 
@@ -1697,6 +1814,13 @@ type HomePageProps = {
   onCodespaceDisconnect: () => void
   onOpenSettings: () => void
   onOpenBpb: () => void
+  freePhase: FreeConfigPhase
+  freeNodeName: string | null
+  freeLatencyMs: number | null
+  freeProgress: string | null
+  freeError: string | null
+  onFreeConnect: () => void
+  onFreeDisconnect: () => void
 }
 
 function HomePage({
@@ -1737,6 +1861,13 @@ function HomePage({
   onCodespaceConnect,
   onCodespaceDisconnect,
   onOpenBpb,
+  freePhase,
+  freeNodeName,
+  freeLatencyMs,
+  freeProgress,
+  freeError,
+  onFreeConnect,
+  onFreeDisconnect,
 }: HomePageProps) {
   const mainActionAvailable = Boolean(
     processStatus.running || fastestServer || selectedServer,
@@ -1750,6 +1881,21 @@ function HomePage({
 
   function requireSwitch(title: string, message: string, onConfirm: () => void) {
     setSwitchConfirm({ title, message, onConfirm })
+  }
+
+  function handleFreeConnect() {
+    if (otherMethodActive) {
+      requireSwitch(
+        'تغییر روش اتصال',
+        'اتصال فعلی قطع می‌شود و از طریق سرور رایگان مجدداً متصل می‌شوید. ادامه می‌دهید؟',
+        () => {
+          setSwitchConfirm(null)
+          onFreeConnect()
+        },
+      )
+    } else {
+      onFreeConnect()
+    }
   }
 
   function handleCodespaceConnect() {
@@ -1782,7 +1928,8 @@ function HomePage({
     }
   }
 
-  const otherMethodActive = processStatus.running || codespaceConnected
+  const freeConnected = freePhase === 'connected'
+  const otherMethodActive = processStatus.running || codespaceConnected || freeConnected
 
   return (
     <div className="home-layout">
@@ -2045,6 +2192,73 @@ function HomePage({
           </div>
         </section>
       </div>
+
+      {/* ── Free Config Card ─────────────────────────────────────────────── */}
+      <section className={`free-config-card${otherMethodActive && !freeConnected ? ' method-faded-card' : ''}`}>
+        <div className="free-config-header">
+          <div className="free-config-header-info">
+            <span className="panel-kicker free-config-kicker">V2ray Collector</span>
+            <h3>اتصال با سرور رایگان</h3>
+          </div>
+          <div className="codespace-header-end">
+            <span className="free-badge">Free</span>
+            <InfoButton
+              fa="به‌طور خودکار از مخزن GitHub سرورهای رایگان را دریافت، آزمایش و سریع‌ترین را انتخاب می‌کند. در صورت قطع اتصال، به‌طور خودکار سرور جایگزین پیدا می‌کند."
+              en="Automatically fetches free proxy servers from a GitHub repository, tests them, and connects to the fastest. Auto-reconnects if the connection drops."
+            />
+          </div>
+        </div>
+
+        {freeProgress && (
+          <div className="free-config-progress">
+            <span className={`free-spinner ${freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' ? 'spinning' : ''}`}>◌</span>
+            <span>{freeProgress}</span>
+          </div>
+        )}
+
+        {freeError && freePhase === 'error' && (
+          <div className="form-message form-message-error">{freeError}</div>
+        )}
+
+        {freeConnected && (
+          <div className="free-config-connected-info">
+            <span className="free-connected-dot" />
+            <span>{freeNodeName}</span>
+            {freeLatencyMs != null && <span className="free-latency">{freeLatencyMs} ms</span>}
+          </div>
+        )}
+
+        <div className="free-config-actions">
+          {freeConnected ? (
+            <button
+              className="free-disconnect-button"
+              type="button"
+              onClick={onFreeDisconnect}
+            >
+              قطع اتصال سرور رایگان
+            </button>
+          ) : (
+            <button
+              className={`free-connect-button${freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' ? ' loading' : ''}`}
+              type="button"
+              disabled={freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting'}
+              onClick={handleFreeConnect}
+            >
+              <span className="free-btn-icon">⬡</span>
+              <span>
+                <strong>
+                  {freePhase === 'fetching' ? 'دریافت سرورها...' :
+                   freePhase === 'testing' ? 'آزمون پینگ...' :
+                   freePhase === 'connecting' ? 'در حال اتصال...' :
+                   freePhase === 'reconnecting' ? 'اتصال مجدد...' :
+                   'دریافت سرور رایگان'}
+                </strong>
+                <small>جستجو · آزمون · اتصال خودکار</small>
+              </span>
+            </button>
+          )}
+        </div>
+      </section>
 
       {switchConfirm && (
         <ConfirmDialog
@@ -2911,11 +3125,14 @@ function ServersPage({
   configCheckingNodeId,
   configCheckResults,
   processRunning,
+  freePool,
+  freePhase,
   onCheckConfig,
   onTestLatency,
   onSelectServer,
   onClearSelectedServer,
   onOpenSubscriptions,
+  onConnectFreeNode,
 }: {
   loading: boolean
   nodes: SafeServerNode[]
@@ -2946,6 +3163,8 @@ function ServersPage({
     }
   >
   processRunning: boolean
+  freePool: FreePoolServer[]
+  freePhase: FreeConfigPhase
   onCheckConfig: (
     node: SafeServerNode,
   ) => void
@@ -2955,6 +3174,7 @@ function ServersPage({
   ) => void
   onClearSelectedServer: () => void
   onOpenSubscriptions: () => void
+  onConnectFreeNode: (server: FreePoolServer) => void
 }) {
   const [expandedServerId, setExpandedServerId] =
     useState<string | null>(null)
@@ -3357,6 +3577,45 @@ function ServersPage({
           }}
           onCancel={() => setSwitchConfirm(null)}
         />
+      )}
+
+      {freePool.length > 0 && (
+        <section className="free-pool-section">
+          <div className="panel-heading">
+            <div>
+              <span className="panel-kicker free-pool-kicker">مخزن رایگان</span>
+              <h3>سرورهای رایگان ذخیره‌شده</h3>
+            </div>
+            <span className="status-pill">
+              {freePool.length} سرور · مرتب‌شده بر اساس پینگ
+            </span>
+          </div>
+          <div className="free-pool-list">
+            {freePool.map((server, index) => (
+              <div
+                key={server.id}
+                className="free-pool-row"
+              >
+                <span className="free-pool-rank">{index + 1}</span>
+                <div className="free-pool-main">
+                  <strong>{server.name}</strong>
+                  <small dir="ltr">{server.protocol.toUpperCase()} · {server.host ?? '—'}{server.port ? `:${server.port}` : ''}</small>
+                </div>
+                <span className={server.latencyMs != null ? 'bpb-ping is-online' : 'bpb-ping'} dir="ltr">
+                  {server.latencyMs != null ? `${server.latencyMs} ms` : '—'}
+                </span>
+                <button
+                  className="free-pool-connect-btn"
+                  type="button"
+                  disabled={freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting'}
+                  onClick={() => onConnectFreeNode(server)}
+                >
+                  اتصال
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   )

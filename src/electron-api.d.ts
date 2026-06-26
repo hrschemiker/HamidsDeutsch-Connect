@@ -458,6 +458,56 @@ type CheckServerConfigResult = {
   error: string | null
 }
 
+type FreeConfigPhase =
+  | 'idle'
+  | 'fetching'
+  | 'testing'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'error'
+
+type FreeConfigStatus = {
+  phase: FreeConfigPhase
+  nodeId: string | null
+  nodeName: string | null
+  latencyMs: number | null
+  error: string | null
+  userDisconnected: boolean
+}
+
+type FreePoolServer = {
+  id: string
+  uri: string
+  name: string
+  protocol: string
+  host: string | null
+  port: number | null
+  latencyMs: number | null
+  failCount: number
+  lastTestedAt: string | null
+  addedAt: string
+}
+
+type FreeConnectResult = {
+  success: boolean
+  nodeId: string | null
+  nodeName: string | null
+  latencyMs: number | null
+  error: string | null
+}
+
+type FreePoolResult = {
+  success: boolean
+  servers: FreePoolServer[]
+  error: string | null
+}
+
+type FreeProgressEvent = {
+  text: string
+  phase: FreeConfigPhase
+}
+
 type OpenExtensionFolderResult = {
   success: boolean
   path: string
@@ -657,6 +707,28 @@ declare global {
         ) => Promise<
           CheckTunConfigResult
         >
+      }
+
+      free: {
+        fetchAndConnect: (input?: {
+          directDomains?: string[]
+          rescueOptions?: RescueOptions | null
+        }) => Promise<FreeConnectResult>
+
+        connectFromPool: (input?: {
+          directDomains?: string[]
+          rescueOptions?: RescueOptions | null
+        }) => Promise<FreeConnectResult>
+
+        disconnect: () => Promise<{ success: boolean; error: string | null }>
+
+        getStatus: () => Promise<FreeConfigStatus>
+
+        getPool: () => Promise<FreePoolResult>
+
+        onProgress: (
+          callback: (payload: FreeProgressEvent) => void,
+        ) => () => void
       }
 
       codespace: {

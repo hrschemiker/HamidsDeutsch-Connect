@@ -4045,3 +4045,305 @@ button {
 [data-theme="light"] .confirm-dialog {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.14);
 }
+
+/* ── Free Config Card (home screen) ─────────────────────────────────────── */
+
+.free-config-card {
+  border: 1px solid rgba(6, 182, 212, 0.28);
+  border-radius: 16px;
+  padding: 18px 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(6, 182, 212, 0.07) 0%,
+    rgba(15, 23, 42, 0.42) 100%
+  );
+  transition: opacity 0.2s, filter 0.2s;
+}
+
+.method-faded-card {
+  opacity: 0.5;
+  filter: saturate(0.4);
+}
+
+.free-config-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.free-config-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.free-config-header-info h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.free-config-kicker {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #22d3ee !important;
+}
+
+.free-config-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+}
+
+.free-spinner {
+  display: inline-block;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.free-spinner.spinning {
+  animation: free-spin 1.2s linear infinite;
+}
+
+@keyframes free-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.free-config-connected-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 0.83rem;
+  color: var(--text-soft);
+}
+
+.free-connected-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22d3ee;
+  box-shadow: 0 0 6px rgba(34, 211, 238, 0.6);
+  flex-shrink: 0;
+  animation: free-pulse 2s ease-in-out infinite;
+}
+
+@keyframes free-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+.free-latency {
+  margin-right: 4px;
+  font-size: 0.75rem;
+  color: #22d3ee;
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+}
+
+.free-config-actions {
+  margin-top: 4px;
+}
+
+.free-connect-button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 13px 18px;
+  background: linear-gradient(135deg, #0891b2, rgba(6, 182, 212, 0.82));
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  border-radius: 12px;
+  color: #f0faff;
+  cursor: pointer;
+  text-align: right;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.free-connect-button:hover:not(:disabled) {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.free-connect-button:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.free-connect-button.loading {
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.6), rgba(6, 182, 212, 0.5));
+}
+
+.free-btn-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.free-connect-button > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.free-connect-button strong {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.free-connect-button small {
+  display: block;
+  font-size: 0.71rem;
+  opacity: 0.75;
+  direction: ltr;
+  text-align: left;
+}
+
+.free-disconnect-button {
+  width: 100%;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  background: rgba(6, 182, 212, 0.08);
+  color: #22d3ee;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 500;
+  transition: background 140ms, border-color 140ms;
+}
+
+.free-disconnect-button:hover {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: rgba(6, 182, 212, 0.55);
+}
+
+/* ── Free Pool Section (servers page) ────────────────────────────────────── */
+
+.free-pool-section {
+  margin-top: 28px;
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+
+.free-pool-kicker {
+  color: #22d3ee !important;
+}
+
+.free-pool-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.free-pool-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 80px 70px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  transition: background 140ms, border-color 140ms;
+}
+
+.free-pool-row:hover {
+  border-color: rgba(6, 182, 212, 0.35);
+  background: rgba(6, 182, 212, 0.04);
+}
+
+.free-pool-rank {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.73rem;
+}
+
+.free-pool-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.free-pool-main strong {
+  font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.free-pool-main small {
+  font-size: 0.71rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.free-pool-connect-btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  background: rgba(6, 182, 212, 0.08);
+  color: #22d3ee;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms, border-color 140ms;
+  white-space: nowrap;
+}
+
+.free-pool-connect-btn:hover:not(:disabled) {
+  background: rgba(6, 182, 212, 0.18);
+  border-color: rgba(6, 182, 212, 0.6);
+}
+
+.free-pool-connect-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── Light theme: free config ─────────────────────────────────────────────── */
+
+[data-theme="light"] .free-config-card {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.06) 0%, var(--surface) 100%);
+  border-color: rgba(6, 182, 212, 0.25);
+}
+
+[data-theme="light"] .free-pool-row {
+  background: var(--surface);
+  border-color: rgba(0, 0, 0, 0.09);
+}
+
+[data-theme="light"] .free-pool-row:hover {
+  background: rgba(6, 182, 212, 0.04);
+  border-color: rgba(6, 182, 212, 0.3);
+}
+
+[data-theme="light"] .free-config-kicker,
+[data-theme="light"] .free-pool-kicker {
+  color: #0891b2 !important;
+}
+
+[data-theme="light"] .free-latency,
+[data-theme="light"] .free-pool-connect-btn {
+  color: #0891b2;
+}
+
+[data-theme="light"] .free-connected-dot {
+  background: #0891b2;
+  box-shadow: 0 0 6px rgba(8, 145, 178, 0.4);
+}
