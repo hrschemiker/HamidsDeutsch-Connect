@@ -298,9 +298,6 @@ function App() {
     }
   }, [appHeroConnected])
 
-  // ── Sidebar hover state ───────────────────────────────────────────────────
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-
   useEffect(() => {
     void window.hamidsDeutsch.system.setVirtualLocationConnected(connectionVerified)
   }, [connectionVerified])
@@ -1241,9 +1238,7 @@ function App() {
       <LangCtx.Provider value={{ lang, setLang }}>
     <div className="application-shell" data-theme={theme} dir={lang === 'fa' ? 'rtl' : 'ltr'}>
       <aside
-        className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}
-        onMouseEnter={() => setSidebarOpen(true)}
-        onMouseLeave={() => setSidebarOpen(false)}
+        className="sidebar"
       >
         <div className="brand">
           <div className="brand-mark"><img src="logo.png" alt="HamidsDeutsch Connect" className="brand-logo-img" /></div>

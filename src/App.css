@@ -122,7 +122,7 @@ button {
 
 .application-shell {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100vh;
   background:
     radial-gradient(
@@ -4546,38 +4546,7 @@ button {
 
 /* ── Sidebar collapse ─────────────────────────────────────────────────────── */
 
-.sidebar {
-  width: 260px;
-  overflow: hidden;
-  transition: width 220ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.sidebar:not(.sidebar-open) {
-  width: 64px;
-  padding-inline: 10px;
-}
-
-.sidebar:not(.sidebar-open) .brand-text,
-.sidebar:not(.sidebar-open) .navigation-label,
-.sidebar:not(.sidebar-open) .sidebar-footer {
-  opacity: 0;
-  pointer-events: none;
-  width: 0;
-  overflow: hidden;
-}
-
-.sidebar:not(.sidebar-open) .brand {
-  padding-inline: 2px;
-  justify-content: center;
-}
-
-.sidebar:not(.sidebar-open) .navigation-item {
-  justify-content: center;
-  padding: 11px;
-}
-
 .navigation-label {
-  transition: opacity 200ms ease, width 200ms ease;
   white-space: nowrap;
 }
 
