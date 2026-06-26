@@ -4,6 +4,8 @@ import {
   useState,
 } from 'react'
 
+import { useT } from '../i18n'
+
 import type {
   RescueSettings,
 } from '../rescue/use-rescue-settings'
@@ -121,6 +123,7 @@ export function BpbPage({
   directDomains,
   rescueSettings,
 }: Props) {
+  const t = useT()
   const [profile, setProfile] =
     useState<BpbProfile>(EMPTY_PROFILE)
 
@@ -258,13 +261,13 @@ export function BpbPage({
       setMessage({
         type: 'success',
         text:
-          'کانفیگ‌های ذخیره‌شده آماده‌اند. فقط برای دریافت نسخه جدید، دکمه به‌روزرسانی کانفیگ‌ها را بزن.',
+          t('bpb.msg.cacheReady'),
       })
     } else if (!loadedProfile.panelUrl) {
       setMessage({
         type: 'info',
         text:
-          'هنوز پنل BPB ساخته نشده است. فقط دکمه راه‌اندازی خودکار را بزن.',
+          t('bpb.msg.noPanelYet'),
       })
     }
 
@@ -278,7 +281,7 @@ export function BpbPage({
     setMessage({
       type: 'info',
       text:
-        'مرورگر Cloudflare باز می‌شود؛ وارد حساب شو و اجازه دسترسی را تأیید کن.',
+        t('bpb.msg.cfLoginPrompt'),
     })
 
     try {
@@ -293,7 +296,7 @@ export function BpbPage({
         if (!login.success) {
           throw new Error(
             login.error ??
-              'ورود Cloudflare ناموفق بود.',
+              t('bpb.msg.cfLoginFailed'),
           )
         }
 
@@ -314,7 +317,7 @@ export function BpbPage({
         ) {
           throw new Error(
             deployed.error ??
-              'ساخت پنل BPB ناموفق بود.',
+              t('bpb.msg.deployFailed'),
           )
         }
 
@@ -334,7 +337,7 @@ export function BpbPage({
         text:
           error instanceof Error
             ? error.message
-            : 'راه‌اندازی BPB ناموفق بود.',
+            : t('bpb.msg.setupFailed'),
       })
     }
 
@@ -347,7 +350,7 @@ export function BpbPage({
   ) {
     if (!sourceProfile.panelUrl) {
       throw new Error(
-        'ابتدا راه‌اندازی خودکار BPB را انجام بده.',
+        t('bpb.msg.setupFirst'),
       )
     }
 
@@ -355,7 +358,7 @@ export function BpbPage({
     setMessage({
       type: 'info',
       text:
-        'در حال دریافت کانفیگ‌ها و تست پینگ...',
+        t('bpb.msg.fetchingConfigs'),
     })
 
     try {
@@ -385,7 +388,7 @@ export function BpbPage({
 
       if (!selectedType || selectedNodes.length === 0) {
         throw new Error(
-          'پنل ساخته شد، اما هنوز کانفیگ قابل نمایش برنگرداند. چند ثانیه بعد دوباره دکمه به‌روزرسانی کانفیگ‌ها را بزن.',
+          t('bpb.msg.noConfigsYet'),
         )
       }
 
@@ -424,9 +427,7 @@ export function BpbPage({
       setMessage({
         type: 'success',
         text:
-          `${selectedNodes.length.toLocaleString(
-            'fa-IR',
-          )} کانفیگ ذخیره شد؛ دفعه بعد بدون دانلود دوباره نمایش داده می‌شود.`,
+          t('bpb.msg.configsSaved', `${selectedNodes.length} configs saved.`),
       })
     } catch (error) {
       setMessage({
@@ -434,7 +435,7 @@ export function BpbPage({
         text:
           error instanceof Error
             ? error.message
-            : 'به‌روزرسانی کانفیگ‌ها ناموفق بود.',
+            : t('bpb.msg.updateFailed'),
       })
     }
 
@@ -452,9 +453,9 @@ export function BpbPage({
     setMessage({
       type: result.success ? 'success' : 'error',
       text: result.success
-        ? 'پنل BPB به آخرین نسخه رسمی به‌روزرسانی شد. حالا کانفیگ‌ها را به‌روزرسانی کن.'
+        ? t('bpb.msg.panelUpdated')
         : result.error ??
-          'به‌روزرسانی پنل ناموفق بود.',
+          t('bpb.msg.panelUpdateFailed'),
     })
 
     setBusy(false)
@@ -477,8 +478,8 @@ export function BpbPage({
           type: 'error',
           text:
             mode === 'previous'
-              ? 'هنوز سرور قبلی ثبت نشده است.'
-              : 'کانفیگی برای اتصال وجود ندارد.',
+              ? t('bpb.msg.noPrevServer')
+              : t('bpb.msg.noConfig'),
         })
       }
       return
@@ -488,7 +489,7 @@ export function BpbPage({
     setMessage({
       type: 'info',
       text:
-        'در حال اتصال و بررسی تغییر واقعی IP...',
+        t('bpb.msg.connecting'),
     })
 
     const result =
@@ -522,14 +523,14 @@ export function BpbPage({
 
       setMessage({
         type: 'success',
-        text: `اتصال برقرار شد: ${node.name}`,
+        text: t('bpb.msg.connected', `Connected: ${node.name}`),
       })
     } else {
       setMessage({
         type: 'error',
         text:
           result.error ??
-          'اتصال BPB ناموفق بود.',
+          t('bpb.msg.connectFailed'),
       })
     }
 
@@ -544,9 +545,9 @@ export function BpbPage({
     setMessage({
       type: result.success ? 'success' : 'error',
       text: result.success
-        ? 'اتصال BPB قطع شد.'
+        ? t('bpb.msg.disconnected')
         : result.error ??
-          'قطع اتصال ناموفق بود.',
+          t('bpb.msg.disconnectFailed'),
     })
   }
 
@@ -554,7 +555,7 @@ export function BpbPage({
     return (
       <section className="panel-card">
         <p className="panel-description">
-          در حال بارگیری BPB...
+          {t('bpb.loading')}
         </p>
       </section>
     )
@@ -568,7 +569,7 @@ export function BpbPage({
             <span className="panel-kicker">
               Cloudflare + BPB
             </span>
-            <h3>راه‌اندازی و اتصال خودکار BPB</h3>
+            <h3>{t('bpb.title')}</h3>
           </div>
 
           <span
@@ -581,15 +582,15 @@ export function BpbPage({
             }
           >
             {status?.connected
-              ? 'متصل'
+              ? t('bpb.badge.connected')
               : cloudflare.deployed
-                ? 'پنل آماده'
-                : 'راه‌اندازی نشده'}
+                ? t('bpb.badge.ready')
+                : t('bpb.badge.notSetup')}
           </span>
         </div>
 
         <p className="panel-description">
-          اولین بار فقط «راه‌اندازی خودکار» را بزن و داخل مرورگر Cloudflare ورود را تأیید کن. نرم‌افزار خودش KV، Worker، پنل و لینک‌های اشتراک را می‌سازد. بعد از آن کانفیگ‌ها روی دستگاه ذخیره می‌شوند.
+          {t('bpb.desc')}
         </p>
 
         {progressText && (
@@ -612,31 +613,31 @@ export function BpbPage({
 
         <div className="bpb-auto-summary">
           <div>
-            <span>حساب Cloudflare</span>
+            <span>{t('bpb.cf.account')}</span>
             <strong>
               {cloudflare.accountName ??
-                'متصل نشده'}
+                t('bpb.cf.notConnected')}
             </strong>
           </div>
           <div>
-            <span>پنل BPB</span>
+            <span>{t('bpb.panel')}</span>
             <strong>
               {cloudflare.deployed
-                ? 'ساخته شده'
-                : 'ساخته نشده'}
+                ? t('bpb.panel.created')
+                : t('bpb.panel.notCreated')}
             </strong>
           </div>
           <div>
-            <span>کانفیگ‌های ذخیره‌شده</span>
+            <span>{t('bpb.cachedConfigs')}</span>
             <strong>
               {nodes.length.toLocaleString('fa-IR')}
             </strong>
           </div>
           <div>
-            <span>سرور قبلی</span>
+            <span>{t('bpb.prevServer')}</span>
             <strong>
               {profile.lastSuccessfulNodeName ??
-                'هنوز ثبت نشده'}
+                t('bpb.prevServer.none')}
             </strong>
           </div>
         </div>
@@ -650,8 +651,8 @@ export function BpbPage({
               onClick={() => void setupEverything()}
             >
               {busy
-                ? 'در حال راه‌اندازی...'
-                : 'راه‌اندازی خودکار BPB'}
+                ? t('bpb.settingUp')
+                : t('bpb.setup')}
             </button>
           )}
 
@@ -675,8 +676,8 @@ export function BpbPage({
                   }
                 >
                   {connectingMode === 'fastest'
-                    ? 'در حال اتصال...'
-                    : 'اتصال به سریع‌ترین'}
+                    ? t('bpb.connecting')
+                    : t('bpb.connectFastest')}
                 </button>
 
                 <button
@@ -695,7 +696,7 @@ export function BpbPage({
                     )
                   }
                 >
-                  اتصال به سرور قبلی
+                  {t('bpb.connectPrev')}
                 </button>
               </>
             )}
@@ -706,7 +707,7 @@ export function BpbPage({
               type="button"
               onClick={() => void disconnect()}
             >
-              قطع اتصال BPB
+              {t('bpb.disconnect')}
             </button>
           )}
 
@@ -719,8 +720,8 @@ export function BpbPage({
                 onClick={() => void updateConfigs()}
               >
                 {busy
-                  ? 'در حال دریافت...'
-                  : 'به‌روزرسانی کانفیگ‌ها'}
+                  ? t('bpb.updating')
+                  : t('bpb.updateConfigs')}
               </button>
 
               <button
@@ -729,7 +730,7 @@ export function BpbPage({
                 disabled={busy || status?.connected}
                 onClick={() => void updatePanel()}
               >
-                به‌روزرسانی پنل BPB
+                {t('bpb.updatePanel')}
               </button>
             </>
           )}
@@ -742,16 +743,16 @@ export function BpbPage({
             <span className="panel-kicker">
               Cached BPB Configs
             </span>
-            <h3>فهرست کانفیگ‌های BPB</h3>
+            <h3>{t('bpb.list.title')}</h3>
           </div>
           <span className="status-pill">
-            مرتب‌شده براساس پینگ
+            {t('bpb.list.sorted')}
           </span>
         </div>
 
         {nodes.length === 0 ? (
           <div className="bpb-empty-list">
-            هنوز کانفیگی ذخیره نشده است. ابتدا راه‌اندازی خودکار را انجام بده یا «به‌روزرسانی کانفیگ‌ها» را بزن.
+            {t('bpb.list.empty')}
           </div>
         ) : (
           <div className="bpb-server-list">
@@ -807,9 +808,9 @@ export function BpbPage({
                     </small>
                   </span>
                   <span className="bpb-server-badges">
-                    {isFastest && <em>سریع‌ترین</em>}
-                    {isPrevious && <em>قبلی</em>}
-                    {isActive && <em>متصل</em>}
+                    {isFastest && <em>{t('bpb.badge.fastest')}</em>}
+                    {isPrevious && <em>{t('bpb.badge.previous')}</em>}
+                    {isActive && <em>{t('bpb.badge.connected')}</em>}
                   </span>
                   <span
                     className={

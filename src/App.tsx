@@ -7,6 +7,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react'
+import { type Lang, LangCtx, TR, useT } from './i18n'
 import { useDirectDomains } from './domain/use-direct-domains'
 import { useEngineInfo } from './engine/use-engine-info'
 import { useEngineProcess } from './engine/use-engine-process'
@@ -51,189 +52,16 @@ type FreePoolServer = {
   addedAt: string
 }
 
-// ── Theme & Language ─────────────────────────────────────────────────────────
+// ── Theme ────────────────────────────────────────────────────────────────────
 
 type Theme = 'dark' | 'light'
-type Lang = 'fa' | 'en' | 'de'
 
 const ThemeCtx = createContext<{ theme: Theme; setTheme: (t: Theme) => void }>({
   theme: 'dark',
   setTheme: () => {},
 })
 
-const LangCtx = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({
-  lang: 'fa',
-  setLang: () => {},
-})
-
-const TR: Record<Lang, Record<string, string>> = {
-  de: {
-    'nav.home': 'Startseite',
-    'nav.servers': 'Server',
-    'nav.subscriptions': 'Abonnements',
-    'nav.bpb': 'BPB Verbindung',
-    'nav.directSites': 'Direkte Seiten',
-    'nav.rescue': 'Rettungszentrum',
-    'nav.statistics': 'Statistiken',
-    'nav.logs': 'Protokolle',
-    'nav.guide': 'Anleitung',
-    'nav.settings': 'Einstellungen',
-    'page.home': 'Startseite',
-    'page.servers': 'Server',
-    'page.subscriptions': 'Abonnements',
-    'page.bpb': 'BPB Unabhängige Verbindung',
-    'page.directSites': 'Direkte Seiten',
-    'page.rescue': 'Verbindungsrettung',
-    'page.statistics': 'Statistiken',
-    'page.logs': 'Anwendungsprotokoll',
-    'page.guide': 'Verbindungsanleitung',
-    'page.settings': 'Einstellungen',
-    'status.connected': 'Verbunden',
-    'status.disconnected': 'Getrennt',
-    'status.connecting': 'Verbinde...',
-    'status.stopping': 'Trenne...',
-    'status.checkingIp': 'IP wird geprüft',
-    'status.findingServer': 'Bester Server wird gesucht',
-    'status.recovering': 'Automatische Wiederherstellung',
-    'status.verifying': 'System-Proxy aktiv – wird verifiziert',
-    'status.proxyReady': 'Proxy bereit – IP nicht bestätigt',
-    'status.running': 'Läuft',
-    'status.tunConnected': 'Verbunden via TUN',
-    'btn.connect': 'Mit schnellstem Server verbinden',
-    'btn.disconnect': 'Trennen',
-    'btn.processing': 'Verarbeitung...',
-    'btn.verifyingIp': 'IP-Änderung wird verifiziert...',
-    'settings.appearance': 'Erscheinungsbild',
-    'settings.appearanceKicker': 'Appearance',
-    'settings.themeLabel': 'App-Design',
-    'settings.dark': 'Dunkel (Standard)',
-    'settings.light': 'Hell',
-    'settings.language': 'Sprache',
-    'settings.languageKicker': 'Language',
-    'settings.langFa': 'فارسی',
-    'settings.langEn': 'English',
-    'settings.langDe': 'Deutsch (Standard)',
-    'settings.appearanceNote': 'Design- und Sprachänderungen werden sofort übernommen.',
-    'toggle.themeToDark': 'Dunkelmodus',
-    'toggle.themeToLight': 'Hellmodus',
-    'toggle.lang': 'Sprache wechseln',
-    'engineCore': 'Kern',
-    'version': 'Version 0.1.0',
-  },
-  fa: {
-    'nav.home': 'خانه',
-    'nav.servers': 'سرورها',
-    'nav.subscriptions': 'اشتراک‌ها',
-    'nav.bpb': 'اتصال BPB',
-    'nav.directSites': 'سایت‌های مستقیم',
-    'nav.rescue': 'مرکز نجات',
-    'nav.statistics': 'آمار',
-    'nav.logs': 'گزارش',
-    'nav.guide': 'راهنما',
-    'nav.settings': 'تنظیمات',
-    'page.home': 'خانه',
-    'page.servers': 'سرورها',
-    'page.subscriptions': 'اشتراک‌ها',
-    'page.bpb': 'اتصال مستقل BPB',
-    'page.directSites': 'سایت‌های مستقیم',
-    'page.rescue': 'مرکز نجات اتصال',
-    'page.statistics': 'آمار اتصال',
-    'page.logs': 'گزارش برنامه',
-    'page.guide': 'راهنمای اتصال',
-    'page.settings': 'تنظیمات',
-    'status.connected': 'متصل',
-    'status.disconnected': 'قطع',
-    'status.connecting': 'در حال راه‌اندازی',
-    'status.stopping': 'در حال توقف',
-    'status.checkingIp': 'در حال بررسی IP',
-    'status.findingServer': 'در حال یافتن سرور سالم',
-    'status.recovering': 'در حال بازیابی خودکار',
-    'status.verifying': 'System Proxy فعال؛ در حال تأیید',
-    'status.proxyReady': 'پروکسی آماده؛ IP تأیید نشده',
-    'status.running': 'در حال اجرا',
-    'status.tunConnected': 'متصل با TUN',
-    'btn.connect': 'اتصال با سریع‌ترین سرور',
-    'btn.disconnect': 'قطع اتصال',
-    'btn.processing': 'در حال انجام عملیات...',
-    'btn.verifyingIp': 'در حال تأیید تغییر IP...',
-    'settings.appearance': 'ظاهر برنامه',
-    'settings.appearanceKicker': 'Appearance',
-    'settings.themeLabel': 'پوسته برنامه',
-    'settings.dark': 'تاریک (پیش‌فرض)',
-    'settings.light': 'روشن',
-    'settings.language': 'زبان',
-    'settings.languageKicker': 'Language',
-    'settings.langFa': 'فارسی (پیش‌فرض)',
-    'settings.langEn': 'English',
-    'settings.langDe': 'Deutsch',
-    'settings.appearanceNote': 'تغییر پوسته و زبان بلافاصله اعمال می‌شود.',
-    'toggle.themeToDark': 'حالت تاریک',
-    'toggle.themeToLight': 'حالت روشن',
-    'toggle.lang': 'تغییر زبان',
-    'engineCore': 'هسته برنامه',
-    'version': 'نسخه ۰.۱.۰',
-  },
-  en: {
-    'nav.home': 'Home',
-    'nav.servers': 'Servers',
-    'nav.subscriptions': 'Subscriptions',
-    'nav.bpb': 'BPB Connect',
-    'nav.directSites': 'Direct Sites',
-    'nav.rescue': 'Rescue Center',
-    'nav.statistics': 'Statistics',
-    'nav.logs': 'Logs',
-    'nav.guide': 'Guide',
-    'nav.settings': 'Settings',
-    'page.home': 'Home',
-    'page.servers': 'Servers',
-    'page.subscriptions': 'Subscriptions',
-    'page.bpb': 'BPB Independent Connect',
-    'page.directSites': 'Direct Sites',
-    'page.rescue': 'Connection Rescue',
-    'page.statistics': 'Statistics',
-    'page.logs': 'Application Logs',
-    'page.guide': 'Connection Guide',
-    'page.settings': 'Settings',
-    'status.connected': 'Connected',
-    'status.disconnected': 'Disconnected',
-    'status.connecting': 'Starting up',
-    'status.stopping': 'Stopping',
-    'status.checkingIp': 'Verifying IP',
-    'status.findingServer': 'Finding best server',
-    'status.recovering': 'Auto-recovering',
-    'status.verifying': 'System Proxy active — verifying',
-    'status.proxyReady': 'Proxy ready — IP not confirmed',
-    'status.running': 'Running',
-    'status.tunConnected': 'Connected via TUN',
-    'btn.connect': 'Connect to fastest server',
-    'btn.disconnect': 'Disconnect',
-    'btn.processing': 'Processing...',
-    'btn.verifyingIp': 'Verifying IP change...',
-    'settings.appearance': 'Appearance',
-    'settings.appearanceKicker': 'Appearance',
-    'settings.themeLabel': 'App theme',
-    'settings.dark': 'Dark (default)',
-    'settings.light': 'Light',
-    'settings.language': 'Language',
-    'settings.languageKicker': 'Language',
-    'settings.langFa': 'فارسی',
-    'settings.langEn': 'English (default)',
-    'settings.langDe': 'Deutsch',
-    'settings.appearanceNote': 'Theme and language changes apply immediately.',
-    'toggle.themeToDark': 'Dark mode',
-    'toggle.themeToLight': 'Light mode',
-    'toggle.lang': 'Change language',
-    'engineCore': 'Engine Core',
-    'version': 'Version 0.1.0',
-  },
-}
-
-function useT() {
-  const { lang } = useContext(LangCtx)
-  return (key: string, fallback?: string) => TR[lang][key] ?? fallback ?? key
-}
-
-// ── ConfirmDialog — generic warning/confirm modal ────────────────────────────
+// ── ConfirmDialog ─────────────────────────────────────────────────────────────
 
 function ConfirmDialog({
   title,
@@ -356,31 +184,6 @@ type LatencyItem = {
   error: string | null
 }
 
-const navigationItems: NavigationItem[] = [
-  { id: 'home', label: 'خانه', icon: '⌂' },
-  { id: 'servers', label: 'سرورها', icon: '◉' },
-  { id: 'subscriptions', label: 'اشتراک‌ها', icon: '↧' },
-  { id: 'bpb', label: 'اتصال BPB', icon: '◈' },
-  { id: 'direct-sites', label: 'سایت‌های مستقیم', icon: '↗' },
-  { id: 'rescue', label: 'مرکز نجات', icon: '✦' },
-  { id: 'statistics', label: 'آمار', icon: '▥' },
-  { id: 'logs', label: 'گزارش', icon: '≡' },
-  { id: 'guide', label: 'راهنما', icon: '?' },
-  { id: 'settings', label: 'تنظیمات', icon: '⚙' },
-]
-
-const pageTitles: Record<PageId, string> = {
-  home: 'خانه',
-  servers: 'سرورها',
-  subscriptions: 'اشتراک‌ها',
-  bpb: 'اتصال مستقل BPB',
-  'direct-sites': 'سایت‌های مستقیم',
-  rescue: 'مرکز نجات اتصال',
-  statistics: 'آمار اتصال',
-  logs: 'گزارش برنامه',
-  guide: 'راهنمای اتصال',
-  settings: 'تنظیمات',
-}
 
 function App() {
   const [theme, setThemeState] = useState<Theme>(
@@ -403,7 +206,34 @@ function App() {
     localStorage.setItem('hd-lang', l)
   }
 
-  const t = (key: string, fallback?: string) => TR[lang][key] ?? fallback ?? key
+  const t = (key: string, fallback?: string): string =>
+    TR[lang]?.[key] ?? fallback ?? TR['fa'][key] ?? key
+
+  const navigationItems: NavigationItem[] = [
+    { id: 'home', label: t('nav.home'), icon: '⌂' },
+    { id: 'servers', label: t('nav.servers'), icon: '◉' },
+    { id: 'subscriptions', label: t('nav.subscriptions'), icon: '↧' },
+    { id: 'bpb', label: t('nav.bpb'), icon: '◈' },
+    { id: 'direct-sites', label: t('nav.directSites'), icon: '↗' },
+    { id: 'rescue', label: t('nav.rescue'), icon: '✦' },
+    { id: 'statistics', label: t('nav.statistics'), icon: '▥' },
+    { id: 'logs', label: t('nav.logs'), icon: '≡' },
+    { id: 'guide', label: t('nav.guide'), icon: '?' },
+    { id: 'settings', label: t('nav.settings'), icon: '⚙' },
+  ]
+
+  const pageTitles: Record<PageId, string> = {
+    home: t('page.home'),
+    servers: t('page.servers'),
+    subscriptions: t('page.subscriptions'),
+    bpb: t('page.bpb'),
+    'direct-sites': t('page.directSites'),
+    rescue: t('page.rescue'),
+    statistics: t('page.statistics'),
+    logs: t('page.logs'),
+    guide: t('page.guide'),
+    settings: t('page.settings'),
+  }
 
   const [activePage, setActivePage] = useState<PageId>('home')
   const [connectionActionError, setConnectionActionError] =
@@ -1375,7 +1205,7 @@ function App() {
               onClick={() => setActivePage(item.id)}
             >
               <span className="navigation-icon">{item.icon}</span>
-              <span>{t(NAV_I18N[item.id], item.label)}</span>
+              <span>{item.label}</span>
             </button>
           ))}
         </nav>
@@ -1398,7 +1228,7 @@ function App() {
                     ? `Proxy ${engineProcess.status.localPort}`
                     : engine.info?.healthy
                       ? `sing-box ${engine.info.version}`
-                      : lang === 'en' ? 'Unavailable' : 'در دسترس نیست'}
+                      : t('home.core.unavailable')}
               </span>
             </div>
           </div>
@@ -1410,7 +1240,7 @@ function App() {
         <header className="topbar">
           <div>
             <p className="topbar-eyebrow">HamidsDeutsch Connect</p>
-            <h1>{t(PAGE_I18N[activePage], pageTitles[activePage])}</h1>
+            <h1>{pageTitles[activePage]}</h1>
           </div>
 
           <div className="topbar-controls">
@@ -1427,9 +1257,9 @@ function App() {
             <button
               className="topbar-lang-btn"
               type="button"
-              title={t('toggle.lang', 'تغییر زبان')}
+              title={t('toggle.lang')}
               onClick={() => setLang(lang === 'fa' ? 'en' : lang === 'en' ? 'de' : 'fa')}
-              aria-label={t('toggle.lang', 'تغییر زبان')}
+              aria-label={t('toggle.lang')}
             >
               {lang === 'fa' ? '🇮🇷' : lang === 'en' ? '🇬🇧' : '🇩🇪'}
               <span className="topbar-lang-label">{lang === 'fa' ? 'FA' : lang === 'en' ? 'EN' : 'DE'}</span>
@@ -1931,6 +1761,7 @@ function HomePage({
   onFreeConnect,
   onFreeDisconnect,
 }: HomePageProps) {
+  const t = useT()
   const mainActionAvailable = Boolean(
     processStatus.running || codespaceConnected || freePhase === 'connected' || fastestServer || selectedServer,
   )
@@ -2009,29 +1840,27 @@ function HomePage({
               }
             />
             {activeMethod === 'codespace'
-              ? `GitHub Codespace متصل${codespaceHost ? ` · ${codespaceHost}` : ''}${isConnected ? ` · IP ${ipVerificationResult.proxyIp ?? 'تأیید شد'}` : ''}`
+              ? `GitHub Codespace ${t('status.connected')}${codespaceHost ? ` · ${codespaceHost}` : ''}${isConnected ? ` · IP ${ipVerificationResult.proxyIp ?? t('stats.confirmed')}` : ''}`
               : activeMethod === 'free'
-                ? `سرور رایگان متصل${freeNodeName ? ` · ${freeNodeName}` : ''}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}${isConnected ? ` · IP ${ipVerificationResult.proxyIp ?? 'تأیید شد'}` : ''}`
+                ? `${t('home.free.title')} ${t('status.connected')}${freeNodeName ? ` · ${freeNodeName}` : ''}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}${isConnected ? ` · IP ${ipVerificationResult.proxyIp ?? t('stats.confirmed')}` : ''}`
                 : isConnected
                   ? processStatus.connectionMode === 'tun'
-                    ? `TUN فعال · IP خروجی ${tunCurrentIp ?? 'تأیید شد'}`
-                    : `System Proxy فعال · IP خروجی ${ipVerificationResult.proxyIp ?? 'تأیید شد'}`
+                    ? `TUN · IP ${tunCurrentIp ?? t('stats.confirmed')}`
+                    : `System Proxy · IP ${ipVerificationResult.proxyIp ?? t('stats.confirmed')}`
                   : ipVerificationChecking
-                    ? 'در حال مقایسه IP مستقیم و پروکسی'
+                    ? t('status.checkingIp')
                     : processStatus.ready
-                      ? `پروکسی محلی آماده است؛ تغییر IP هنوز تأیید نشده`
+                      ? t('home.proxy.title.ready')
                       : processStatus.running
-                        ? 'فرایند sing-box در حال اجراست'
-                        : 'اتصال برقرار نیست'}
+                        ? t('home.proxy.title.running')
+                        : t('status.disconnected')}
           </div>
 
           {!administratorAvailable && !processStatus.running && (
             <div className="elevation-panel">
               <div>
-                <strong>برای TUN دسترسی Administrator لازم است</strong>
-                <span>
-                  بدون آن، برنامه همچنان از System Proxy امن استفاده می‌کند.
-                </span>
+                <strong>{t('hero.adminRequired')}</strong>
+                <span>{t('hero.adminDesc')}</span>
               </div>
               <button
                 className="secondary-button"
@@ -2040,8 +1869,8 @@ function HomePage({
                 onClick={onRelaunchAsAdministrator}
               >
                 {elevationRequesting
-                  ? 'در حال درخواست دسترسی...'
-                  : 'اجرای مجدد با دسترسی Administrator'}
+                  ? t('hero.requestingAccess')
+                  : t('hero.relaunchAdmin')}
               </button>
             </div>
           )}
@@ -2068,29 +1897,29 @@ function HomePage({
             <span>
               <strong>
                 {processBusy
-                  ? 'در حال انجام عملیات...'
+                  ? t('btn.processing')
                   : ipVerificationChecking
-                    ? 'در حال تأیید تغییر IP...'
+                    ? t('btn.verifyingIp')
                     : activeMethod === 'codespace'
-                      ? 'قطع اتصال GitHub'
+                      ? t('hero.disconnectGithub')
                       : activeMethod === 'free'
-                        ? 'قطع اتصال سرور رایگان'
+                        ? t('hero.disconnectFree')
                         : activeMethod === 'subscription'
-                          ? 'قطع اتصال'
-                          : 'اتصال با سریع‌ترین سرور'}
+                          ? t('btn.disconnect')
+                          : t('hero.connectFastest')}
               </strong>
               <small>
                 {activeMethod === 'codespace'
                   ? `GitHub Codespace${codespaceHost ? ` · ${codespaceHost}` : ''}`
                   : activeMethod === 'free'
-                    ? `${freeNodeName ?? 'سرور رایگان'}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}`
+                    ? `${freeNodeName ?? t('home.free.title')}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}`
                     : isConnected
                       ? processStatus.connectionMode === 'tun'
-                        ? `IP مبنا ${tunBaselineIp ?? '—'} ← IP خروجی ${tunCurrentIp ?? '—'}`
-                        : `IP مستقیم ${ipVerificationResult.directIp ?? '—'} ← IP خروجی ${ipVerificationResult.proxyIp ?? '—'}`
+                        ? `${tunBaselineIp ?? '—'} ← ${tunCurrentIp ?? '—'}`
+                        : `${ipVerificationResult.directIp ?? '—'} ← ${ipVerificationResult.proxyIp ?? '—'}`
                       : processStatus.ready
-                        ? 'پروکسی آماده است؛ می‌توانی بررسی IP را دوباره اجرا کنی'
-                        : 'کانفیگ بررسی، sing-box اجرا و تغییر IP تأیید می‌شود'}
+                        ? t('hero.proxyReady')
+                        : t('hero.configHint')}
               </small>
             </span>
           </button>
@@ -2117,12 +1946,12 @@ function HomePage({
         <article className="statistic-card">
           <span className="statistic-icon">◎</span>
           <div>
-            <span className="statistic-label">IP خروجی</span>
+            <span className="statistic-label">{t('stats.outputIp')}</span>
             <strong dir="ltr">
               {isConnected
-                ? ipVerificationResult.proxyIp ?? 'تأییدشده'
+                ? ipVerificationResult.proxyIp ?? t('stats.confirmed')
                 : processStatus.ready
-                  ? 'در انتظار تأیید'
+                  ? t('stats.pendingVerify')
                   : '—'}
             </strong>
           </div>
@@ -2130,26 +1959,26 @@ function HomePage({
         <article className="statistic-card">
           <span className="statistic-icon">◌</span>
           <div>
-            <span className="statistic-label">سرور قبلی</span>
-            <strong>{selectedServer?.name ?? 'انتخاب نشده'}</strong>
+            <span className="statistic-label">{t('stats.prevServer')}</span>
+            <strong>{selectedServer?.name ?? t('stats.notSelected')}</strong>
           </div>
         </article>
         <article className="statistic-card">
           <span className="statistic-icon">↗</span>
           <div>
-            <span className="statistic-label">سایت‌های مستقیم</span>
-            <strong>{directDomains.length} دامنه</strong>
+            <span className="statistic-label">{t('stats.directSites')}</span>
+            <strong>{directDomains.length} {t('stats.domainCount')}</strong>
           </div>
         </article>
       </section>
 
       <section className="connection-choice-grid">
         <ConnectionChoiceCard
-          title="سریع‌ترین سرور"
-          kicker="پیشنهاد خودکار"
+          title={t('home.fastest.title')}
+          kicker={t('home.fastest.kicker')}
           serverName={
             fastestServer?.name ??
-            (latencyTesting ? 'در حال سنجش...' : 'هنوز مشخص نشده')
+            (latencyTesting ? t('home.fastest.testing') : t('home.fastest.unknown'))
           }
           protocol={
             fastestServer
@@ -2159,16 +1988,16 @@ function HomePage({
           latencyMs={fastestLatencyMs}
           available={Boolean(fastestServer) && !processBusy}
           testing={latencyTesting}
-          actionLabel="اجرا با سریع‌ترین"
+          actionLabel={t('home.fastest.connect')}
           onAction={onStartFastest}
-          secondaryActionLabel="مشاهده سرورها"
+          secondaryActionLabel={t('home.fastest.viewServers')}
           onSecondaryAction={onOpenServers}
         />
 
         <ConnectionChoiceCard
-          title="سرور قبلی"
-          kicker="آخرین انتخاب"
-          serverName={selectedServer?.name ?? 'سروری انتخاب نشده'}
+          title={t('home.prev.title')}
+          kicker={t('home.prev.kicker')}
+          serverName={selectedServer?.name ?? t('home.prev.none')}
           protocol={
             selectedServer
               ? formatProtocolNameForUi(selectedServer.protocol)
@@ -2177,9 +2006,9 @@ function HomePage({
           latencyMs={selectedServerLatency?.latencyMs ?? null}
           available={Boolean(selectedServer) && !processBusy}
           testing={latencyTesting}
-          actionLabel="اجرا با سرور قبلی"
+          actionLabel={t('home.prev.connect')}
           onAction={onStartPrevious}
-          secondaryActionLabel="تست دوباره پینگ"
+          secondaryActionLabel={t('home.prev.retest')}
           onSecondaryAction={onRetestLatency}
         />
       </section>
@@ -2189,7 +2018,7 @@ function HomePage({
           <div className="codespace-connect-header">
             <div>
               <span className="panel-kicker">GitHub Codespace</span>
-              <h3>اتصال از طریق GitHub</h3>
+              <h3>{t('home.codespace.title')}</h3>
             </div>
             <div className="codespace-header-end">
               {codespaceConnected && codespaceHost && (
@@ -2219,7 +2048,7 @@ function HomePage({
                 disabled={codespaceConnecting || processBusy}
                 onClick={onCodespaceDisconnect}
               >
-                قطع اتصال GitHub
+                {t('home.codespace.disconnect')}
               </button>
             ) : (
               <button
@@ -2231,7 +2060,7 @@ function HomePage({
                 <span className="codespace-connect-icon">⬡</span>
                 <span>
                   <strong>
-                    {codespaceConnecting ? 'در حال اتصال...' : 'اتصال با GitHub Codespace'}
+                    {codespaceConnecting ? t('home.codespace.connecting') : t('home.codespace.connect')}
                   </strong>
                   <small>VLESS · WebSocket · TLS · GitHub Infrastructure</small>
                 </span>
@@ -2244,7 +2073,7 @@ function HomePage({
           <div className="codespace-connect-header">
             <div>
               <span className="panel-kicker bpb-home-kicker">BPB Panel</span>
-              <h3>اتصال از طریق BPB</h3>
+              <h3>{t('home.bpb.title')}</h3>
             </div>
             <div className="codespace-header-end">
               <span className="free-badge">Free</span>
@@ -2254,6 +2083,9 @@ function HomePage({
               />
             </div>
           </div>
+          <p className="bpb-home-description">
+            {t('home.bpb.hint')}
+          </p>
           <div className="bpb-home-actions">
             <button
               className={`bpb-home-connect-button${otherMethodActive ? ' method-faded' : ''}`}
@@ -2262,8 +2094,8 @@ function HomePage({
             >
               <span>◈</span>
               <span>
-                <strong>اتصال از طریق BPB</strong>
-                <small>Cloudflare Workers · سریع‌ترین سرور</small>
+                <strong>{t('home.bpb.connect')}</strong>
+                <small>Cloudflare Workers</small>
               </span>
             </button>
           </div>
@@ -2366,10 +2198,10 @@ function HomePage({
             </span>
             <h3>
               {isConnected
-                ? 'System Proxy و تغییر IP تأیید شد'
+                ? t('home.proxy.title.verified')
                 : processStatus.ready
-                  ? 'پروکسی محلی آماده است'
-                  : 'sing-box در حال اجراست'}
+                  ? t('home.proxy.title.ready')
+                  : t('home.proxy.title.running')}
             </h3>
             <p dir="ltr">
               {processStatus.localHost}:{processStatus.localPort}
@@ -2392,7 +2224,7 @@ function HomePage({
                 disabled={processBusy || ipVerificationChecking}
                 onClick={onVerifyIp}
               >
-                {ipVerificationChecking ? 'در حال بررسی...' : 'بررسی دوباره IP'}
+                {ipVerificationChecking ? t('home.proxy.verifying') : t('home.proxy.recheck')}
               </button>
             )}
 
@@ -2402,7 +2234,7 @@ function HomePage({
               disabled={processBusy || ipVerificationChecking}
               onClick={onStop}
             >
-              قطع
+              {t('home.proxy.stop')}
             </button>
           </div>
         </section>
@@ -2421,16 +2253,16 @@ function HomePage({
               <span className="panel-kicker">IP Verification</span>
               <h3>
                 {processStatus.connectionMode === 'tun'
-                  ? 'اتصال سراسری TUN تأیید شد'
-                  : 'اتصال سراسری ویندوز تأیید شد'}
+                  ? t('home.proxy.title.tun')
+                  : t('home.proxy.title.global')}
               </h3>
             </div>
-            <span className="verified-connection-badge">متصل</span>
+            <span className="verified-connection-badge">{t('home.proxy.connected')}</span>
           </div>
 
           <div className="ip-verification-grid">
             <div>
-              <span>IP مستقیم</span>
+              <span>IP</span>
               <strong dir="ltr">{ipVerificationResult.directIp ?? '—'}</strong>
               <small>
                 {ipVerificationResult.directDurationMs !== null
@@ -2439,7 +2271,7 @@ function HomePage({
               </small>
             </div>
             <div>
-              <span>IP عبوری از پروکسی</span>
+              <span>{t('home.proxy.ipLabel')}</span>
               <strong dir="ltr">{ipVerificationResult.proxyIp ?? '—'}</strong>
               <small>
                 {ipVerificationResult.proxyDurationMs !== null
@@ -2454,35 +2286,35 @@ function HomePage({
       <section className="home-grid">
         <article className="panel-card">
           <div className="panel-heading">
-            <div><span className="panel-kicker">مسیر خروج</span><h3>وضعیت هسته</h3></div>
+            <div><span className="panel-kicker">{t('home.core.kicker')}</span><h3>{t('home.core.title')}</h3></div>
             <span className="panel-icon">◉</span>
           </div>
           <div className="connection-details">
             <DetailRow
-              label="مرحله فعلی"
-              value={isConnected ? 'اتصال تأییدشده' : 'پروکسی محلی'}
+              label={t('home.core.phase')}
+              value={isConnected ? t('home.core.connected') : t('home.core.localProxy')}
             />
             <DetailRow
-              label="پورت محلی"
+              label={t('home.core.port')}
               value={`${processStatus.localHost}:${processStatus.localPort}`}
               muted={!processStatus.ready}
             />
             <DetailRow
-              label="هسته شبکه"
-              value={engineInfo?.healthy ? `sing-box ${engineInfo.version}` : 'در دسترس نیست'}
+              label={t('home.core.engine')}
+              value={engineInfo?.healthy ? `sing-box ${engineInfo.version}` : t('home.core.unavailable')}
               muted={!engineInfo?.healthy}
             />
-            <DetailRow label="System Proxy / TUN" value="هنوز فعال نشده" muted />
+            <DetailRow label={t('home.core.proxyStatus')} value={t('home.core.notEnabled')} muted />
             <DetailRow
-              label="بررسی تغییر IP"
+              label={t('home.core.ipCheck')}
               value={
                 isConnected
                   ? `${ipVerificationResult.directIp ?? '—'} → ${ipVerificationResult.proxyIp ?? '—'}`
                   : ipVerificationChecking
-                    ? 'در حال بررسی'
+                    ? t('home.core.checking')
                     : processStatus.ready
-                      ? 'تأیید نشده'
-                      : 'در انتظار اجرا'
+                      ? t('home.core.unverified')
+                      : t('home.core.pending')
               }
               muted={!isConnected}
             />
@@ -2491,30 +2323,30 @@ function HomePage({
 
         <article className="panel-card">
           <div className="panel-heading">
-            <div><span className="panel-kicker">دسترسی مستقیم</span><h3>سایت‌های بدون VPN</h3></div>
-            <button className="text-button" type="button" onClick={onOpenDirectSites}>مدیریت</button>
+            <div><span className="panel-kicker">{t('home.direct.kicker')}</span><h3>{t('home.direct.title')}</h3></div>
+            <button className="text-button" type="button" onClick={onOpenDirectSites}>{t('home.direct.manage')}</button>
           </div>
           <div className="domain-preview-list">
             {directDomains.slice(0, 3).map((domain) => (
               <DomainPreview domain={domain} key={domain} />
             ))}
             {directDomains.length === 0 && (
-              <p className="empty-list-message">هنوز دامنه‌ای ثبت نشده است.</p>
+              <p className="empty-list-message">{t('home.direct.empty')}</p>
             )}
           </div>
           <button className="secondary-button" type="button" onClick={onOpenDirectSites}>
-            مشاهده تمام دامنه‌ها
+            {t('home.direct.viewAll')}
           </button>
         </article>
 
         <article className="panel-card rescue-preview-card">
           <div className="panel-heading">
-            <div><span className="panel-kicker">شرایط اختلال</span><h3>مرکز نجات اتصال</h3></div>
-            <span className="rescue-badge">آماده‌سازی</span>
+            <div><span className="panel-kicker">{t('home.rescue.kicker')}</span><h3>{t('home.rescue.title')}</h3></div>
+            <span className="rescue-badge">{t('home.rescue.badge')}</span>
           </div>
-          <p>در نسخه‌های بعد، برنامه Fragment، SNI، Serverless و روش‌های Tor را بررسی می‌کند.</p>
+          <p>{t('home.rescue.desc')}</p>
           <button className="secondary-button" type="button" onClick={onOpenRescue}>
-            مشاهده مرکز نجات
+            {t('home.rescue.view')}
           </button>
         </article>
       </section>
@@ -2597,10 +2429,11 @@ function LatencyBadge({
   latencyMs: number | null
   testing?: boolean
 }) {
+  const t = useT()
   if (testing) {
     return (
       <span className="latency-badge latency-badge-testing">
-        در حال تست
+        {t('servers.testing')}
       </span>
     )
   }
@@ -2608,7 +2441,7 @@ function LatencyBadge({
   if (latencyMs === null) {
     return (
       <span className="latency-badge latency-badge-unavailable">
-        بدون نتیجه
+        {t('servers.noResult')}
       </span>
     )
   }
@@ -2658,13 +2491,14 @@ function DomainPreview({
 }: {
   domain: string
 }) {
+  const t = useT()
   return (
     <div className="domain-preview">
       <span className="domain-preview-check">
         ✓
       </span>
       <span dir="ltr">{domain}</span>
-      <small>مستقیم</small>
+      <small>{t('servers.direct')}</small>
     </div>
   )
 }
@@ -2787,6 +2621,7 @@ function SubscriptionsPage({
   onLoadServers,
   loadingServerSubscriptionId,
 }: SubscriptionsPageProps) {
+  const t = useT()
   const [nameInput, setNameInput] =
     useState('')
 
@@ -2848,7 +2683,7 @@ function SubscriptionsPage({
 
     setMessage({
       type: 'success',
-      text: 'اشتراک با موفقیت و به‌صورت امن ذخیره شد.',
+      text: t('sub.success.add'),
     })
   }
 
@@ -2880,7 +2715,7 @@ function SubscriptionsPage({
 
     setMessage({
       type: 'success',
-      text: 'اشتراک حذف شد.',
+      text: t('sub.success.delete'),
     })
   }
 
@@ -2921,8 +2756,7 @@ function SubscriptionsPage({
 
     setMessage({
       type: 'success',
-      text:
-        'اشتراک با موفقیت دریافت و تحلیل شد.',
+      text: t('sub.success.inspect'),
     })
   }
 
@@ -2958,9 +2792,9 @@ function SubscriptionsPage({
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
-              منبع کانفیگ
+              {t('sub.add.kicker')}
             </span>
-            <h3>افزودن اشتراک امن</h3>
+            <h3>{t('sub.add.title')}</h3>
           </div>
 
           <div className="heading-end-row">
@@ -2978,13 +2812,13 @@ function SubscriptionsPage({
           className="field-label"
           htmlFor="subscription-name"
         >
-          نام دلخواه
+          {t('sub.name.label')}
         </label>
 
         <input
           id="subscription-name"
           className="text-input"
-          placeholder="مثلاً اشتراک شخصی من"
+          placeholder={t('sub.name.placeholder')}
           type="text"
           value={nameInput}
           onChange={(event) => {
@@ -2999,7 +2833,7 @@ function SubscriptionsPage({
           className="field-label subscription-url-label"
           htmlFor="subscription-url"
         >
-          آدرس اشتراک
+          {t('sub.url.label')}
         </label>
 
         <div className="input-action-row">
@@ -3030,8 +2864,8 @@ function SubscriptionsPage({
             }}
           >
             {submitting
-              ? 'در حال ذخیره...'
-              : 'افزودن'}
+              ? t('sub.add.saving')
+              : t('sub.add.btn')}
           </button>
         </div>
 
@@ -3058,15 +2892,15 @@ function SubscriptionsPage({
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
-              اشتراک‌های ذخیره‌شده
+              {t('sub.list.kicker')}
             </span>
-            <h3>منابع کانفیگ</h3>
+            <h3>{t('sub.list.title')}</h3>
           </div>
         </div>
 
         {loading ? (
           <div className="subscription-loading">
-            در حال خواندن اشتراک‌ها...
+            {t('sub.list.loading')}
           </div>
         ) : subscriptions.length > 0 ? (
           <div className="subscription-list">
@@ -3090,13 +2924,13 @@ function SubscriptionsPage({
                     </span>
 
                     <small>
-                      لینک ذخیره‌شده و مخفی است
+                      {t('sub.list.hidden')}
                     </small>
                   </div>
 
                   <div className="subscription-actions">
                     <span className="secure-badge">
-                      امن
+                      {t('sub.list.secure')}
                     </span>
 
                     <button
@@ -3114,8 +2948,8 @@ function SubscriptionsPage({
                     >
                       {loadingServerSubscriptionId ===
                       subscription.id
-                        ? 'در حال دریافت...'
-                        : 'مشاهده سرورها'}
+                        ? t('sub.list.loading2')
+                        : t('sub.list.viewServers')}
                     </button>
 
                     <button
@@ -3133,8 +2967,8 @@ function SubscriptionsPage({
                     >
                       {inspectingId ===
                       subscription.id
-                        ? 'در حال بررسی...'
-                        : 'بررسی اشتراک'}
+                        ? t('sub.list.inspecting')
+                        : t('sub.list.inspect')}
                     </button>
 
                     <button
@@ -3152,8 +2986,8 @@ function SubscriptionsPage({
                     >
                       {removingId ===
                       subscription.id
-                        ? 'در حال حذف...'
-                        : 'حذف'}
+                        ? t('sub.list.deleting')
+                        : t('sub.list.delete')}
                     </button>
                   </div>
 
@@ -3176,11 +3010,10 @@ function SubscriptionsPage({
           <div className="empty-domain-list">
             <span>↧</span>
             <strong>
-              اشتراکی ثبت نشده است
+              {t('sub.empty.title')}
             </strong>
             <p>
-              لینک شخصی خودت را از فرم بالا
-              اضافه کن.
+              {t('sub.empty.desc')}
             </p>
           </div>
         )}
@@ -3253,6 +3086,7 @@ function ServersPage({
   onOpenSubscriptions: () => void
   onConnectFreeNode: (server: FreePoolServer) => void
 }) {
+  const t = useT()
   const [expandedServerId, setExpandedServerId] =
     useState<string | null>(null)
 
@@ -3263,10 +3097,8 @@ function ServersPage({
     return (
       <section className="empty-state">
         <div className="empty-state-icon">◌</div>
-        <h2>در حال دریافت سرورها</h2>
-        <p>
-          محتوای اشتراک در بخش امن برنامه دریافت و تحلیل می‌شود.
-        </p>
+        <h2>{t('servers.loading')}</h2>
+        <p>{t('servers.loadingDesc')}</p>
       </section>
     )
   }
@@ -3275,14 +3107,14 @@ function ServersPage({
     return (
       <section className="empty-state">
         <div className="empty-state-icon">!</div>
-        <h2>دریافت سرورها ناموفق بود</h2>
+        <h2>{t('servers.error.title')}</h2>
         <p>{error}</p>
         <button
           className="primary-button"
           type="button"
           onClick={onOpenSubscriptions}
         >
-          بازگشت به اشتراک‌ها
+          {t('servers.back')}
         </button>
       </section>
     )
@@ -3292,9 +3124,9 @@ function ServersPage({
     return (
       <EmptyPage
         icon="◉"
-        title="هنوز سروری بارگذاری نشده است"
-        description="سرورهای همه اشتراک‌ها در شروع برنامه خودکار بارگذاری می‌شوند."
-        actionLabel="رفتن به اشتراک‌ها"
+        title={t('servers.empty.title')}
+        description={t('servers.empty.desc')}
+        actionLabel={t('servers.goSubs')}
         onAction={onOpenSubscriptions}
       />
     )
@@ -3341,43 +3173,43 @@ function ServersPage({
 
     if (configCheckingNodeId === node.id) {
       return {
-        label: 'در حال بررسی کانفیگ',
+        label: t('servers.status.checking'),
         className: 'server-status-checking',
       }
     }
 
     if (configResult?.success) {
       return {
-        label: 'کانفیگ تأیید شد',
+        label: t('servers.status.ok'),
         className: 'server-status-ready',
       }
     }
 
     if (configResult && !configResult.success) {
       return {
-        label: 'کانفیگ ناسازگار',
+        label: t('servers.status.bad'),
         className: 'server-status-error',
       }
     }
 
     if (latencyResult?.reachable) {
       return {
-        label: 'در دسترس',
+        label: t('servers.status.reachable'),
         className: 'server-status-online',
       }
     }
 
     if (latencyResult && !latencyResult.reachable) {
       return {
-        label: 'پاسخ نداد',
+        label: t('servers.status.offline'),
         className: 'server-status-offline',
       }
     }
 
     return {
       label: node.valid
-        ? 'آماده بررسی'
-        : 'اطلاعات ناقص',
+        ? t('servers.status.ready')
+        : t('servers.status.incomplete'),
       className: node.valid
         ? 'server-status-pending'
         : 'server-status-error',
@@ -3392,7 +3224,7 @@ function ServersPage({
             <span className="panel-kicker">
               All Subscription Nodes
             </span>
-            <h3>همه سرورها بر اساس سرعت</h3>
+            <h3>{t('servers.title')}</h3>
           </div>
 
           <div className="servers-heading-actions">
@@ -3414,8 +3246,8 @@ function ServersPage({
               onClick={onTestLatency}
             >
               {latencyTesting
-                ? 'در حال تست همه...'
-                : 'تست دوباره پینگ'}
+                ? t('servers.retesting')
+                : t('servers.retestPing')}
             </button>
 
             {selectedServerId && (
@@ -3424,7 +3256,7 @@ function ServersPage({
                 type="button"
                 onClick={onClearSelectedServer}
               >
-                لغو انتخاب
+                {t('servers.deselect')}
               </button>
             )}
 
@@ -3514,7 +3346,7 @@ function ServersPage({
 
                 {isSelected && (
                   <span className="server-selected-label">
-                    انتخاب‌شده
+                    {t('servers.selected')}
                   </span>
                 )}
 
@@ -3527,20 +3359,20 @@ function ServersPage({
                 <div className="server-list-details">
                   <div className="server-detail-grid">
                     <ServerInformationRow
-                      label="آدرس"
-                      value={node.host ?? 'نامشخص'}
+                      label={t('servers.address')}
+                      value={node.host ?? t('servers.unknown')}
                       leftToRight
                     />
                     <ServerInformationRow
-                      label="پورت"
+                      label={t('servers.port')}
                       value={
                         node.port
                           ? String(node.port)
-                          : 'نامشخص'
+                          : t('servers.unknown')
                       }
                     />
                     <ServerInformationRow
-                      label="پروتکل"
+                      label="Protocol"
                       value={
                         formatProtocolNameForUi(
                           node.protocol,
@@ -3548,28 +3380,28 @@ function ServersPage({
                       }
                     />
                     <ServerInformationRow
-                      label="اشتراک"
+                      label={t('servers.subscription')}
                       value={
                         node.subscriptionName
                       }
                     />
                     <ServerInformationRow
-                      label="انتقال"
+                      label={t('servers.transport')}
                       value={
-                        node.transport ?? 'نامشخص'
+                        node.transport ?? t('servers.unknown')
                       }
                     />
                     <ServerInformationRow
-                      label="امنیت"
+                      label={t('servers.security')}
                       value={
                         node.tls
                           ? node.security ?? 'TLS'
-                          : 'بدون TLS'
+                          : t('servers.noTls')
                       }
                     />
                     <ServerInformationRow
-                      label="دامنه‌های مستقیم"
-                      value={`${directDomains.length} دامنه`}
+                      label={t('servers.directDomains')}
+                      value={`${directDomains.length} ${t('stats.domainCount')}`}
                     />
                   </div>
 
@@ -3583,8 +3415,8 @@ function ServersPage({
                     >
                       <strong>
                         {configResult.success
-                          ? 'sing-box کانفیگ را تأیید کرد.'
-                          : 'کانفیگ توسط sing-box رد شد.'}
+                          ? t('servers.configOk')
+                          : t('servers.configFail')}
                       </strong>
                       <p>
                         {configResult.success
@@ -3613,8 +3445,8 @@ function ServersPage({
                       }}
                     >
                       {isSelected
-                        ? 'سرور انتخاب‌شده'
-                        : 'انتخاب این سرور'}
+                        ? t('servers.selectedBtn')
+                        : t('servers.selectThis')}
                     </button>
 
                     <button
@@ -3631,8 +3463,8 @@ function ServersPage({
                       }}
                     >
                       {configCheckingNodeId === node.id
-                        ? 'در حال بررسی کانفیگ...'
-                        : 'بررسی با sing-box'}
+                        ? t('servers.checking')
+                        : t('servers.checkBtn')}
                     </button>
                   </div>
                 </div>
@@ -3933,6 +3765,7 @@ function DirectSitesPage({
   onRemoveDomain,
   onResetDomains,
 }: DirectSitesPageProps) {
+  const t = useT()
   const [domainInput, setDomainInput] =
     useState('')
 
@@ -4054,7 +3887,7 @@ function DirectSitesPage({
               Split Tunnel
             </span>
             <h3>
-              افزودن سایت بدون VPN
+              {t('direct.add.title')}
             </h3>
           </div>
 
@@ -4084,7 +3917,7 @@ function DirectSitesPage({
             type="button"
             onClick={handleAddDomain}
           >
-            افزودن
+            {t('direct.add.btn')}
           </button>
 
           <InfoButton
@@ -4097,10 +3930,10 @@ function DirectSitesPage({
           <div className="bulk-domain-heading">
             <div>
               <strong>
-                افزودن گروهی دامنه‌ها
+                {t('direct.bulk.title')}
               </strong>
               <span>
-                هر دامنه را در یک خط یا با ویرگول وارد کن.
+                {t('direct.bulk.desc')}
               </span>
             </div>
           </div>
@@ -4136,7 +3969,7 @@ domain:hamidrezasaadati.com`}
                 handleAddDomains
               }
             >
-              افزودن همه دامنه‌های معتبر
+              {t('direct.bulk.btn')}
             </button>
             <InfoButton
               fa="پیشوندهای domain:، آدرس کامل با https، ویرگول انتهای خط و خطوط خالی خودکار پاک می‌شوند. موارد تکراری دوباره ثبت نخواهند شد."
@@ -4164,7 +3997,7 @@ domain:hamidrezasaadati.com`}
             <span className="panel-kicker">
               مسیر مستقیم
             </span>
-            <h3>دامنه‌های ثبت‌شده</h3>
+            <h3>{t('direct.list.title')}</h3>
           </div>
 
           <button
@@ -4172,7 +4005,7 @@ domain:hamidrezasaadati.com`}
             type="button"
             onClick={handleResetDomains}
           >
-            بازیابی فهرست اولیه
+            {t('direct.list.reset')}
           </button>
         </div>
 
@@ -4193,28 +4026,26 @@ domain:hamidrezasaadati.com`}
                       {domain}
                     </strong>
                     <span>
-                      دامنه و تمام زیردامنه‌ها
+                      {t('direct.list.scope')}
                     </span>
                   </div>
                 </div>
 
                 <div className="domain-management-actions">
                   <span className="direct-badge">
-                    مستقیم
+                    {t('direct.list.direct')}
                   </span>
 
                   <button
                     className="remove-domain-button"
                     type="button"
-                    aria-label={`حذف ${domain}`}
-                    title="حذف دامنه"
                     onClick={() =>
                       handleRemoveDomain(
                         domain,
                       )
                     }
                   >
-                    حذف
+                    {t('direct.list.delete')}
                   </button>
                 </div>
               </div>
@@ -4224,11 +4055,10 @@ domain:hamidrezasaadati.com`}
           <div className="empty-domain-list">
             <span>↗</span>
             <strong>
-              فهرست خالی است
+              {t('direct.empty.title')}
             </strong>
             <p>
-              یک آدرس سایت وارد کن تا بدون VPN
-              باز شود.
+              {t('direct.empty.desc')}
             </p>
           </div>
         )}
@@ -4262,6 +4092,7 @@ function RescuePage({
   onReset: () => void
   connected: boolean
 }) {
+  const t = useT()
   return (
     <div className="page-stack">
       <section className="rescue-header-card active-rescue-header">
@@ -4274,7 +4105,7 @@ function RescuePage({
             Emergency Connection
           </span>
           <h2>
-            تنظیمات نجات اتصال
+            {t('rescue.title')}
           </h2>
           <p>
             این گزینه‌ها فقط هنگام ساخت اتصال جدید
@@ -4299,8 +4130,8 @@ function RescuePage({
           />
           <span>
             {settings.enabled
-              ? 'فعال'
-              : 'غیرفعال'}
+              ? t('rescue.enabled')
+              : t('rescue.disabled')}
           </span>
         </label>
       </section>
@@ -4317,7 +4148,7 @@ function RescuePage({
           <div className="rescue-setting-heading">
             <div>
               <span className="rescue-setting-badge">
-                پیشنهادشده
+                {t('rescue.suggested')}
               </span>
               <h3>
                 TLS Record Fragment
@@ -4356,7 +4187,7 @@ function RescuePage({
           <div className="rescue-setting-heading">
             <div>
               <span className="rescue-setting-badge secondary">
-                پیشرفته
+                {t('rescue.advanced')}
               </span>
               <h3>
                 TLS Handshake Fragment
@@ -4392,7 +4223,7 @@ function RescuePage({
 
           <label className="rescue-field">
             <span>
-              تأخیر fallback
+              {t('rescue.fallbackDelay')}
             </span>
             <select
               disabled={
@@ -4419,7 +4250,7 @@ function RescuePage({
                 500 ms
               </option>
               <option value="1s">
-                1 ثانیه
+                {t('rescue.sec1')}
               </option>
             </select>
           </label>
@@ -4429,7 +4260,7 @@ function RescuePage({
           <div className="rescue-setting-heading">
             <div>
               <span className="rescue-setting-badge caution">
-                اختیاری
+                {t('rescue.optional')}
               </span>
               <h3>
                 SNI سفارشی
@@ -4445,7 +4276,7 @@ function RescuePage({
 
           <label className="rescue-field">
             <span>
-              نام دامنه SNI
+              {t('rescue.sniLabel')}
             </span>
             <input
               type="text"
@@ -4484,8 +4315,8 @@ function RescuePage({
             <strong>
               {settings.enabled &&
               settings.recordFragment
-                ? ' روشن'
-                : ' خاموش'}
+                ? ` ${t('rescue.on')}`
+                : ` ${t('rescue.off')}`}
             </strong>
           </span>
 
@@ -4494,8 +4325,8 @@ function RescuePage({
             <strong>
               {settings.enabled &&
               settings.handshakeFragment
-                ? ' روشن'
-                : ' خاموش'}
+                ? ` ${t('rescue.on')}`
+                : ` ${t('rescue.off')}`}
             </strong>
           </span>
 
@@ -4505,7 +4336,7 @@ function RescuePage({
               {settings.enabled &&
               settings.customSni
                 ? ` ${settings.customSni}`
-                : ' خودکار'}
+                : ` ${t('rescue.auto')}`}
             </strong>
           </span>
         </div>
@@ -4515,7 +4346,7 @@ function RescuePage({
           type="button"
           onClick={onReset}
         >
-          بازنشانی تنظیمات نجات
+          {t('rescue.reset')}
         </button>
       </section>
     </div>
@@ -4550,6 +4381,7 @@ function StatisticsPage({
       | null
   }>
 }) {
+  const t = useT()
   const recentSessions =
     sessions.slice(0, 10)
 
@@ -4562,7 +4394,7 @@ function StatisticsPage({
           </span>
           <div>
             <span className="statistic-label">
-              اتصال موفق
+              {t('stats2.success')}
             </span>
             <strong>
               {summary.successfulSessions.toLocaleString(
@@ -4578,7 +4410,7 @@ function StatisticsPage({
           </span>
           <div>
             <span className="statistic-label">
-              تلاش ناموفق
+              {t('stats2.failed')}
             </span>
             <strong>
               {summary.failedAttempts.toLocaleString(
@@ -4594,7 +4426,7 @@ function StatisticsPage({
           </span>
           <div>
             <span className="statistic-label">
-              مجموع زمان اتصال
+              {t('stats2.totalTime')}
             </span>
             <strong>
               {formatDuration(
@@ -4610,7 +4442,7 @@ function StatisticsPage({
           </span>
           <div>
             <span className="statistic-label">
-              نشست TUN
+              {t('stats2.tunSessions')}
             </span>
             <strong>
               {summary.tunSessions.toLocaleString(
@@ -4628,22 +4460,22 @@ function StatisticsPage({
               Connection History
             </span>
             <h3>
-              نشست‌های اخیر
+              {t('stats2.recent')}
             </h3>
           </div>
 
           <span className="count-badge">
             {sessions.length.toLocaleString(
               'fa-IR',
-            )} نشست
+            )} {t('stats2.sessions')}
           </span>
         </div>
 
         {recentSessions.length === 0 ? (
           <EmptyPage
             icon="▥"
-            title="هنوز نشستی ثبت نشده"
-            description="پس از اولین اتصال واقعی، سرور، روش اتصال و مدت نشست در این بخش نمایش داده می‌شود."
+            title={t('stats2.noSessions')}
+            description={t('stats2.noSessionsDesc')}
           />
         ) : (
           <div className="diagnostic-session-list">
@@ -4685,14 +4517,14 @@ function StatisticsPage({
                         ? `${session.latencyMs.toLocaleString(
                             'fa-IR',
                           )} ms`
-                        : 'بدون پینگ'}
+                        : t('stats2.noPing')}
                     </span>
                     <span>
                       {session.endedAt
                         ? formatLocalDateTime(
                             session.endedAt,
                           )
-                        : 'در حال اتصال'}
+                        : t('stats2.connecting')}
                     </span>
                   </div>
                 </article>
@@ -4732,6 +4564,7 @@ function LogsPage({
   onCopyReport: () =>
     Promise<void>
 }) {
+  const t = useT()
   const [copied, setCopied] =
     useState(false)
 
@@ -4752,7 +4585,7 @@ function LogsPage({
             Application Diagnostics
           </span>
           <h3>
-            گزارش اتصال
+            {t('logs.title')}
           </h3>
         </div>
 
@@ -4773,8 +4606,8 @@ function LogsPage({
             }}
           >
             {copied
-              ? 'کپی شد'
-              : 'کپی گزارش فنی'}
+              ? t('logs.copied')
+              : t('logs.copy')}
           </button>
 
           <button
@@ -4785,7 +4618,7 @@ function LogsPage({
             }
             onClick={onClear}
           >
-            پاک‌کردن
+            {t('logs.clear')}
           </button>
         </div>
       </div>
@@ -4793,8 +4626,8 @@ function LogsPage({
       {events.length === 0 ? (
         <EmptyPage
           icon="▤"
-          title="گزارشی ثبت نشده"
-          description="تلاش‌های اتصال و بازیابی خودکار پس از استفاده از برنامه در این بخش نمایش داده می‌شوند."
+          title={t('logs.empty.title')}
+          description={t('logs.empty.desc')}
         />
       ) : (
         <div className="diagnostic-log-list">
@@ -5042,6 +4875,7 @@ function SettingsPage({
       error: string | null
     }>
 }) {
+  const t = useT()
   const [
     extensionMessage,
     setExtensionMessage,
@@ -5118,8 +4952,8 @@ function SettingsPage({
         message:
           result.success
             ? result.updateAvailable
-              ? 'نسخه پایدار جدید آماده نصب است.'
-              : 'آخرین نسخه پایدار از قبل نصب است.'
+              ? t('settings.engine.updateAvailable')
+              : t('settings.engine.upToDate')
             : null,
         error:
           result.error,
@@ -5176,12 +5010,12 @@ function SettingsPage({
     try {
       const result = await onDownloadExtensionZip()
       if (result.success) {
-        setExtensionMessage({ type: 'success', text: 'فایل ZIP افزونه با موفقیت ذخیره شد.' })
+        setExtensionMessage({ type: 'success', text: t('settings.ext.zipSaved') })
       } else {
-        setExtensionMessage({ type: 'error', text: result.error ?? 'دانلود افزونه ناموفق بود.' })
+        setExtensionMessage({ type: 'error', text: result.error ?? t('settings.ext.zipFailed') })
       }
     } catch (error) {
-      setExtensionMessage({ type: 'error', text: error instanceof Error ? error.message : 'دانلود افزونه ناموفق بود.' })
+      setExtensionMessage({ type: 'error', text: error instanceof Error ? error.message : t('settings.ext.zipFailed') })
     } finally {
       setDownloadingExtensionZip(false)
     }
@@ -5202,15 +5036,14 @@ function SettingsPage({
       if (result.success) {
         setExtensionMessage({
           type: 'success',
-          text:
-            'پوشه افزونه باز شد. آن را با گزینه Load unpacked در Chrome یا Edge انتخاب کن.',
+          text: t('settings.ext.folderOpened'),
         })
       } else {
         setExtensionMessage({
           type: 'error',
           text:
             result.error ??
-            'بازکردن پوشه افزونه ناموفق بود.',
+            t('settings.ext.folderFailed'),
         })
       }
     } catch (error) {
@@ -5219,14 +5052,13 @@ function SettingsPage({
         text:
           error instanceof Error
             ? error.message
-            : 'بازکردن پوشه افزونه ناموفق بود.',
+            : t('settings.ext.folderFailed'),
       })
     } finally {
       setOpeningExtensionFolder(false)
     }
   }
 
-  const t = useT()
   const { theme, setTheme } = useContext(ThemeCtx)
   const { lang, setLang } = useContext(LangCtx)
 
@@ -5316,7 +5148,7 @@ function SettingsPage({
               Connection Routing
             </span>
             <h3>
-              روش اتصال
+              {t('settings.connection.title')}
             </h3>
           </div>
 
@@ -5325,20 +5157,19 @@ function SettingsPage({
             type="button"
             onClick={onReset}
           >
-            بازنشانی
+            {t('settings.connection.reset')}
           </button>
         </div>
 
         {connected && (
           <div className="inline-notice">
-            تغییرات این بخش از اتصال بعدی اعمال
-            می‌شوند.
+            {t('settings.connection.notice')}
           </div>
         )}
 
         <label className="settings-select-field">
           <span>
-            حالت ترجیحی اتصال
+            {t('settings.mode.label')}
           </span>
 
           <select
@@ -5357,20 +5188,20 @@ function SettingsPage({
             }
           >
             <option value="auto">
-              خودکار — TUN با fallback
+              {t('settings.mode.auto')}
             </option>
             <option value="tun">
-              فقط TUN
+              {t('settings.mode.tunOnly')}
             </option>
             <option value="system-proxy">
-              فقط System Proxy
+              {t('settings.mode.proxyOnly')}
             </option>
           </select>
         </label>
 
         <SettingRow
-          title="Fallback به System Proxy"
-          description="اگر TUN ناموفق بود، اتصال همان سرور با System Proxy ادامه پیدا کند."
+          title={t('settings.mode.fallbackTitle')}
+          description={t('settings.mode.fallbackDesc')}
           checked={
             settings.allowFallback
           }
@@ -5394,21 +5225,21 @@ function SettingsPage({
           </span>
           <strong>
             {administratorAvailable
-              ? 'فعال'
-              : 'غیرفعال'}
+              ? t('settings.mode.active')
+              : t('settings.mode.inactive')}
           </strong>
 
           <span>
-            حالت انتخابی
+            {t('settings.mode.selected')}
           </span>
           <strong>
             {settings.mode ===
             'auto'
-              ? 'خودکار'
+              ? t('settings.mode.autoShort')
               : settings.mode ===
                   'tun'
-                ? 'فقط TUN'
-                : 'فقط System Proxy'}
+                ? t('settings.mode.tunShort')
+                : t('settings.mode.proxyShort')}
           </strong>
         </div>
       </section>
@@ -5420,13 +5251,13 @@ function SettingsPage({
               Split Tunneling
             </span>
             <h3>
-              سایت‌های مستقیم
+              {t('settings.direct.title')}
             </h3>
           </div>
 
           <div className="heading-end-row">
             <span className="count-badge">
-              {directDomainCount} دامنه
+              {directDomainCount} {t('settings.direct.domains')}
             </span>
             <InfoButton
               fa="دامنه‌های این فهرست از خروجی مستقیم اینترنت باز می‌شوند و وارد تونل نمی‌شوند. این قانون هم در TUN و هم در System Proxy اعمال می‌شود."
@@ -5442,7 +5273,7 @@ function SettingsPage({
             onOpenDirectSites
           }
         >
-          مدیریت سایت‌های مستقیم
+          {t('settings.direct.manage')}
         </button>
       </section>
 
@@ -5453,7 +5284,7 @@ function SettingsPage({
               Engine Update
             </span>
             <h3>
-              به‌روزرسانی sing-box
+              {t('settings.engine.title')}
             </h3>
           </div>
 
@@ -5471,22 +5302,22 @@ function SettingsPage({
         <div className="engine-version-grid">
           <div>
             <span>
-              نسخه نصب‌شده
+              {t('settings.engine.installed')}
             </span>
             <strong dir="ltr">
               {engineUpdateState.installedVersion ??
               currentEngineVersion ??
-              'نامشخص'}
+              t('settings.engine.unknown')}
             </strong>
           </div>
 
           <div>
             <span>
-              آخرین نسخه پایدار
+              {t('settings.engine.latest')}
             </span>
             <strong dir="ltr">
               {engineUpdateState.latestVersion ??
-              'هنوز بررسی نشده'}
+              t('settings.engine.notChecked')}
             </strong>
           </div>
         </div>
@@ -5504,8 +5335,8 @@ function SettingsPage({
             }}
           >
             {engineUpdateState.checking
-              ? 'در حال بررسی...'
-              : 'بررسی نسخه پایدار'}
+              ? t('settings.engine.checking')
+              : t('settings.engine.check')}
           </button>
 
           <button
@@ -5521,10 +5352,10 @@ function SettingsPage({
             }}
           >
             {engineUpdateState.installing
-              ? 'در حال دانلود و نصب...'
+              ? t('settings.engine.installing')
               : connected
-                ? 'ابتدا اتصال را قطع کن'
-                : 'دانلود و نصب نسخه جدید'}
+                ? t('settings.engine.disconnectFirst')
+                : t('settings.engine.install')}
           </button>
         </div>
 
@@ -5549,7 +5380,7 @@ function SettingsPage({
               Browser Virtual Location
             </span>
             <h3>
-              مکان مجازی مرورگر
+              {t('settings.ext.title')}
             </h3>
           </div>
 
@@ -5566,13 +5397,13 @@ function SettingsPage({
 
         <div className="virtual-location-steps">
           <span>
-            ۱. پوشه افزونه را فقط یک‌بار باز کن
+            {t('settings.ext.step1')}
           </span>
           <span>
-            ۲. صفحه Extensions مرورگر را باز کن
+            {t('settings.ext.step2')}
           </span>
           <span>
-            ۳. Developer mode و سپس Load unpacked
+            {t('settings.ext.step3')}
           </span>
         </div>
 
@@ -5583,7 +5414,7 @@ function SettingsPage({
             disabled={openingExtensionFolder}
             onClick={() => void openExtensionFolder()}
           >
-            {openingExtensionFolder ? 'در حال بازکردن...' : 'بازکردن پوشه افزونه'}
+            {openingExtensionFolder ? t('settings.ext.opening') : t('settings.ext.openFolder')}
           </button>
           <button
             className="secondary-button"
@@ -5591,7 +5422,7 @@ function SettingsPage({
             disabled={downloadingExtensionZip}
             onClick={() => void downloadZip()}
           >
-            {downloadingExtensionZip ? 'در حال ساخت...' : 'دانلود ZIP افزونه'}
+            {downloadingExtensionZip ? t('settings.ext.downloading') : t('settings.ext.downloadZip')}
           </button>
         </div>
 
@@ -5619,28 +5450,28 @@ function SettingsPage({
               Safety
             </span>
             <h3>
-              کنترل‌های ثابت
+              {t('settings.fixed.title')}
             </h3>
           </div>
         </div>
 
         <SettingRow
-          title="بررسی تغییر واقعی IP"
-          description="اتصال تنها پس از عبور واقعی ترافیک و تغییر IP موفق اعلام شود."
+          title={t('settings.fixed.ipCheck')}
+          description={t('settings.fixed.ipCheckDesc')}
           checked
           disabled
         />
 
         <SettingRow
-          title="بازیابی Proxy ویندوز"
-          description="هنگام قطع یا خروج، تنظیمات قبلی Proxy ویندوز بازیابی شود."
+          title={t('settings.fixed.proxyRestore')}
+          description={t('settings.fixed.proxyRestoreDesc')}
           checked
           disabled
         />
 
         <SettingRow
-          title="پایش سلامت اتصال"
-          description="اتصال به‌صورت دوره‌ای بررسی و در صورت خرابی بازیابی شود."
+          title={t('settings.fixed.healthMonitor')}
+          description={t('settings.fixed.healthMonitorDesc')}
           checked
           disabled
         />
@@ -5650,6 +5481,7 @@ function SettingsPage({
 }
 
 function GitHubSection() {
+  const t = useT()
   const [token, setToken] = useState('')
   const [status, setStatus] = useState<{
     hasToken: boolean
@@ -5673,11 +5505,11 @@ function GitHubSection() {
     setBusy(false)
     if (result.success) {
       setToken('')
-      setMessage({ type: 'success', text: `اتصال به حساب @${result.username} برقرار شد. مخزن اختصاصی آماده است.` })
+      setMessage({ type: 'success', text: `${t('github.connected')}: @${result.username}` })
       const s = await window.hamidsDeutsch.codespace.getStatus()
       setStatus(s)
     } else {
-      setMessage({ type: 'error', text: result.error ?? 'راه‌اندازی ناموفق بود.' })
+      setMessage({ type: 'error', text: result.error ?? t('github.setupFailed') })
     }
   }
 
@@ -5687,7 +5519,8 @@ function GitHubSection() {
     setMessage(null)
     await window.hamidsDeutsch.codespace.clearToken()
     setBusy(false)
-    setMessage({ type: 'success', text: 'توکن GitHub حذف شد.' })
+    setMessage({ type: 'success', text: t('github.tokenCleared') })
+
     const s = await window.hamidsDeutsch.codespace.getStatus()
     setStatus(s)
   }
@@ -5697,10 +5530,10 @@ function GitHubSection() {
       <div className="panel-heading">
         <div>
           <span className="panel-kicker">GitHub Codespace</span>
-          <h3>اتصال به GitHub</h3>
+          <h3>{t('github.title')}</h3>
         </div>
         {status?.hasToken && (
-          <span className="count-badge">متصل</span>
+          <span className="count-badge">{t('github.connected')}</span>
         )}
         <InfoButton
           fa="برای استفاده از اتصال Codespace، یک Personal Access Token با دسترسی‌های codespace و repo وارد کن. توکن به‌صورت رمزگذاری‌شده ذخیره می‌شود و هیچ‌گاه به‌صورت متن ساده نگهداری نخواهد شد."
@@ -5711,22 +5544,22 @@ function GitHubSection() {
       {status?.hasToken ? (
         <div className="github-status-grid">
           <div>
-            <span>حساب GitHub</span>
+            <span>{t('github.account')}</span>
             <strong dir="ltr">@{status.username ?? '—'}</strong>
           </div>
           <div>
-            <span>مخزن اختصاصی</span>
-            <strong>{status.repoCreated ? 'ساخته شده' : 'هنوز ساخته نشده'}</strong>
+            <span>{t('github.repo')}</span>
+            <strong>{status.repoCreated ? t('github.repoCreated') : t('github.repoNotCreated')}</strong>
           </div>
           {status.lastCodespaceName && (
             <div>
-              <span>آخرین Codespace</span>
+              <span>{t('github.lastCodespace')}</span>
               <strong dir="ltr">{status.lastCodespaceName}</strong>
             </div>
           )}
           {status.lastCodespaceState && (
             <div>
-              <span>وضعیت</span>
+              <span>{t('github.status')}</span>
               <strong dir="ltr">{status.lastCodespaceState}</strong>
             </div>
           )}
@@ -5759,7 +5592,7 @@ function GitHubSection() {
             disabled={busy || !token.trim()}
             onClick={() => void handleSetup()}
           >
-            {busy ? 'در حال راه‌اندازی...' : 'ذخیره و راه‌اندازی'}
+            {busy ? t('github.saving') : t('github.save')}
           </button>
         )}
         {status?.hasToken && (
@@ -5769,7 +5602,7 @@ function GitHubSection() {
             disabled={busy}
             onClick={() => void handleClear()}
           >
-            حذف توکن و قطع اتصال
+            {t('github.remove')}
           </button>
         )}
       </div>
@@ -5778,147 +5611,119 @@ function GitHubSection() {
 }
 
 function GuidePage() {
-  const { lang } = useContext(LangCtx)
-  const fa = lang === 'fa'
+  const t = useT()
 
   return (
     <div className="page-stack">
+
+      {/* ── Method 0: Free Config ──────────────────────────────────── */}
       <section className="panel-card guide-section">
         <div className="panel-heading">
           <div>
-            <span className="panel-kicker">{fa ? 'روش ۱' : 'Method 1'}</span>
-            <h3>{fa ? 'اتصال از طریق Cloudflare' : 'Cloudflare Connection'}</h3>
+            <span className="panel-kicker">{t('guide.method0.kicker')}</span>
+            <h3>{t('guide.method0.title')}</h3>
           </div>
-          <span className="guide-badge guide-badge-cf">Cloudflare</span>
+          <span className="guide-badge guide-badge-free">{t('guide.method0.badge')}</span>
         </div>
+        <p className="guide-desc">{t('guide.method0.desc')}</p>
         <ol className="guide-steps">
-          <li>{fa ? 'یک دامنه را به Cloudflare اضافه کن.' : 'Add a domain to Cloudflare.'}</li>
-          <li>{fa ? 'یک Worker جدید در Cloudflare ایجاد کن.' : 'Create a new Worker in Cloudflare.'}</li>
-          <li>{fa ? 'در تب «اتصال BPB» آدرس Worker را وارد کن.' : 'Enter the Worker URL in the BPB Connect tab.'}</li>
-          <li>{fa ? 'روی «اتصال» کلیک کن و منتظر تأیید IP بمان.' : 'Click Connect and wait for IP verification.'}</li>
+          <li>{t('guide.method0.step1')}</li>
+          <li>{t('guide.method0.step2')}</li>
+          <li>{t('guide.method0.step3')}</li>
+          <li>{t('guide.method0.step4')}</li>
         </ol>
-        <div className="guide-note">
-          {fa
-            ? 'این روش سریع‌ترین و پایدارترین اتصال را ارائه می‌دهد. برای راه‌اندازی اولیه به اکانت Cloudflare نیاز داری.'
-            : 'This method provides the fastest and most stable connection. You need a Cloudflare account for initial setup.'}
-        </div>
+        <div className="guide-note">{t('guide.method0.note')}</div>
       </section>
 
+      {/* ── Method 1: GitHub Codespace ─────────────────────────────── */}
       <section className="panel-card guide-section">
         <div className="panel-heading">
           <div>
-            <span className="panel-kicker">{fa ? 'روش ۲' : 'Method 2'}</span>
-            <h3>{fa ? 'اتصال از طریق BPB Panel' : 'BPB Panel Connection'}</h3>
+            <span className="panel-kicker">{t('guide.method1.kicker')}</span>
+            <h3>{t('guide.method1.title')}</h3>
           </div>
-          <span className="guide-badge guide-badge-bpb">BPB</span>
+          <span className="guide-badge guide-badge-gh">{t('guide.method1.badge')}</span>
         </div>
+        <p className="guide-desc">{t('guide.method1.desc')}</p>
         <ol className="guide-steps">
-          <li>{fa ? 'لینک اشتراک یا آدرس پنل BPB خود را آماده کن.' : 'Prepare your BPB panel subscription link or URL.'}</li>
-          <li>{fa ? 'به تب «اشتراک‌ها» برو و لینک را اضافه کن.' : 'Go to the Subscriptions tab and add the link.'}</li>
-          <li>{fa ? 'در تب «سرورها» پینگ را تست کن.' : 'Test ping in the Servers tab.'}</li>
-          <li>{fa ? 'از صفحه خانه روی «اتصال با سریع‌ترین سرور» کلیک کن.' : 'Click "Connect to fastest server" on the home screen.'}</li>
+          <li>{t('guide.method1.step1')}</li>
+          <li>{t('guide.method1.step2')}</li>
+          <li>{t('guide.method1.step3')}</li>
+          <li>{t('guide.method1.step4')}</li>
+          <li>{t('guide.method1.step5')}</li>
+          <li>{t('guide.method1.step6')}</li>
+          <li>{t('guide.method1.step7')}</li>
+          <li>{t('guide.method1.step8')}</li>
+          <li>{t('guide.method1.step9')}</li>
+          <li>{t('guide.method1.step10')}</li>
+          <li>{t('guide.method1.step11')}</li>
+          <li>{t('guide.method1.step12')}</li>
+          <li>{t('guide.method1.step13')}</li>
+          <li>{t('guide.method1.step14')}</li>
         </ol>
-        <div className="guide-note">
-          {fa
-            ? 'BPB Panel از چندین پروتکل پشتیبانی می‌کند. برنامه به‌صورت خودکار سریع‌ترین سرور را انتخاب می‌کند.'
-            : 'BPB Panel supports multiple protocols. The app automatically selects the fastest server.'}
-        </div>
+        <div className="guide-note">{t('guide.method1.note')}</div>
       </section>
 
+      {/* ── Method 2: V2Ray Subscription ──────────────────────────── */}
       <section className="panel-card guide-section">
         <div className="panel-heading">
           <div>
-            <span className="panel-kicker">{fa ? 'روش ۳' : 'Method 3'}</span>
-            <h3>{fa ? 'اتصال از طریق GitHub Codespace' : 'GitHub Codespace Connection'}</h3>
+            <span className="panel-kicker">{t('guide.method2.kicker')}</span>
+            <h3>{t('guide.method2.title')}</h3>
           </div>
-          <span className="guide-badge guide-badge-gh">GitHub</span>
+          <span className="guide-badge guide-badge-v2">{t('guide.method2.badge')}</span>
         </div>
+        <p className="guide-desc">{t('guide.method2.desc')}</p>
         <ol className="guide-steps">
-          <li>
-            {fa
-              ? 'یک Personal Access Token (PAT) با دسترسی‌های codespace و repo در GitHub بساز.'
-              : 'Create a Personal Access Token (PAT) with codespace and repo scopes on GitHub.'}
-          </li>
-          <li>
-            {fa
-              ? 'به «تنظیمات → GitHub Codespace» برو و توکن را وارد کن.'
-              : 'Go to Settings → GitHub Codespace and enter the token.'}
-          </li>
-          <li>
-            {fa
-              ? 'روی «ذخیره و راه‌اندازی» کلیک کن. برنامه یک مخزن خصوصی می‌سازد.'
-              : 'Click "Save & Setup". The app creates a private repository.'}
-          </li>
-          <li>
-            {fa
-              ? 'از صفحه خانه روی «اتصال با GitHub Codespace» کلیک کن.'
-              : 'Click "Connect via GitHub Codespace" on the home screen.'}
-          </li>
-          <li>
-            {fa
-              ? 'برنامه به‌صورت خودکار Codespace می‌سازد، منتظر راه‌اندازی می‌ماند و وصل می‌شود.'
-              : 'The app automatically creates a Codespace, waits for it to start, and connects.'}
-          </li>
+          <li>{t('guide.method2.step1')}</li>
+          <li>{t('guide.method2.step2')}</li>
+          <li>{t('guide.method2.step3')}</li>
+          <li>{t('guide.method2.step4')}</li>
+          <li>{t('guide.method2.step5')}</li>
         </ol>
-        <div className="guide-note">
-          {fa
-            ? 'اتصال از طریق زیرساخت GitHub برقرار می‌شود. اگر اولین اتصال ناموفق بود، برنامه یک‌بار مجدداً تلاش می‌کند.'
-            : 'Connection runs through GitHub infrastructure. If the first attempt fails, the app retries once automatically.'}
-        </div>
       </section>
 
+      {/* ── Method 3: BPB + Cloudflare ─────────────────────────────── */}
       <section className="panel-card guide-section">
         <div className="panel-heading">
           <div>
-            <span className="panel-kicker">{fa ? 'افزونه مرورگر' : 'Browser Extension'}</span>
-            <h3>{fa ? 'مکان مجازی مرورگر' : 'Browser Virtual Location'}</h3>
+            <span className="panel-kicker">{t('guide.method3.kicker')}</span>
+            <h3>{t('guide.method3.title')}</h3>
           </div>
-          <span className="guide-badge guide-badge-ext">Chrome / Edge</span>
+          <span className="guide-badge guide-badge-cf">{t('guide.method3.badge')}</span>
         </div>
-
-        <h4 className="guide-subheading">{fa ? 'نصب' : 'Installation'}</h4>
+        <p className="guide-desc">{t('guide.method3.desc')}</p>
         <ol className="guide-steps">
-          <li>
-            {fa
-              ? 'در «تنظیمات → مکان مجازی» روی «بازکردن پوشه افزونه» کلیک کن.'
-              : 'In Settings → Virtual Location, click "Open Extension Folder".'}
-          </li>
-          <li>
-            {fa
-              ? 'در Chrome/Edge به «chrome://extensions» برو و «Developer mode» را فعال کن.'
-              : 'In Chrome/Edge, go to chrome://extensions and enable Developer mode.'}
-          </li>
-          <li>
-            {fa
-              ? 'روی «Load unpacked» کلیک کن و پوشه باز‌شده را انتخاب کن.'
-              : 'Click "Load unpacked" and select the opened folder.'}
-          </li>
+          <li>{t('guide.method3.step1')}</li>
+          <li>{t('guide.method3.step2')}</li>
+          <li>{t('guide.method3.step3')}</li>
+          <li>{t('guide.method3.step4')}</li>
+          <li>{t('guide.method3.step5')}</li>
+          <li>{t('guide.method3.step6')}</li>
+          <li>{t('guide.method3.step7')}</li>
+          <li>{t('guide.method3.step8')}</li>
         </ol>
+        <div className="guide-note">{t('guide.method3.note')}</div>
+      </section>
 
-        <h4 className="guide-subheading">{fa ? 'نحوه کار' : 'How it works'}</h4>
-        <ul className="guide-steps guide-steps-bullet">
-          <li>
-            {fa
-              ? 'وقتی HamidsDeutsch متصل است، افزونه مختصات HTML5 Geolocation را با IP خروجی VPN هماهنگ می‌کند.'
-              : 'When HamidsDeutsch is connected, the extension aligns HTML5 Geolocation with the VPN exit IP.'}
-          </li>
-          <li>
-            {fa
-              ? 'سایت‌هایی که در فهرست «دسترسی مستقیم» هستند همیشه موقعیت واقعی تو را نشان می‌دهند.'
-              : 'Sites in the direct-access list always show your real location.'}
-          </li>
-          <li>
-            {fa
-              ? 'با قطع اتصال VPN، افزونه به‌طور خودکار غیرفعال می‌شود.'
-              : 'When the VPN disconnects, the extension deactivates automatically.'}
-          </li>
-        </ul>
-
-        <div className="guide-note">
-          {fa
-            ? 'افزونه فقط HTML5 Geolocation API را تغییر می‌دهد. IP مرورگر از طریق System Proxy ویندوز تنظیم می‌شود.'
-            : 'The extension only overrides the HTML5 Geolocation API. Browser IP is routed via Windows System Proxy.'}
+      {/* ── Method 4: Browser Extension ────────────────────────────── */}
+      <section className="panel-card guide-section">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">{t('guide.method4.kicker')}</span>
+            <h3>{t('guide.method4.title')}</h3>
+          </div>
+          <span className="guide-badge guide-badge-ext">{t('guide.method4.badge')}</span>
         </div>
+        <p className="guide-desc">{t('guide.method4.desc')}</p>
+        <ol className="guide-steps">
+          <li>{t('guide.method4.step1')}</li>
+          <li>{t('guide.method4.step2')}</li>
+          <li>{t('guide.method4.step3')}</li>
+          <li>{t('guide.method4.step4')}</li>
+          <li>{t('guide.method4.step5')}</li>
+          <li>{t('guide.method4.step6')}</li>
+        </ol>
       </section>
     </div>
   )
