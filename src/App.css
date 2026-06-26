@@ -4773,3 +4773,41 @@ button {
 [data-theme="light"] .session-timer {
   background: rgba(54, 179, 126, 0.1);
 }
+
+/* ── Protocol badge ───────────────────────────────────────────────────────── */
+
+.protocol-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-inline-start: 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--pb-color, #94a3b8) 15%, transparent);
+  color: var(--pb-color, #94a3b8);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+  border: 1px solid color-mix(in srgb, var(--pb-color, #94a3b8) 30%, transparent);
+}
+
+/* ── Free pool meta / refresh status ─────────────────────────────────────── */
+
+.free-pool-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.free-pool-refreshing-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+  animation: poolRefreshPulse 1s ease-in-out infinite;
+}
+
+@keyframes poolRefreshPulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50%       { opacity: 1;   transform: scale(1.1); }
+}

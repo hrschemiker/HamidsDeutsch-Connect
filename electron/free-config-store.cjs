@@ -4,8 +4,9 @@ const fs = require('node:fs/promises')
 
 const DATA_DIR = 'HamidsDeutsch-Connect'
 const DATA_FILE = 'free-config-pool.json'
-const MAX_POOL_SIZE = 100
-const MAX_FAIL_COUNT = 2
+const MAX_POOL_SIZE = 400
+const MAX_FAIL_COUNT = 3
+const PING_THRESHOLD_MS = 400
 
 function getFilePath() {
   return path.join(app.getPath('userData'), DATA_DIR, DATA_FILE)
@@ -22,7 +23,7 @@ function isValidEntry(s) {
 }
 
 function createEmpty() {
-  return { version: 1, servers: [] }
+  return { version: 2, servers: [], meta: { lastRefreshedAt: null, sourceCount: 0 } }
 }
 
 async function ensureDir() {
@@ -35,21 +36,28 @@ async function readPool() {
     const raw = await fs.readFile(getFilePath(), 'utf8')
     const parsed = JSON.parse(raw)
     if (!parsed || !Array.isArray(parsed.servers)) return createEmpty()
-    return { version: 1, servers: parsed.servers.filter(isValidEntry) }
+    return {
+      version: 2,
+      servers: parsed.servers.filter(isValidEntry),
+      meta: parsed.meta ?? { lastRefreshedAt: null, sourceCount: 0 },
+    }
   } catch (err) {
     if (err?.code === 'ENOENT') return createEmpty()
     throw err
   }
 }
 
-async function writePool(servers) {
+async function writePool(servers, meta) {
   await ensureDir()
   const sorted = [...servers]
     .sort((a, b) => (a.latencyMs ?? 999999) - (b.latencyMs ?? 999999))
     .slice(0, MAX_POOL_SIZE)
 
+  const current = await readPool()
+  const newMeta = meta ?? current.meta ?? { lastRefreshedAt: null, sourceCount: 0 }
+
   const tmp = getFilePath() + '.tmp'
-  await fs.writeFile(tmp, JSON.stringify({ version: 1, servers: sorted }, null, 2), 'utf8')
+  await fs.writeFile(tmp, JSON.stringify({ version: 2, servers: sorted, meta: newMeta }, null, 2), 'utf8')
   try {
     await fs.rename(tmp, getFilePath())
   } catch (err) {
@@ -65,14 +73,15 @@ async function writePool(servers) {
 
 /**
  * Merge newly-tested servers into the persistent pool.
- * newServers: Array<{ id, uri, name, protocol, host, port, latencyMs, lastTestedAt, addedAt }>
- * Reachable servers reset failCount; existing unreachable entries keep their failCount.
+ * - Only keeps servers with latencyMs < PING_THRESHOLD_MS
+ * - Evicts worst-latency entries when over MAX_POOL_SIZE
  */
 async function mergeServers(newServers) {
   const pool = await readPool()
   const map = new Map(pool.servers.map((s) => [s.id, s]))
 
   for (const s of newServers) {
+    if (typeof s.latencyMs === 'number' && s.latencyMs >= PING_THRESHOLD_MS) continue
     const existing = map.get(s.id)
     map.set(s.id, {
       ...(existing ?? {}),
@@ -82,24 +91,54 @@ async function mergeServers(newServers) {
     })
   }
 
-  const merged = [...map.values()].filter((s) => (s.failCount ?? 0) < MAX_FAIL_COUNT)
+  // Only keep servers with acceptable ping; drop those over threshold
+  const merged = [...map.values()].filter(
+    (s) =>
+      (s.failCount ?? 0) < MAX_FAIL_COUNT &&
+      (s.latencyMs == null || s.latencyMs < PING_THRESHOLD_MS),
+  )
   return writePool(merged)
 }
 
 /**
- * Called on app launch to increment failCount for all servers that are not in the
- * current "known good" set. If failCount reaches MAX_FAIL_COUNT they are dropped.
+ * Re-validate stored servers by pinging them.
+ * latencyFn: async (inputs: {id, host, port}[]) => {results: {id, reachable, latencyMs}[]}
+ * Removes servers that are unreachable or over threshold.
  */
-async function markStartupFailure(successfulIds = []) {
+async function revalidatePool(latencyFn) {
   const pool = await readPool()
-  const successSet = new Set(successfulIds)
+  if (pool.servers.length === 0) return []
+
+  const inputs = pool.servers
+    .filter((s) => s.host && s.port)
+    .map((s) => ({ id: s.id, host: s.host, port: s.port }))
+
+  if (inputs.length === 0) return pool.servers
+
+  const result = await latencyFn(inputs)
+  const latencyMap = new Map(result.results.map((r) => [r.id, r]))
+  const now = new Date().toISOString()
+
   const updated = pool.servers
-    .map((s) => ({
-      ...s,
-      failCount: successSet.has(s.id) ? 0 : (s.failCount ?? 0) + 1,
-    }))
-    .filter((s) => s.failCount < MAX_FAIL_COUNT)
+    .map((s) => {
+      const lr = latencyMap.get(s.id)
+      if (!lr) return { ...s, failCount: (s.failCount ?? 0) + 1 }
+      if (!lr.reachable || typeof lr.latencyMs !== 'number' || lr.latencyMs >= PING_THRESHOLD_MS) {
+        return { ...s, failCount: (s.failCount ?? 0) + 1 }
+      }
+      return { ...s, latencyMs: lr.latencyMs, failCount: 0, lastTestedAt: now }
+    })
+    .filter((s) => (s.failCount ?? 0) < MAX_FAIL_COUNT)
+
   return writePool(updated)
+}
+
+/**
+ * Update pool metadata (lastRefreshedAt, sourceCount).
+ */
+async function updatePoolMeta(meta) {
+  const pool = await readPool()
+  return writePool(pool.servers, { ...pool.meta, ...meta })
 }
 
 /** Reset failCount for a server that successfully connected. */
@@ -111,15 +150,36 @@ async function markSuccess(id) {
   return writePool(updated)
 }
 
-/** Returns the sorted pool (best latency first). */
+/** Returns top 100 servers by latency for UI display. */
 async function getPool() {
+  const pool = await readPool()
+  return pool.servers.slice(0, 100)
+}
+
+/** Returns total pool size and metadata. */
+async function getPoolMeta() {
+  const pool = await readPool()
+  return {
+    total: pool.servers.length,
+    displaying: Math.min(pool.servers.length, 100),
+    lastRefreshedAt: pool.meta?.lastRefreshedAt ?? null,
+    sourceCount: pool.meta?.sourceCount ?? 0,
+  }
+}
+
+/** Returns all stored servers (up to MAX_POOL_SIZE) for reconnect rotation. */
+async function getAllPool() {
   const pool = await readPool()
   return pool.servers
 }
 
 module.exports = {
   mergeServers,
-  markStartupFailure,
+  revalidatePool,
+  updatePoolMeta,
   markSuccess,
   getPool,
+  getPoolMeta,
+  getAllPool,
+  PING_THRESHOLD_MS,
 }

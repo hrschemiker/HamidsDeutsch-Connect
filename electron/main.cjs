@@ -50,9 +50,13 @@ const {
 
 const {
   mergeServers: mergeFreeServers,
-  markStartupFailure,
+  revalidatePool: revalidateFreePool,
+  updatePoolMeta: updateFreePoolMeta,
   markSuccess: markFreeSuccess,
   getPool: getFreePool,
+  getPoolMeta: getFreePoolMeta,
+  getAllPool: getAllFreePool,
+  PING_THRESHOLD_MS,
 } = require('./free-config-store.cjs')
 
 const {
@@ -168,10 +172,18 @@ let fatalCleanupStarted = false
 
 // ── Free Config State ──────────────────────────────────────────────────────
 
-const FREE_CONFIG_SOURCE = 'https://raw.githubusercontent.com/MohammadBahemmat/V2ray-Collector/main/all_servers.txt'
-const FREE_FETCH_LINES = 200
+const FREE_CONFIG_SOURCES = [
+  'https://raw.githubusercontent.com/MohammadBahemmat/V2ray-Collector/main/all_servers.txt',
+  'https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/all/configs.txt',
+  'https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/mix',
+  'https://raw.githubusercontent.com/Pawdroid/Free-servers/main/sub',
+]
 const FREE_TEST_TIMEOUT = 3500
 const FREE_CONNECT_ATTEMPTS = 5
+const FREE_BACKGROUND_INTERVAL_MS = 15 * 60 * 1000
+
+let freePoolRefreshing = false
+let freeBackgroundTimer = null
 
 let freeConfigState = {
   phase: 'idle',
@@ -180,6 +192,10 @@ let freeConfigState = {
   latencyMs: null,
   error: null,
   userDisconnected: false,
+  poolCount: 0,
+  poolDisplaying: 0,
+  poolLastRefreshedAt: null,
+  poolRefreshing: false,
 }
 
 function sendFreeProgress(text, phase) {
@@ -189,34 +205,37 @@ function sendFreeProgress(text, phase) {
   }
 }
 
-async function fetchFreeConfigContent() {
+async function fetchOneSource(url) {
   const { net } = require('electron')
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 20000)
   try {
-    const res = await net.fetch(FREE_CONFIG_SOURCE, {
+    const res = await net.fetch(url, {
       method: 'GET',
       redirect: 'follow',
       signal: ctrl.signal,
       headers: { 'User-Agent': 'HamidsDeutsch-Connect/1.0' },
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const text = await res.text()
-    return text
+    return await res.text()
   } finally {
     clearTimeout(timer)
   }
 }
 
-function parseLastNLines(content, n) {
+async function fetchAllFreeSources() {
+  const results = await Promise.allSettled(
+    FREE_CONFIG_SOURCES.map((url) => fetchOneSource(url)),
+  )
+  const texts = results
+    .filter((r) => r.status === 'fulfilled' && r.value)
+    .map((r) => r.value)
+  return { texts, sourceCount: texts.length }
+}
+
+function parseAllProtocols(content) {
   const { parseSubscriptionNodeRecords } = require('./subscription-parser.cjs')
-  const SUPPORTED = ['vmess://', 'vless://', 'trojan://', 'ss://']
-  const lines = content
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => SUPPORTED.some((p) => l.toLowerCase().startsWith(p)))
-  const candidates = lines.slice(-n)
-  return parseSubscriptionNodeRecords(candidates.join('\n'))
+  return parseSubscriptionNodeRecords(content)
 }
 
 async function testFreeNodes(records) {
@@ -250,12 +269,121 @@ async function testProxyConnectivity(port = 2080, timeoutMs = 6000) {
   })
 }
 
+async function backgroundRefreshFreePool() {
+  if (freePoolRefreshing) return
+  freePoolRefreshing = true
+  freeConfigState.poolRefreshing = true
+  sendFreePoolStatus()
+
+  try {
+    // 1. Fetch all sources
+    const { texts, sourceCount } = await fetchAllFreeSources()
+    if (texts.length === 0) return
+
+    // 2. Parse all protocols from combined content
+    const combined = texts.join('\n')
+    const records = parseAllProtocols(combined)
+    if (records.length === 0) return
+
+    // 3. Deduplicate by id (stable hash of uri)
+    const seen = new Set()
+    const unique = records.filter((r) => {
+      if (!r.node.valid || !r.node.host || !r.node.port) return false
+      if (seen.has(r.id)) return false
+      seen.add(r.id)
+      return true
+    })
+
+    // 4. Re-validate existing pool first (remove dead servers)
+    const { testServerBatch } = require('./server-latency.cjs')
+    await revalidateFreePool(async (inputs) => testServerBatch(inputs)).catch(() => {})
+
+    // 5. Ping-test new candidates in chunks to avoid overwhelming the network
+    const CHUNK = 80
+    const now = new Date().toISOString()
+    let totalMerged = 0
+
+    for (let i = 0; i < unique.length; i += CHUNK) {
+      if (freeConfigState.userDisconnected === false && freePoolRefreshing === false) break
+      const chunk = unique.slice(i, i + CHUNK)
+      const inputs = chunk.map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
+      const result = await testServerBatch(inputs)
+      const latencyMap = new Map(result.results.map((r) => [r.id, r]))
+
+      const toStore = chunk
+        .filter((r) => {
+          const lr = latencyMap.get(r.id)
+          return lr && lr.reachable && typeof lr.latencyMs === 'number' && lr.latencyMs < PING_THRESHOLD_MS
+        })
+        .map((r) => ({
+          id: r.id,
+          uri: r.uri,
+          name: r.node.name ?? r.node.protocol,
+          protocol: r.node.protocol,
+          host: r.node.host,
+          port: r.node.port,
+          latencyMs: latencyMap.get(r.id)?.latencyMs ?? null,
+          lastTestedAt: now,
+          addedAt: now,
+        }))
+
+      if (toStore.length > 0) {
+        await mergeFreeServers(toStore).catch(() => {})
+        totalMerged += toStore.length
+      }
+    }
+
+    const refreshedAt = new Date().toISOString()
+    await updateFreePoolMeta({ lastRefreshedAt: refreshedAt, sourceCount }).catch(() => {})
+    freeConfigState.poolLastRefreshedAt = refreshedAt
+
+    const meta = await getFreePoolMeta().catch(() => null)
+    if (meta) {
+      freeConfigState.poolCount = meta.total
+      freeConfigState.poolDisplaying = meta.displaying
+    }
+
+    sendFreePoolStatus()
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('free:pool-updated', {
+        count: meta?.total ?? 0,
+        displaying: meta?.displaying ?? 0,
+        refreshedAt,
+      })
+    }
+  } catch {
+    // Best-effort background refresh; do not surface errors.
+  } finally {
+    freePoolRefreshing = false
+    freeConfigState.poolRefreshing = false
+    sendFreePoolStatus()
+  }
+}
+
+function sendFreePoolStatus() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('free:pool-status', {
+      poolCount: freeConfigState.poolCount,
+      poolDisplaying: freeConfigState.poolDisplaying,
+      poolLastRefreshedAt: freeConfigState.poolLastRefreshedAt,
+      poolRefreshing: freeConfigState.poolRefreshing,
+    })
+  }
+}
+
+function startFreeBackgroundRefresh() {
+  backgroundRefreshFreePool().catch(() => {})
+  freeBackgroundTimer = setInterval(() => {
+    backgroundRefreshFreePool().catch(() => {})
+  }, FREE_BACKGROUND_INTERVAL_MS)
+}
+
 async function tryConnectFreeNode(record, directDomains, rescueOptions) {
   const enginePath = getEnginePath()
   const userDataPath = app.getPath('userData')
   try {
     const configResult = await createAndCheckConfig({
-      subscriptionUrl: FREE_CONFIG_SOURCE,
+      subscriptionUrl: FREE_CONFIG_SOURCES[0],
       nodeId: record.id,
       nodeUri: record.uri,
       enginePath,
@@ -288,6 +416,16 @@ async function tryConnectFreeNode(record, directDomains, rescueOptions) {
   }
 }
 
+async function testFreeNodes(records) {
+  const { testServerBatch } = require('./server-latency.cjs')
+  const inputs = records
+    .filter((r) => r.node.valid && r.node.host && r.node.port)
+    .map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
+  if (inputs.length === 0) return []
+  const result = await testServerBatch(inputs)
+  return result.results
+}
+
 async function runFreeConnect({ directDomains, rescueOptions, fetchFresh }) {
   freeConfigState.userDisconnected = false
 
@@ -306,26 +444,48 @@ async function runFreeConnect({ directDomains, rescueOptions, fetchFresh }) {
     }
   }
 
-  let records = []
-
-  if (fetchFresh) {
-    sendFreeProgress('در حال دریافت فهرست سرورهای رایگان از GitHub...', 'fetching')
-    try {
-      const content = await fetchFreeConfigContent()
-      records = parseLastNLines(content, FREE_FETCH_LINES)
-    } catch (err) {
-      sendFreeProgress('دریافت ناموفق بود. استفاده از مخزن ذخیره‌شده...', 'fetching')
+  // First: try from stored pool (fast path — already tested, below threshold)
+  const storedPool = await getAllFreePool().catch(() => [])
+  if (storedPool.length > 0) {
+    sendFreeProgress('در حال اتصال از مخزن سرورهای ذخیره‌شده...', 'connecting')
+    for (const stored of storedPool.slice(0, FREE_CONNECT_ATTEMPTS)) {
+      const record = {
+        id: stored.id,
+        uri: stored.uri,
+        node: { valid: true, host: stored.host, port: stored.port, name: stored.name, protocol: stored.protocol, transport: null, tls: false, security: null },
+      }
+      sendFreeProgress(`اتصال به ${stored.name} (${stored.latencyMs ?? '?'} ms)...`, 'connecting')
+      const configPath = await tryConnectFreeNode(record, directDomains, rescueOptions)
+      if (configPath) {
+        freeConfigState.phase = 'connected'
+        freeConfigState.nodeId = stored.id
+        freeConfigState.nodeName = stored.name
+        freeConfigState.latencyMs = stored.latencyMs
+        freeConfigState.error = null
+        await markFreeSuccess(stored.id).catch(() => {})
+        setVirtualLocationConnected(true)
+        sendFreeProgress(`متصل شد: ${stored.name}`, 'connected')
+        return { success: true, nodeId: stored.id, nodeName: stored.name, latencyMs: stored.latencyMs, error: null }
+      }
     }
   }
 
+  // Fallback: fetch fresh from all sources
+  sendFreeProgress(`در حال دریافت سرورها از ${FREE_CONFIG_SOURCES.length} منبع...`, 'fetching')
+  let records = []
+  try {
+    const { texts } = await fetchAllFreeSources()
+    const combined = texts.join('\n')
+    records = parseAllProtocols(combined)
+  } catch {
+    // Nothing fetched — pool already tried above
+  }
+
   if (records.length === 0) {
-    const pool = await getFreePool()
-    records = pool.map((s) => ({ id: s.id, uri: s.uri, node: { valid: true, host: s.host, port: s.port, name: s.name, protocol: s.protocol, transport: null, tls: false, security: null } }))
-    if (records.length === 0) {
-      freeConfigState.phase = 'error'
-      freeConfigState.error = 'هیچ سرور رایگانی در دسترس نیست. اتصال به اینترنت را بررسی کن.'
-      return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: freeConfigState.error }
-    }
+    freeConfigState.phase = 'error'
+    freeConfigState.error = 'هیچ سرور رایگانی در دسترس نیست. اتصال به اینترنت را بررسی کنید.'
+    sendFreeProgress(freeConfigState.error, 'error')
+    return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: freeConfigState.error }
   }
 
   sendFreeProgress(`در حال بررسی پینگ ${records.length} سرور...`, 'testing')
@@ -335,7 +495,7 @@ async function runFreeConnect({ directDomains, rescueOptions, fetchFresh }) {
   const reachable = records
     .filter((r) => {
       const lr = latencyMap.get(r.id)
-      return lr && lr.reachable && typeof lr.latencyMs === 'number'
+      return lr && lr.reachable && typeof lr.latencyMs === 'number' && lr.latencyMs < PING_THRESHOLD_MS
     })
     .sort((a, b) => {
       const la = latencyMap.get(a.id)?.latencyMs ?? 999999
@@ -345,7 +505,7 @@ async function runFreeConnect({ directDomains, rescueOptions, fetchFresh }) {
 
   if (reachable.length > 0) {
     const now = new Date().toISOString()
-    const toStore = reachable.slice(0, 100).map((r) => ({
+    const toStore = reachable.map((r) => ({
       id: r.id,
       uri: r.uri,
       name: r.node.name ?? r.node.protocol,
@@ -357,10 +517,24 @@ async function runFreeConnect({ directDomains, rescueOptions, fetchFresh }) {
       addedAt: now,
     }))
     await mergeFreeServers(toStore).catch(() => {})
+    const meta = await getFreePoolMeta().catch(() => null)
+    if (meta) {
+      freeConfigState.poolCount = meta.total
+      freeConfigState.poolDisplaying = meta.displaying
+      freeConfigState.poolLastRefreshedAt = meta.lastRefreshedAt
+    }
+    sendFreePoolStatus()
+  }
+
+  if (reachable.length === 0) {
+    freeConfigState.phase = 'error'
+    freeConfigState.error = 'هیچ سروری با پینگ زیر ۴۰۰ میلی‌ثانیه پیدا نشد.'
+    sendFreeProgress(freeConfigState.error, 'error')
+    return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: freeConfigState.error }
   }
 
   const candidates = reachable.slice(0, FREE_CONNECT_ATTEMPTS)
-  sendFreeProgress(`در حال اتصال به سریع‌ترین سرور...`, 'connecting')
+  sendFreeProgress('در حال اتصال به سریع‌ترین سرور...', 'connecting')
 
   for (const record of candidates) {
     const lr = latencyMap.get(record.id)
@@ -3267,9 +3441,18 @@ function registerIpcHandlers() {
 
   ipcMain.handle('free:get-pool', async () => {
     try {
-      return { success: true, servers: await getFreePool(), error: null }
+      const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
+      return { success: true, servers, meta, error: null }
     } catch (err) {
-      return { success: false, servers: [], error: err?.message ?? 'خواندن مخزن سرورهای رایگان ناموفق بود.' }
+      return { success: false, servers: [], meta: null, error: err?.message ?? 'خواندن مخزن سرورهای رایگان ناموفق بود.' }
+    }
+  })
+
+  ipcMain.handle('free:get-pool-meta', async () => {
+    try {
+      return { success: true, ...(await getFreePoolMeta()), poolRefreshing: freePoolRefreshing, error: null }
+    } catch (err) {
+      return { success: false, error: err?.message ?? 'خطا' }
     }
   })
 
@@ -3785,6 +3968,14 @@ app.whenReady().then(async () => {
 
   registerIpcHandlers()
   createMainWindow()
+
+  // Initialize pool metadata from disk, then start background refresh
+  getFreePoolMeta().then((meta) => {
+    freeConfigState.poolCount = meta.total
+    freeConfigState.poolDisplaying = meta.displaying
+    freeConfigState.poolLastRefreshedAt = meta.lastRefreshedAt
+  }).catch(() => {})
+  startFreeBackgroundRefresh()
 
   app.on(
     'activate',

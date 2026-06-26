@@ -497,10 +497,31 @@ type FreeConnectResult = {
   error: string | null
 }
 
+type FreePoolMeta = {
+  total: number
+  displaying: number
+  lastRefreshedAt: string | null
+  sourceCount: number
+}
+
 type FreePoolResult = {
   success: boolean
   servers: FreePoolServer[]
+  meta: FreePoolMeta | null
   error: string | null
+}
+
+type FreePoolStatusEvent = {
+  poolCount: number
+  poolDisplaying: number
+  poolLastRefreshedAt: string | null
+  poolRefreshing: boolean
+}
+
+type FreePoolUpdatedEvent = {
+  count: number
+  displaying: number
+  refreshedAt: string
 }
 
 type FreeProgressEvent = {
@@ -726,8 +747,18 @@ declare global {
 
         getPool: () => Promise<FreePoolResult>
 
+        getPoolMeta: () => Promise<{ success: boolean; total: number; displaying: number; lastRefreshedAt: string | null; poolRefreshing: boolean; error: string | null }>
+
         onProgress: (
           callback: (payload: FreeProgressEvent) => void,
+        ) => () => void
+
+        onPoolUpdated: (
+          callback: (payload: FreePoolUpdatedEvent) => void,
+        ) => () => void
+
+        onPoolStatus: (
+          callback: (payload: FreePoolStatusEvent) => void,
         ) => () => void
       }
 

@@ -237,10 +237,25 @@ contextBridge.exposeInMainWorld(
       getPool: () =>
         ipcRenderer.invoke('free:get-pool'),
 
+      getPoolMeta: () =>
+        ipcRenderer.invoke('free:get-pool-meta'),
+
       onProgress: (callback) => {
         const listener = (_event, payload) => callback(payload)
         ipcRenderer.on('free:progress', listener)
         return () => ipcRenderer.removeListener('free:progress', listener)
+      },
+
+      onPoolUpdated: (callback) => {
+        const listener = (_event, payload) => callback(payload)
+        ipcRenderer.on('free:pool-updated', listener)
+        return () => ipcRenderer.removeListener('free:pool-updated', listener)
+      },
+
+      onPoolStatus: (callback) => {
+        const listener = (_event, payload) => callback(payload)
+        ipcRenderer.on('free:pool-status', listener)
+        return () => ipcRenderer.removeListener('free:pool-status', listener)
       },
     },
 

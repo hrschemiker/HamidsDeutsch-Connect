@@ -243,6 +243,7 @@ function App() {
   const [freeProgress, setFreeProgress] = useState<string | null>(null)
   const [freeError, setFreeError] = useState<string | null>(null)
   const [freePool, setFreePool] = useState<FreePoolServer[]>([])
+  const [freePoolMeta, setFreePoolMeta] = useState<{ total: number; displaying: number; lastRefreshedAt: string | null; poolRefreshing: boolean } | null>(null)
 
   // For smart hero-button priority: know if BPB/codespace are configured
   const [codespaceHasToken, setCodespaceHasToken] = useState(false)
@@ -321,12 +322,30 @@ function App() {
 
   useEffect(() => {
     void window.hamidsDeutsch.free.getPool().then((r) => {
-      if (r.success) setFreePool(r.servers)
+      if (r.success) {
+        setFreePool(r.servers)
+        if (r.meta) setFreePoolMeta({ total: r.meta.total, displaying: r.meta.displaying, lastRefreshedAt: r.meta.lastRefreshedAt, poolRefreshing: false })
+      }
     })
-    return window.hamidsDeutsch.free.onProgress(({ text, phase }) => {
+    const unsubProgress = window.hamidsDeutsch.free.onProgress(({ text, phase }) => {
       setFreeProgress(text)
       setFreePhase(phase)
     })
+    const unsubPoolUpdated = window.hamidsDeutsch.free.onPoolUpdated((payload) => {
+      void window.hamidsDeutsch.free.getPool().then((r) => {
+        if (r.success) setFreePool(r.servers)
+      })
+      setFreePoolMeta((prev) => ({ ...prev, total: payload.count, displaying: payload.displaying, lastRefreshedAt: payload.refreshedAt, poolRefreshing: false } as typeof prev))
+    })
+    const unsubPoolStatus = window.hamidsDeutsch.free.onPoolStatus((payload) => {
+      setFreePoolMeta((prev) => ({
+        total: payload.poolCount ?? prev?.total ?? 0,
+        displaying: payload.poolDisplaying ?? prev?.displaying ?? 0,
+        lastRefreshedAt: payload.poolLastRefreshedAt ?? prev?.lastRefreshedAt ?? null,
+        poolRefreshing: payload.poolRefreshing ?? false,
+      }))
+    })
+    return () => { unsubProgress(); unsubPoolUpdated(); unsubPoolStatus() }
   }, [])
 
   async function connectFreeConfig() {
@@ -1492,6 +1511,7 @@ function App() {
               onClearSelectedServer={selectedServer.clearSelectedServer}
               onOpenSubscriptions={() => setActivePage('subscriptions')}
               freePool={freePool}
+              freePoolMeta={freePoolMeta}
               freePhase={freePhase}
               onConnectFreeNode={async (server) => {
                 setFreePhase('connecting')
@@ -2553,6 +2573,44 @@ function ConnectionChoiceCard({
   )
 }
 
+// ── ProtocolBadge ─────────────────────────────────────────────────────────────
+
+const PROTOCOL_COLORS: Record<string, string> = {
+  vmess: '#e8b84b',
+  vless: '#a78bfa',
+  trojan: '#f87171',
+  ss: '#60a5fa',
+  shadowsocks: '#60a5fa',
+  hysteria: '#34d399',
+  hysteria2: '#10b981',
+  hy2: '#10b981',
+  tuic: '#fb923c',
+  wireguard: '#818cf8',
+}
+
+function ProtocolBadge({ protocol }: { protocol: string }) {
+  const key = protocol.toLowerCase().replace('://', '')
+  const color = PROTOCOL_COLORS[key] ?? '#94a3b8'
+  const label = protocol.toUpperCase().replace('://', '')
+  return (
+    <span className="protocol-badge" style={{ '--pb-color': color } as React.CSSProperties}>
+      {label}
+    </span>
+  )
+}
+
+// ── formatRelativeTime ─────────────────────────────────────────────────────────
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'همین الان'
+  if (mins < 60) return `${mins} دقیقه پیش`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs} ساعت پیش`
+  return `${Math.floor(hrs / 24)} روز پیش`
+}
+
 // ── CopyButton ────────────────────────────────────────────────────────────────
 
 function CopyButton({ text }: { text: string }) {
@@ -3190,6 +3248,7 @@ function ServersPage({
   configCheckResults,
   processRunning,
   freePool,
+  freePoolMeta,
   freePhase,
   onCheckConfig,
   onTestLatency,
@@ -3228,6 +3287,7 @@ function ServersPage({
   >
   processRunning: boolean
   freePool: FreePoolServer[]
+  freePoolMeta: { total: number; displaying: number; lastRefreshedAt: string | null; poolRefreshing: boolean } | null
   freePhase: FreeConfigPhase
   onCheckConfig: (
     node: SafeServerNode,
@@ -3489,6 +3549,7 @@ function ServersPage({
                   <strong>{node.name}</strong>
                   <small>
                     {node.subscriptionName}
+                    {node.protocol && <ProtocolBadge protocol={node.protocol} />}
                   </small>
                 </span>
 
@@ -3652,16 +3713,20 @@ function ServersPage({
         />
       )}
 
-      {freePool.length > 0 && (
+      {(freePool.length > 0 || freePoolMeta) && (
         <section className="free-pool-section">
           <div className="panel-heading">
             <div>
               <span className="panel-kicker free-pool-kicker">مخزن رایگان</span>
               <h3>سرورهای رایگان ذخیره‌شده</h3>
             </div>
-            <span className="status-pill">
-              {freePool.length} سرور · مرتب‌شده بر اساس پینگ
-            </span>
+            <div className="free-pool-meta">
+              {freePoolMeta?.poolRefreshing && <span className="free-pool-refreshing-dot" title="در حال بروزرسانی..." />}
+              <span className="status-pill">
+                {freePoolMeta ? `${freePoolMeta.total} سرور ذخیره · نمایش ${freePoolMeta.displaying}` : `${freePool.length} سرور`}
+                {freePoolMeta?.lastRefreshedAt && ` · ${formatRelativeTime(freePoolMeta.lastRefreshedAt)}`}
+              </span>
+            </div>
           </div>
           <div className="free-pool-list">
             {freePool.map((server, index) => (
@@ -3672,7 +3737,7 @@ function ServersPage({
                 <span className="free-pool-rank">{index + 1}</span>
                 <div className="free-pool-main">
                   <strong>{server.name}</strong>
-                  <small dir="ltr">{server.protocol.toUpperCase()} · {server.host ?? '—'}{server.port ? `:${server.port}` : ''}</small>
+                  <small dir="ltr"><ProtocolBadge protocol={server.protocol} /> {server.host ?? '—'}{server.port ? `:${server.port}` : ''}</small>
                 </div>
                 <span className={server.latencyMs != null ? 'bpb-ping is-online' : 'bpb-ping'} dir="ltr">
                   {server.latencyMs != null ? `${server.latencyMs} ms` : '—'}
