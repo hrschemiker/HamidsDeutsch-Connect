@@ -511,8 +511,16 @@ declare global {
 
         setVirtualLocationConnected: (
           connected: boolean,
-        ) => Promise<{
+        ) => Promise<{ success: boolean }>
+
+        setDirectDomains: (
+          domains: string[],
+        ) => Promise<{ success: boolean }>
+
+        downloadExtensionZip: () => Promise<{
           success: boolean
+          path?: string
+          error: string | null
         }>
       }
 

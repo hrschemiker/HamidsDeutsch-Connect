@@ -77,12 +77,14 @@ const {
 
 const {
   ensureVirtualLocationExtension,
+  buildExtensionZip,
 } = require('./virtual-location-extension-bundle.cjs')
 
 const {
   startVirtualLocationService,
   stopVirtualLocationService,
   setVirtualLocationConnected,
+  setDirectDomains,
 } = require('./virtual-location-service.cjs')
 
 const {
@@ -1185,16 +1187,50 @@ function registerIpcHandlers() {
 
   ipcMain.handle(
     'system:set-virtual-location-connected',
-    async (
-      _event,
-      connected,
-    ) => {
-      setVirtualLocationConnected(
-        connected === true,
-      )
+    async (_event, connected) => {
+      setVirtualLocationConnected(connected === true)
+      return { success: true }
+    },
+  )
 
-      return {
-        success: true,
+  ipcMain.handle(
+    'system:set-direct-domains',
+    async (_event, domains) => {
+      setDirectDomains(Array.isArray(domains) ? domains : [])
+      return { success: true }
+    },
+  )
+
+  ipcMain.handle(
+    'system:download-extension-zip',
+    async () => {
+      const { dialog } = require('electron')
+      const archiver = null // no archiver dep — use PowerShell
+
+      try {
+        const extensionPath = await buildExtensionZip(app.getPath('userData'))
+
+        const { filePath } = await dialog.showSaveDialog({
+          title: 'ذخیره افزونه مرورگر',
+          defaultPath: 'HamidsDeutsch-VirtualLocation.zip',
+          filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
+        })
+
+        if (!filePath) {
+          return { success: false, error: 'لغو شد.' }
+        }
+
+        // Use PowerShell Compress-Archive to create ZIP
+        await execFileAsync('powershell.exe', [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `Compress-Archive -Path "${extensionPath}\\*" -DestinationPath "${filePath}" -Force`,
+        ])
+
+        return { success: true, path: filePath, error: null }
+      } catch (err) {
+        return { success: false, error: err?.message ?? 'ساخت ZIP ناموفق بود.' }
       }
     },
   )

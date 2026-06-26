@@ -27,13 +27,14 @@ contextBridge.exposeInMainWorld(
           'system:open-virtual-location-extension',
         ),
 
-      setVirtualLocationConnected: (
-        connected,
-      ) =>
-        ipcRenderer.invoke(
-          'system:set-virtual-location-connected',
-          connected,
-        ),
+      setVirtualLocationConnected: (connected) =>
+        ipcRenderer.invoke('system:set-virtual-location-connected', connected),
+
+      setDirectDomains: (domains) =>
+        ipcRenderer.invoke('system:set-direct-domains', domains),
+
+      downloadExtensionZip: () =>
+        ipcRenderer.invoke('system:download-extension-zip'),
     },
 
     engine: {

@@ -9,12 +9,14 @@ const PORT =
 
 let server = null
 let connected = false
+let directDomains = []
 
-function setVirtualLocationConnected(
-  value,
-) {
-  connected =
-    value === true
+function setVirtualLocationConnected(value) {
+  connected = value === true
+}
+
+function setDirectDomains(domains) {
+  directDomains = Array.isArray(domains) ? domains : []
 }
 
 async function startVirtualLocationService() {
@@ -80,10 +82,9 @@ async function startVirtualLocationService() {
         response.end(
           JSON.stringify({
             connected,
-            application:
-              'HamidsDeutsch Connect',
-            updatedAt:
-              new Date().toISOString(),
+            directDomains,
+            application: 'HamidsDeutsch Connect',
+            updatedAt: new Date().toISOString(),
           }),
         )
       },
@@ -136,4 +137,5 @@ module.exports = {
   startVirtualLocationService,
   stopVirtualLocationService,
   setVirtualLocationConnected,
+  setDirectDomains,
 }

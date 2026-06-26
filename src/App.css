@@ -77,6 +77,36 @@
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
 }
 
+[data-theme="light"] .connection-orbit-online .connection-orbit-core {
+  background: linear-gradient(145deg, rgba(54, 179, 126, 0.14), var(--surface));
+  box-shadow: 0 0 40px rgba(54, 179, 126, 0.12);
+}
+
+[data-theme="light"] .codespace-connect-section {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, var(--surface) 70%);
+  border-color: rgba(124, 58, 237, 0.3);
+}
+
+[data-theme="light"] .codespace-connect-section .codespace-connect-header h3 {
+  color: var(--text);
+}
+
+[data-theme="light"] .log-viewer {
+  background: var(--surface-soft);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+[data-theme="light"] .log-viewer div {
+  border-bottom-color: var(--border);
+}
+
+[data-theme="light"] .bpb-wizard-console {
+  background: var(--surface-soft);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -3615,4 +3645,184 @@ button {
 
 .appearance-option-icon {
   font-size: 16px;
+}
+
+/* ── Home dual-card row (GitHub + BPB) ──────────────────────────────────── */
+
+.home-dual-card-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 720px) {
+  .home-dual-card-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── BPB home card ────────────────────────────────────────────────────────── */
+
+.bpb-home-card {
+  background: linear-gradient(135deg, rgba(230, 184, 79, 0.09) 0%, var(--surface) 70%);
+  border: 1px solid rgba(230, 184, 79, 0.28);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+[data-theme="light"] .bpb-home-card {
+  background: linear-gradient(135deg, rgba(230, 184, 79, 0.08) 0%, var(--surface) 70%);
+}
+
+.bpb-home-kicker {
+  color: var(--gold) !important;
+}
+
+.bpb-home-description {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.bpb-home-actions {
+  margin-top: auto;
+}
+
+.bpb-home-connect-button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, var(--gold), rgba(230, 184, 79, 0.8));
+  border: 1px solid rgba(230, 184, 79, 0.3);
+  border-radius: 12px;
+  color: #1a1200;
+  cursor: pointer;
+  text-align: right;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.bpb-home-connect-button:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.bpb-home-connect-button > span:first-child {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.bpb-home-connect-button > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bpb-home-connect-button strong {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.bpb-home-connect-button small {
+  display: block;
+  font-size: 0.72rem;
+  opacity: 0.7;
+  direction: ltr;
+  text-align: left;
+}
+
+/* ── Extension install row ────────────────────────────────────────────────── */
+
+.extension-install-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Guide page ───────────────────────────────────────────────────────────── */
+
+.guide-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.guide-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.guide-badge-cf {
+  background: rgba(249, 115, 22, 0.14);
+  color: #f97316;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.guide-badge-bpb {
+  background: var(--gold-soft);
+  color: var(--gold);
+  border: 1px solid rgba(230, 184, 79, 0.3);
+}
+
+.guide-badge-gh {
+  background: rgba(124, 58, 237, 0.12);
+  color: #a78bfa;
+  border: 1px solid rgba(124, 58, 237, 0.3);
+}
+
+.guide-badge-ext {
+  background: rgba(54, 179, 126, 0.12);
+  color: var(--green);
+  border: 1px solid rgba(54, 179, 126, 0.28);
+}
+
+.guide-steps {
+  margin: 0;
+  padding-right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-soft);
+  line-height: 1.7;
+}
+
+.guide-steps-bullet {
+  list-style: disc;
+}
+
+.guide-steps li::marker {
+  color: var(--gold);
+}
+
+.guide-subheading {
+  margin: 4px 0 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-soft);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.guide-note {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.7;
 }

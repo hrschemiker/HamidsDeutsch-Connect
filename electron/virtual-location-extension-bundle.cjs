@@ -1,54 +1,574 @@
 const path = require('node:path')
 const fsp = require('node:fs/promises')
 
-const EXTENSION_FILES = {
-  "manifest.json": "{\n  \"manifest_version\": 3,\n  \"name\": \"HamidsDeutsch Virtual Location\",\n  \"version\": \"1.1.0\",\n  \"description\": \"Automatically aligns browser HTML5 geolocation with HamidsDeutsch Connect while the app is connected.\",\n  \"permissions\": [\n    \"storage\",\n    \"alarms\"\n  ],\n  \"host_permissions\": [\n    \"http://127.0.0.1:47891/*\",\n    \"https://ipwho.is/*\"\n  ],\n  \"background\": {\n    \"service_worker\": \"service-worker.js\",\n    \"type\": \"module\"\n  },\n  \"action\": {\n    \"default_title\": \"HamidsDeutsch Virtual Location\",\n    \"default_popup\": \"popup.html\"\n  },\n  \"content_scripts\": [\n    {\n      \"matches\": [\n        \"http://*/*\",\n        \"https://*/*\"\n      ],\n      \"js\": [\n        \"page-inject.js\"\n      ],\n      \"run_at\": \"document_start\",\n      \"all_frames\": true,\n      \"world\": \"MAIN\"\n    },\n    {\n      \"matches\": [\n        \"http://*/*\",\n        \"https://*/*\"\n      ],\n      \"js\": [\n        \"content-bridge.js\"\n      ],\n      \"run_at\": \"document_start\",\n      \"all_frames\": true\n    }\n  ]\n}",
-  "service-worker.js": "const STATUS_URL =\n  'http://127.0.0.1:47891/status'\n\nconst LOCATION_URL =\n  'https://ipwho.is/'\n\nconst ALARM_NAME =\n  'hamidsdeutsch-virtual-location-poll'\n\nconst DEFAULT_STATE = {\n  appConnected: false,\n  enabled: false,\n  location: null,\n  lastError: null,\n  updatedAt: null,\n}\n\nchrome.runtime.onInstalled.addListener(\n  async () => {\n    await ensureAlarm()\n    await refreshState()\n  },\n)\n\nchrome.runtime.onStartup.addListener(\n  async () => {\n    await ensureAlarm()\n    await refreshState()\n  },\n)\n\nchrome.alarms.onAlarm.addListener(\n  async (alarm) => {\n    if (\n      alarm.name ===\n      ALARM_NAME\n    ) {\n      await refreshState()\n    }\n  },\n)\n\nchrome.runtime.onMessage.addListener(\n  (message, _sender, sendResponse) => {\n    if (\n      message?.type ===\n      'get-state'\n    ) {\n      getState()\n        .then(sendResponse)\n        .catch((error) => {\n          sendResponse({\n            ...DEFAULT_STATE,\n            lastError:\n              error instanceof Error\n                ? error.message\n                : 'خواندن وضعیت مکان مجازی ناموفق بود.',\n          })\n        })\n\n      return true\n    }\n\n    if (\n      message?.type ===\n      'refresh-state'\n    ) {\n      refreshState()\n        .then(sendResponse)\n        .catch((error) => {\n          sendResponse({\n            success: false,\n            error:\n              error instanceof Error\n                ? error.message\n                : 'به‌روزرسانی وضعیت ناموفق بود.',\n          })\n        })\n\n      return true\n    }\n\n    return false\n  },\n)\n\nasync function ensureAlarm() {\n  const existing =\n    await chrome.alarms.get(\n      ALARM_NAME,\n    )\n\n  if (!existing) {\n    chrome.alarms.create(\n      ALARM_NAME,\n      {\n        periodInMinutes: 1,\n      },\n    )\n  }\n}\n\nasync function getState() {\n  const stored =\n    await chrome.storage.local.get(\n      Object.keys(DEFAULT_STATE),\n    )\n\n  return {\n    ...DEFAULT_STATE,\n    ...stored,\n  }\n}\n\nasync function refreshState() {\n  const appState =\n    await getAppConnectionState()\n\n  if (!appState.connected) {\n    const state = {\n      appConnected: false,\n      enabled: false,\n      location: null,\n      lastError: null,\n      updatedAt:\n        new Date().toISOString(),\n    }\n\n    await chrome.storage.local.set(\n      state,\n    )\n\n    await broadcastState(state)\n\n    return {\n      success: true,\n      state,\n    }\n  }\n\n  try {\n    const response =\n      await fetch(\n        LOCATION_URL,\n        {\n          method: 'GET',\n          cache: 'no-store',\n          credentials: 'omit',\n          headers: {\n            Accept:\n              'application/json',\n          },\n        },\n      )\n\n    if (!response.ok) {\n      throw new Error(\n        `HTTP ${response.status}`,\n      )\n    }\n\n    const payload =\n      await response.json()\n\n    if (\n      payload?.success === false ||\n      !Number.isFinite(\n        payload?.latitude,\n      ) ||\n      !Number.isFinite(\n        payload?.longitude,\n      )\n    ) {\n      throw new Error(\n        payload?.message ||\n        'پاسخ موقعیت IP معتبر نبود.',\n      )\n    }\n\n    const state = {\n      appConnected: true,\n      enabled: true,\n      location: {\n        latitude:\n          payload.latitude,\n        longitude:\n          payload.longitude,\n        accuracy: 25000,\n        city:\n          typeof payload.city ===\n            'string'\n            ? payload.city\n            : '',\n        region:\n          typeof payload.region ===\n            'string'\n            ? payload.region\n            : '',\n        country:\n          typeof payload.country ===\n            'string'\n            ? payload.country\n            : '',\n        countryCode:\n          typeof payload.country_code ===\n            'string'\n            ? payload.country_code\n            : '',\n      },\n      lastError: null,\n      updatedAt:\n        new Date().toISOString(),\n    }\n\n    await chrome.storage.local.set(\n      state,\n    )\n\n    await broadcastState(state)\n\n    return {\n      success: true,\n      state,\n    }\n  } catch (error) {\n    const state = {\n      appConnected: true,\n      enabled: false,\n      location: null,\n      lastError:\n        error instanceof Error\n          ? error.message\n          : 'دریافت موقعیت IP ناموفق بود.',\n      updatedAt:\n        new Date().toISOString(),\n    }\n\n    await chrome.storage.local.set(\n      state,\n    )\n\n    await broadcastState(state)\n\n    return {\n      success: false,\n      state,\n      error:\n        state.lastError,\n    }\n  }\n}\n\nasync function getAppConnectionState() {\n  try {\n    const response =\n      await fetch(\n        STATUS_URL,\n        {\n          method: 'GET',\n          cache: 'no-store',\n          credentials: 'omit',\n          signal:\n            AbortSignal.timeout(\n              1200,\n            ),\n        },\n      )\n\n    if (!response.ok) {\n      return {\n        connected: false,\n      }\n    }\n\n    const payload =\n      await response.json()\n\n    return {\n      connected:\n        payload?.connected === true,\n    }\n  } catch {\n    return {\n      connected: false,\n    }\n  }\n}\n\nasync function broadcastState(\n  state,\n) {\n  const tabs =\n    await chrome.tabs.query({})\n\n  await Promise.allSettled(\n    tabs.map((tab) => {\n      if (\n        !tab.id ||\n        !/^https?:/i.test(\n          tab.url || '',\n        )\n      ) {\n        return Promise.resolve()\n      }\n\n      return chrome.tabs.sendMessage(\n        tab.id,\n        {\n          type:\n            'virtual-location-state',\n          state,\n        },\n      )\n    }),\n  )\n}\n",
-  "content-bridge.js": "const EVENT_NAME =\n  '__HAMIDSDEUTSCH_VIRTUAL_LOCATION__'\n\nvoid syncState()\n\nchrome.runtime.onMessage.addListener(\n  (message) => {\n    if (\n      message?.type ===\n      'virtual-location-state'\n    ) {\n      publishState(\n        message.state,\n      )\n    }\n  },\n)\n\nchrome.storage.onChanged.addListener(\n  (_changes, areaName) => {\n    if (\n      areaName === 'local'\n    ) {\n      void syncState()\n    }\n  },\n)\n\nasync function syncState() {\n  try {\n    const state =\n      await chrome.runtime.sendMessage({\n        type: 'get-state',\n      })\n\n    publishState(state)\n  } catch {\n    publishState({\n      enabled: false,\n      location: null,\n      updatedAt: null,\n    })\n  }\n}\n\nfunction publishState(\n  state,\n) {\n  window.dispatchEvent(\n    new CustomEvent(\n      EVENT_NAME,\n      {\n        detail: {\n          enabled:\n            state?.enabled === true,\n          location:\n            normalizeLocation(\n              state?.location,\n            ),\n          updatedAt:\n            typeof state?.updatedAt ===\n              'string'\n              ? state.updatedAt\n              : null,\n        },\n      },\n    ),\n  )\n}\n\nfunction normalizeLocation(\n  location,\n) {\n  if (\n    !Number.isFinite(\n      location?.latitude,\n    ) ||\n    !Number.isFinite(\n      location?.longitude,\n    )\n  ) {\n    return null\n  }\n\n  return {\n    latitude:\n      location.latitude,\n    longitude:\n      location.longitude,\n    accuracy:\n      Number.isFinite(\n        location.accuracy,\n      )\n        ? location.accuracy\n        : 25000,\n  }\n}\n",
-  "page-inject.js": "(() => {\n  const EVENT_NAME =\n    '__HAMIDSDEUTSCH_VIRTUAL_LOCATION__'\n\n  const original =\n    navigator.geolocation\n\n  if (!original) {\n    return\n  }\n\n  const originalGet =\n    original.getCurrentPosition\n      .bind(original)\n\n  const originalWatch =\n    original.watchPosition\n      .bind(original)\n\n  const originalClear =\n    original.clearWatch\n      .bind(original)\n\n  let enabled = false\n  let location = null\n  let nextWatchId = 1000000\n\n  const virtualWatches =\n    new Map()\n\n  window.addEventListener(\n    EVENT_NAME,\n    (event) => {\n      enabled =\n        Boolean(\n          event?.detail?.enabled,\n        )\n\n      location =\n        normalizeLocation(\n          event?.detail?.location,\n        )\n\n      if (\n        enabled &&\n        location\n      ) {\n        notifyVirtualWatches()\n      }\n    },\n  )\n\n  function createPosition() {\n    const now =\n      Date.now()\n\n    return {\n      coords: {\n        latitude:\n          location.latitude,\n        longitude:\n          location.longitude,\n        accuracy:\n          location.accuracy,\n        altitude: null,\n        altitudeAccuracy: null,\n        heading: null,\n        speed: null,\n      },\n      timestamp: now,\n      toJSON() {\n        return {\n          coords:\n            this.coords,\n          timestamp:\n            this.timestamp,\n        }\n      },\n    }\n  }\n\n  function getCurrentPosition(\n    success,\n    error,\n    options,\n  ) {\n    if (\n      !enabled ||\n      !location\n    ) {\n      return originalGet(\n        success,\n        error,\n        options,\n      )\n    }\n\n    queueMicrotask(() => {\n      if (\n        typeof success ===\n          'function'\n      ) {\n        success(\n          createPosition(),\n        )\n      }\n    })\n  }\n\n  function watchPosition(\n    success,\n    error,\n    options,\n  ) {\n    if (\n      !enabled ||\n      !location\n    ) {\n      return originalWatch(\n        success,\n        error,\n        options,\n      )\n    }\n\n    const id =\n      nextWatchId++\n\n    virtualWatches.set(\n      id,\n      {\n        success,\n      },\n    )\n\n    queueMicrotask(() => {\n      if (\n        virtualWatches.has(id) &&\n        typeof success ===\n          'function'\n      ) {\n        success(\n          createPosition(),\n        )\n      }\n    })\n\n    return id\n  }\n\n  function clearWatch(\n    id,\n  ) {\n    if (\n      virtualWatches.delete(id)\n    ) {\n      return\n    }\n\n    originalClear(id)\n  }\n\n  function notifyVirtualWatches() {\n    const position =\n      createPosition()\n\n    for (\n      const { success } of\n        virtualWatches.values()\n    ) {\n      if (\n        typeof success ===\n          'function'\n      ) {\n        queueMicrotask(() => {\n          success(position)\n        })\n      }\n    }\n  }\n\n  function normalizeLocation(\n    value,\n  ) {\n    if (\n      !Number.isFinite(\n        value?.latitude,\n      ) ||\n      !Number.isFinite(\n        value?.longitude,\n      )\n    ) {\n      return null\n    }\n\n    return {\n      latitude:\n        value.latitude,\n      longitude:\n        value.longitude,\n      accuracy:\n        Number.isFinite(\n          value.accuracy,\n        )\n          ? value.accuracy\n          : 25000,\n    }\n  }\n\n  try {\n    Object.defineProperties(\n      navigator.geolocation,\n      {\n        getCurrentPosition: {\n          configurable: true,\n          value:\n            getCurrentPosition,\n        },\n        watchPosition: {\n          configurable: true,\n          value:\n            watchPosition,\n        },\n        clearWatch: {\n          configurable: true,\n          value:\n            clearWatch,\n        },\n      },\n    )\n  } catch {\n    try {\n      Object.defineProperty(\n        navigator,\n        'geolocation',\n        {\n          configurable: true,\n          value: {\n            getCurrentPosition,\n            watchPosition,\n            clearWatch,\n          },\n        },\n      )\n    } catch {\n      // Browser prevented geolocation override.\n    }\n  }\n})()\n",
-  "popup.html": "<!doctype html>\n<html lang=\"fa\" dir=\"rtl\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta\n    name=\"viewport\"\n    content=\"width=device-width,initial-scale=1\"\n  >\n  <title>HamidsDeutsch Virtual Location</title>\n  <link\n    rel=\"stylesheet\"\n    href=\"popup.css\"\n  >\n</head>\n<body>\n  <main>\n    <header>\n      <span class=\"brand-dot\"></span>\n      <div>\n        <strong>HamidsDeutsch</strong>\n        <span>Virtual Location</span>\n      </div>\n    </header>\n\n    <section class=\"status-card\">\n      <span class=\"label\">\n        وضعیت خودکار\n      </span>\n      <strong id=\"status\">\n        در حال بررسی...\n      </strong>\n      <span id=\"location\"></span>\n      <span id=\"updated\"></span>\n    </section>\n\n    <p\n      id=\"error\"\n      class=\"error\"\n      hidden\n    ></p>\n\n    <button\n      id=\"refresh\"\n      type=\"button\"\n    >\n      بررسی دوباره\n    </button>\n\n    <p class=\"hint\">\n      افزونه فقط هنگام اتصال تأییدشده\n      HamidsDeutsch فعال است. با قطع برنامه یا\n      استفاده از VPN دیگر، خودکار غیرفعال می‌شود.\n    </p>\n  </main>\n\n  <script src=\"popup.js\"></script>\n</body>\n</html>\n",
-  "popup.js": "const statusText =\n  document.querySelector(\n    '#status',\n  )\n\nconst locationText =\n  document.querySelector(\n    '#location',\n  )\n\nconst updatedText =\n  document.querySelector(\n    '#updated',\n  )\n\nconst errorText =\n  document.querySelector(\n    '#error',\n  )\n\nconst refreshButton =\n  document.querySelector(\n    '#refresh',\n  )\n\nvoid renderState()\n\nrefreshButton.addEventListener(\n  'click',\n  async () => {\n    refreshButton.disabled = true\n    refreshButton.textContent =\n      'در حال بررسی...'\n\n    await chrome.runtime.sendMessage({\n      type: 'refresh-state',\n    })\n\n    await renderState()\n\n    refreshButton.disabled = false\n    refreshButton.textContent =\n      'بررسی دوباره'\n  },\n)\n\nasync function renderState() {\n  const result =\n    await chrome.runtime.sendMessage({\n      type: 'refresh-state',\n    })\n\n  const state =\n    result?.state ??\n    await chrome.runtime.sendMessage({\n      type: 'get-state',\n    })\n\n  if (\n    state?.appConnected &&\n    state?.enabled\n  ) {\n    statusText.textContent =\n      'فعال — متصل به HamidsDeutsch'\n  } else if (\n    state?.appConnected\n  ) {\n    statusText.textContent =\n      'اتصال برنامه فعال است؛ موقعیت هنوز آماده نیست'\n  } else {\n    statusText.textContent =\n      'غیرفعال — برنامه متصل نیست'\n  }\n\n  const location =\n    state?.location\n\n  if (location) {\n    const parts = [\n      location.city,\n      location.region,\n      location.country,\n    ].filter(Boolean)\n\n    locationText.textContent =\n      parts.join('، ') ||\n      'مختصات IP دریافت شد'\n  } else {\n    locationText.textContent = ''\n  }\n\n  updatedText.textContent =\n    state?.updatedAt\n      ? `آخرین بررسی: ${new Date(\n          state.updatedAt,\n        ).toLocaleString('fa-IR')}`\n      : ''\n\n  if (state?.lastError) {\n    errorText.hidden = false\n    errorText.textContent =\n      state.lastError\n  } else {\n    errorText.hidden = true\n    errorText.textContent = ''\n  }\n}\n",
-  "popup.css": "* {\n  box-sizing: border-box;\n}\n\nbody {\n  margin: 0;\n  min-width: 340px;\n  background: #0b1120;\n  color: #f8fafc;\n  font-family:\n    Tahoma,\n    Arial,\n    sans-serif;\n}\n\nmain {\n  padding: 18px;\n}\n\nheader {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  margin-bottom: 18px;\n}\n\nheader > div,\n.status-card {\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n}\n\nheader span,\n.status-card span,\n.hint {\n  color: #94a3b8;\n  font-size: 12px;\n  line-height: 1.7;\n}\n\n.brand-dot {\n  width: 11px;\n  height: 11px;\n  background: #facc15;\n  border-radius: 50%;\n}\n\n.status-card {\n  border: 1px solid #263244;\n  background: #111827;\n  padding: 14px;\n}\n\n.status-card strong {\n  line-height: 1.7;\n}\n\nbutton {\n  width: 100%;\n  min-height: 42px;\n  margin-top: 14px;\n  border: 0;\n  background: #facc15;\n  color: #111827;\n  font-weight: 700;\n  cursor: pointer;\n}\n\nbutton:disabled {\n  opacity: 0.6;\n  cursor: default;\n}\n\n.error {\n  color: #fca5a5;\n  font-size: 12px;\n  line-height: 1.7;\n}\n\n.hint {\n  margin: 10px 0 0;\n}\n"
+const MANIFEST = {
+  manifest_version: 3,
+  name: 'HamidsDeutsch Virtual Location',
+  version: '1.2.0',
+  description: 'Automatically aligns browser HTML5 geolocation with HamidsDeutsch Connect. Respects the direct-domain list — direct-domain sites always show the real location.',
+  permissions: ['storage', 'alarms', 'tabs'],
+  host_permissions: [
+    'http://127.0.0.1:47891/*',
+    'https://ipwho.is/*',
+  ],
+  background: {
+    service_worker: 'service-worker.js',
+    type: 'module',
+  },
+  action: {
+    default_title: 'HamidsDeutsch Virtual Location',
+    default_popup: 'popup.html',
+  },
+  content_scripts: [
+    {
+      matches: ['http://*/*', 'https://*/*'],
+      js: ['page-inject.js'],
+      run_at: 'document_start',
+      all_frames: true,
+      world: 'MAIN',
+    },
+    {
+      matches: ['http://*/*', 'https://*/*'],
+      js: ['content-bridge.js'],
+      run_at: 'document_start',
+      all_frames: true,
+    },
+  ],
 }
 
-async function ensureVirtualLocationExtension(
-  userDataPath,
-) {
-  const extensionPath =
-    path.join(
-      userDataPath,
-      'HamidsDeutsch-Connect',
-      'browser-extension',
-    )
+const SERVICE_WORKER = `
+const STATUS_URL = 'http://127.0.0.1:47891/status'
+const LOCATION_URL = 'https://ipwho.is/'
+const ALARM_NAME = 'hamidsdeutsch-virtual-location-poll'
 
-  await fsp.mkdir(
-    extensionPath,
-    {
-      recursive: true,
-    },
+const DEFAULT_STATE = {
+  appConnected: false,
+  enabled: false,
+  location: null,
+  directDomains: [],
+  lastError: null,
+  updatedAt: null,
+}
+
+chrome.runtime.onInstalled.addListener(async () => {
+  await ensureAlarm()
+  await refreshState()
+})
+
+chrome.runtime.onStartup.addListener(async () => {
+  await ensureAlarm()
+  await refreshState()
+})
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === ALARM_NAME) {
+    await refreshState()
+  }
+})
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === 'get-state') {
+    getState()
+      .then(sendResponse)
+      .catch((error) => {
+        sendResponse({
+          ...DEFAULT_STATE,
+          lastError: error instanceof Error ? error.message : 'خواندن وضعیت مکان مجازی ناموفق بود.',
+        })
+      })
+    return true
+  }
+
+  if (message?.type === 'refresh-state') {
+    refreshState()
+      .then(sendResponse)
+      .catch((error) => {
+        sendResponse({
+          success: false,
+          error: error instanceof Error ? error.message : 'به‌روزرسانی وضعیت ناموفق بود.',
+        })
+      })
+    return true
+  }
+
+  return false
+})
+
+async function ensureAlarm() {
+  const existing = await chrome.alarms.get(ALARM_NAME)
+  if (!existing) {
+    chrome.alarms.create(ALARM_NAME, { periodInMinutes: 1 })
+  }
+}
+
+async function getState() {
+  const stored = await chrome.storage.local.get(Object.keys(DEFAULT_STATE))
+  return { ...DEFAULT_STATE, ...stored }
+}
+
+async function refreshState() {
+  const appState = await getAppConnectionState()
+
+  if (!appState.connected) {
+    const state = {
+      appConnected: false,
+      enabled: false,
+      location: null,
+      directDomains: appState.directDomains,
+      lastError: null,
+      updatedAt: new Date().toISOString(),
+    }
+    await chrome.storage.local.set(state)
+    await broadcastState(state)
+    return { success: true, state }
+  }
+
+  try {
+    const response = await fetch(LOCATION_URL, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'omit',
+      headers: { Accept: 'application/json' },
+    })
+
+    if (!response.ok) throw new Error('HTTP ' + response.status)
+
+    const payload = await response.json()
+
+    if (
+      payload?.success === false ||
+      !Number.isFinite(payload?.latitude) ||
+      !Number.isFinite(payload?.longitude)
+    ) {
+      throw new Error(payload?.message || 'پاسخ موقعیت IP معتبر نبود.')
+    }
+
+    const state = {
+      appConnected: true,
+      enabled: true,
+      location: {
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        accuracy: 25000,
+        city: typeof payload.city === 'string' ? payload.city : '',
+        region: typeof payload.region === 'string' ? payload.region : '',
+        country: typeof payload.country === 'string' ? payload.country : '',
+        countryCode: typeof payload.country_code === 'string' ? payload.country_code : '',
+      },
+      directDomains: appState.directDomains,
+      lastError: null,
+      updatedAt: new Date().toISOString(),
+    }
+
+    await chrome.storage.local.set(state)
+    await broadcastState(state)
+    return { success: true, state }
+  } catch (error) {
+    const state = {
+      appConnected: true,
+      enabled: false,
+      location: null,
+      directDomains: appState.directDomains,
+      lastError: error instanceof Error ? error.message : 'دریافت موقعیت IP ناموفق بود.',
+      updatedAt: new Date().toISOString(),
+    }
+    await chrome.storage.local.set(state)
+    await broadcastState(state)
+    return { success: false, state, error: state.lastError }
+  }
+}
+
+async function getAppConnectionState() {
+  try {
+    const response = await fetch(STATUS_URL, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'omit',
+      signal: AbortSignal.timeout(1200),
+    })
+
+    if (!response.ok) return { connected: false, directDomains: [] }
+
+    const payload = await response.json()
+    return {
+      connected: payload?.connected === true,
+      directDomains: Array.isArray(payload?.directDomains) ? payload.directDomains : [],
+    }
+  } catch {
+    return { connected: false, directDomains: [] }
+  }
+}
+
+function isDirectDomain(hostname, domains) {
+  const h = hostname.replace(/^www\\./, '')
+  return domains.some((d) => h === d || h.endsWith('.' + d))
+}
+
+async function broadcastState(state) {
+  const tabs = await chrome.tabs.query({})
+  const domains = Array.isArray(state?.directDomains) ? state.directDomains : []
+
+  await Promise.allSettled(
+    tabs.map((tab) => {
+      if (!tab.id || !/^https?:/i.test(tab.url || '')) return Promise.resolve()
+
+      let enabled = state?.enabled ?? false
+      if (enabled && domains.length > 0) {
+        try {
+          const host = new URL(tab.url).hostname
+          if (isDirectDomain(host, domains)) enabled = false
+        } catch {
+          enabled = false
+        }
+      }
+
+      const tabState =
+        enabled === (state?.enabled ?? false)
+          ? state
+          : Object.assign({}, state, { enabled })
+
+      return chrome.tabs.sendMessage(tab.id, {
+        type: 'virtual-location-state',
+        state: tabState,
+      })
+    }),
+  )
+}
+`.trimStart()
+
+const CONTENT_BRIDGE = `
+const EVENT_NAME = '__HAMIDSDEUTSCH_VIRTUAL_LOCATION__'
+
+void syncState()
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === 'virtual-location-state') {
+    // Service worker already computed per-tab enabled state
+    publishState(message.state)
+  }
+})
+
+chrome.storage.onChanged.addListener((_changes, areaName) => {
+  if (areaName === 'local') {
+    void syncState()
+  }
+})
+
+async function syncState() {
+  try {
+    const state = await chrome.runtime.sendMessage({ type: 'get-state' })
+    publishState(applyDirectDomainFilter(state))
+  } catch {
+    publishState({ enabled: false, location: null, updatedAt: null })
+  }
+}
+
+function applyDirectDomainFilter(state) {
+  if (!state?.enabled) return state
+  const domains = Array.isArray(state?.directDomains) ? state.directDomains : []
+  if (domains.length === 0) return state
+  try {
+    const host = location.hostname.replace(/^www\\./, '')
+    const isDirect = domains.some((d) => host === d || host.endsWith('.' + d))
+    if (isDirect) return Object.assign({}, state, { enabled: false })
+  } catch {}
+  return state
+}
+
+function publishState(state) {
+  window.dispatchEvent(
+    new CustomEvent(EVENT_NAME, {
+      detail: {
+        enabled: state?.enabled === true,
+        location: normalizeLocation(state?.location),
+        updatedAt: typeof state?.updatedAt === 'string' ? state.updatedAt : null,
+      },
+    }),
+  )
+}
+
+function normalizeLocation(location) {
+  if (!Number.isFinite(location?.latitude) || !Number.isFinite(location?.longitude)) {
+    return null
+  }
+  return {
+    latitude: location.latitude,
+    longitude: location.longitude,
+    accuracy: Number.isFinite(location.accuracy) ? location.accuracy : 25000,
+  }
+}
+`.trimStart()
+
+const PAGE_INJECT = `
+(() => {
+  const EVENT_NAME = '__HAMIDSDEUTSCH_VIRTUAL_LOCATION__'
+
+  const original = navigator.geolocation
+  if (!original) return
+
+  const originalGet = original.getCurrentPosition.bind(original)
+  const originalWatch = original.watchPosition.bind(original)
+  const originalClear = original.clearWatch.bind(original)
+
+  let enabled = false
+  let location = null
+  let nextWatchId = 1000000
+  const virtualWatches = new Map()
+
+  window.addEventListener(EVENT_NAME, (event) => {
+    enabled = Boolean(event?.detail?.enabled)
+    location = normalizeLocation(event?.detail?.location)
+    if (enabled && location) notifyVirtualWatches()
+  })
+
+  function createPosition() {
+    const now = Date.now()
+    return {
+      coords: {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        accuracy: location.accuracy,
+        altitude: null,
+        altitudeAccuracy: null,
+        heading: null,
+        speed: null,
+      },
+      timestamp: now,
+      toJSON() { return { coords: this.coords, timestamp: this.timestamp } },
+    }
+  }
+
+  function getCurrentPosition(success, error, options) {
+    if (!enabled || !location) return originalGet(success, error, options)
+    queueMicrotask(() => { if (typeof success === 'function') success(createPosition()) })
+  }
+
+  function watchPosition(success, error, options) {
+    if (!enabled || !location) return originalWatch(success, error, options)
+    const id = nextWatchId++
+    virtualWatches.set(id, { success })
+    queueMicrotask(() => {
+      if (virtualWatches.has(id) && typeof success === 'function') success(createPosition())
+    })
+    return id
+  }
+
+  function clearWatch(id) {
+    if (virtualWatches.delete(id)) return
+    originalClear(id)
+  }
+
+  function notifyVirtualWatches() {
+    const position = createPosition()
+    for (const { success } of virtualWatches.values()) {
+      if (typeof success === 'function') queueMicrotask(() => success(position))
+    }
+  }
+
+  function normalizeLocation(value) {
+    if (!Number.isFinite(value?.latitude) || !Number.isFinite(value?.longitude)) return null
+    return {
+      latitude: value.latitude,
+      longitude: value.longitude,
+      accuracy: Number.isFinite(value.accuracy) ? value.accuracy : 25000,
+    }
+  }
+
+  try {
+    Object.defineProperties(navigator.geolocation, {
+      getCurrentPosition: { configurable: true, value: getCurrentPosition },
+      watchPosition: { configurable: true, value: watchPosition },
+      clearWatch: { configurable: true, value: clearWatch },
+    })
+  } catch {
+    try {
+      Object.defineProperty(navigator, 'geolocation', {
+        configurable: true,
+        value: { getCurrentPosition, watchPosition, clearWatch },
+      })
+    } catch {
+      // Browser prevented geolocation override.
+    }
+  }
+})()
+`.trimStart()
+
+const POPUP_HTML = `<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HamidsDeutsch Virtual Location</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <span class="brand-dot"></span>
+      <div>
+        <strong>HamidsDeutsch</strong>
+        <span>Virtual Location</span>
+      </div>
+    </header>
+
+    <section class="status-card">
+      <span class="label">وضعیت خودکار</span>
+      <strong id="status">در حال بررسی...</strong>
+      <span id="location"></span>
+      <span id="updated"></span>
+    </section>
+
+    <p id="error" class="error" hidden></p>
+
+    <button id="refresh" type="button">بررسی دوباره</button>
+
+    <p class="hint">
+      افزونه فقط هنگام اتصال تأییدشده HamidsDeutsch فعال است.
+      سایت‌های موجود در فهرست دسترسی مستقیم همیشه موقعیت واقعی را نشان می‌دهند.
+    </p>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>
+`
+
+const POPUP_JS = `
+const statusText = document.querySelector('#status')
+const locationText = document.querySelector('#location')
+const updatedText = document.querySelector('#updated')
+const errorText = document.querySelector('#error')
+const refreshButton = document.querySelector('#refresh')
+
+void renderState()
+
+refreshButton.addEventListener('click', async () => {
+  refreshButton.disabled = true
+  refreshButton.textContent = 'در حال بررسی...'
+  await chrome.runtime.sendMessage({ type: 'refresh-state' })
+  await renderState()
+  refreshButton.disabled = false
+  refreshButton.textContent = 'بررسی دوباره'
+})
+
+async function renderState() {
+  const result = await chrome.runtime.sendMessage({ type: 'refresh-state' })
+  const state = result?.state ?? await chrome.runtime.sendMessage({ type: 'get-state' })
+
+  if (state?.appConnected && state?.enabled) {
+    statusText.textContent = 'فعال — متصل به HamidsDeutsch'
+  } else if (state?.appConnected) {
+    statusText.textContent = 'اتصال برنامه فعال است؛ موقعیت هنوز آماده نیست'
+  } else {
+    statusText.textContent = 'غیرفعال — برنامه متصل نیست'
+  }
+
+  const location = state?.location
+  if (location) {
+    const parts = [location.city, location.region, location.country].filter(Boolean)
+    locationText.textContent = parts.join('، ') || 'مختصات IP دریافت شد'
+  } else {
+    locationText.textContent = ''
+  }
+
+  updatedText.textContent = state?.updatedAt
+    ? 'آخرین بررسی: ' + new Date(state.updatedAt).toLocaleString('fa-IR')
+    : ''
+
+  if (state?.lastError) {
+    errorText.hidden = false
+    errorText.textContent = state.lastError
+  } else {
+    errorText.hidden = true
+    errorText.textContent = ''
+  }
+}
+`.trimStart()
+
+const POPUP_CSS = `* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-width: 340px;
+  background: #0b1120;
+  color: #f8fafc;
+  font-family: Tahoma, Arial, sans-serif;
+}
+main { padding: 18px; }
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+header > div, .status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+header span, .status-card span, .hint {
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.brand-dot {
+  width: 11px;
+  height: 11px;
+  background: #facc15;
+  border-radius: 50%;
+}
+.status-card {
+  border: 1px solid #263244;
+  background: #111827;
+  padding: 14px;
+}
+.status-card strong { line-height: 1.7; }
+button {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 14px;
+  border: 0;
+  background: #facc15;
+  color: #111827;
+  font-weight: 700;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.6; cursor: default; }
+.error { color: #fca5a5; font-size: 12px; line-height: 1.7; }
+.hint { margin: 10px 0 0; }
+`
+
+const EXTENSION_FILES = {
+  'manifest.json': JSON.stringify(MANIFEST, null, 2),
+  'service-worker.js': SERVICE_WORKER,
+  'content-bridge.js': CONTENT_BRIDGE,
+  'page-inject.js': PAGE_INJECT,
+  'popup.html': POPUP_HTML,
+  'popup.js': POPUP_JS,
+  'popup.css': POPUP_CSS,
+}
+
+async function ensureVirtualLocationExtension(userDataPath) {
+  const extensionPath = path.join(
+    userDataPath,
+    'HamidsDeutsch-Connect',
+    'browser-extension',
   )
 
-  for (
-    const [
-      name,
-      content,
-    ] of Object.entries(
-      EXTENSION_FILES,
-    )
-  ) {
-    await fsp.writeFile(
-      path.join(
-        extensionPath,
-        name,
-      ),
-      content,
-      'utf8',
-    )
+  await fsp.mkdir(extensionPath, { recursive: true })
+
+  for (const [name, content] of Object.entries(EXTENSION_FILES)) {
+    await fsp.writeFile(path.join(extensionPath, name), content, 'utf8')
   }
 
   return extensionPath
 }
 
+async function buildExtensionZip(userDataPath) {
+  const extensionPath = await ensureVirtualLocationExtension(userDataPath)
+  return extensionPath
+}
+
 module.exports = {
   ensureVirtualLocationExtension,
+  buildExtensionZip,
 }

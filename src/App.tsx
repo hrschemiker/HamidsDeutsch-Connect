@@ -52,6 +52,7 @@ const TR: Record<Lang, Record<string, string>> = {
     'nav.rescue': 'مرکز نجات',
     'nav.statistics': 'آمار',
     'nav.logs': 'گزارش',
+    'nav.guide': 'راهنما',
     'nav.settings': 'تنظیمات',
     'page.home': 'خانه',
     'page.servers': 'سرورها',
@@ -61,6 +62,7 @@ const TR: Record<Lang, Record<string, string>> = {
     'page.rescue': 'مرکز نجات اتصال',
     'page.statistics': 'آمار اتصال',
     'page.logs': 'گزارش برنامه',
+    'page.guide': 'راهنمای اتصال',
     'page.settings': 'تنظیمات',
     'status.connected': 'متصل',
     'status.disconnected': 'قطع',
@@ -102,6 +104,7 @@ const TR: Record<Lang, Record<string, string>> = {
     'nav.rescue': 'Rescue Center',
     'nav.statistics': 'Statistics',
     'nav.logs': 'Logs',
+    'nav.guide': 'Guide',
     'nav.settings': 'Settings',
     'page.home': 'Home',
     'page.servers': 'Servers',
@@ -111,6 +114,7 @@ const TR: Record<Lang, Record<string, string>> = {
     'page.rescue': 'Connection Rescue',
     'page.statistics': 'Statistics',
     'page.logs': 'Application Logs',
+    'page.guide': 'Connection Guide',
     'page.settings': 'Settings',
     'status.connected': 'Connected',
     'status.disconnected': 'Disconnected',
@@ -187,6 +191,7 @@ const NAV_I18N: Record<string, string> = {
   rescue: 'nav.rescue',
   statistics: 'nav.statistics',
   logs: 'nav.logs',
+  guide: 'nav.guide',
   settings: 'nav.settings',
 }
 
@@ -199,6 +204,7 @@ const PAGE_I18N: Record<string, string> = {
   rescue: 'page.rescue',
   statistics: 'page.statistics',
   logs: 'page.logs',
+  guide: 'page.guide',
   settings: 'page.settings',
 }
 
@@ -211,6 +217,7 @@ type PageId =
   | 'rescue'
   | 'statistics'
   | 'logs'
+  | 'guide'
   | 'settings'
 
 type NavigationItem = {
@@ -248,6 +255,7 @@ const navigationItems: NavigationItem[] = [
   { id: 'rescue', label: 'مرکز نجات', icon: '✦' },
   { id: 'statistics', label: 'آمار', icon: '▥' },
   { id: 'logs', label: 'گزارش', icon: '≡' },
+  { id: 'guide', label: 'راهنما', icon: '?' },
   { id: 'settings', label: 'تنظیمات', icon: '⚙' },
 ]
 
@@ -260,6 +268,7 @@ const pageTitles: Record<PageId, string> = {
   rescue: 'مرکز نجات اتصال',
   statistics: 'آمار اتصال',
   logs: 'گزارش برنامه',
+  guide: 'راهنمای اتصال',
   settings: 'تنظیمات',
 }
 
@@ -344,12 +353,12 @@ function App() {
         engineProcess.status.systemProxyEnabled
 
   useEffect(() => {
-    void window.hamidsDeutsch
-      .system
-      .setVirtualLocationConnected(
-        connectionVerified,
-      )
+    void window.hamidsDeutsch.system.setVirtualLocationConnected(connectionVerified)
   }, [connectionVerified])
+
+  useEffect(() => {
+    void window.hamidsDeutsch.system.setDirectDomains(directDomains.domains)
+  }, [directDomains.domains])
 
   useEffect(() => {
     return window.hamidsDeutsch.codespace.onProgress(({ message }) => {
@@ -1360,6 +1369,7 @@ function App() {
               onCodespaceConnect={() => void connectViaCodespace()}
               onCodespaceDisconnect={() => void disconnectCodespace()}
               onOpenSettings={() => setActivePage('settings')}
+              onOpenBpb={() => setActivePage('bpb')}
             />
           )}
 
@@ -1500,6 +1510,9 @@ function App() {
               }}
             />
           )}
+          {activePage === 'guide' && (
+            <GuidePage />
+          )}
           {activePage === 'settings' && (
             <SettingsPage
               settings={
@@ -1526,9 +1539,10 @@ function App() {
                 )
               }
               onOpenVirtualLocationExtension={() =>
-                window.hamidsDeutsch
-                  .system
-                  .openVirtualLocationExtension()
+                window.hamidsDeutsch.system.openVirtualLocationExtension()
+              }
+              onDownloadExtensionZip={() =>
+                window.hamidsDeutsch.system.downloadExtensionZip()
               }
               currentEngineVersion={
                 engine.info?.version ??
@@ -1648,6 +1662,7 @@ type HomePageProps = {
   onCodespaceConnect: () => void
   onCodespaceDisconnect: () => void
   onOpenSettings: () => void
+  onOpenBpb: () => void
 }
 
 function HomePage({
@@ -1687,7 +1702,7 @@ function HomePage({
   codespaceHost,
   onCodespaceConnect,
   onCodespaceDisconnect,
-  onOpenSettings,
+  onOpenBpb,
 }: HomePageProps) {
   const mainActionAvailable = Boolean(
     processStatus.running || fastestServer || selectedServer,
@@ -1869,67 +1884,90 @@ function HomePage({
         />
       </section>
 
-      <section className="codespace-connect-section">
-        <div className="codespace-connect-header">
-          <div>
-            <span className="panel-kicker">GitHub Codespace</span>
-            <h3>اتصال از طریق GitHub</h3>
+      <div className="home-dual-card-row">
+        <section className="codespace-connect-section">
+          <div className="codespace-connect-header">
+            <div>
+              <span className="panel-kicker">GitHub Codespace</span>
+              <h3>اتصال از طریق GitHub</h3>
+            </div>
+            <div className="codespace-header-end">
+              {codespaceConnected && codespaceHost && (
+                <span className="codespace-host-badge" dir="ltr">{codespaceHost}</span>
+              )}
+              <InfoButton
+                fa="یک سرور پروکسی موقت روی زیرساخت GitHub می‌سازد و از طریق پروتکل VLESS + WebSocket متصل می‌شود. نیازی به سرور اختصاصی نیست. توکن GitHub باید در تنظیمات وارد شده باشد."
+                en="Spins up a temporary proxy server on GitHub's infrastructure and connects via VLESS + WebSocket. No dedicated server needed. A GitHub PAT must be configured in Settings."
+              />
+            </div>
           </div>
-          <div className="codespace-header-end">
-            {codespaceConnected && codespaceHost && (
-              <span className="codespace-host-badge" dir="ltr">{codespaceHost}</span>
-            )}
-            <InfoButton
-              fa="یک سرور پروکسی موقت روی زیرساخت GitHub می‌سازد و از طریق پروتکل VLESS + WebSocket متصل می‌شود. نیازی به سرور اختصاصی نیست. توکن GitHub باید در تنظیمات وارد شده باشد."
-              en="Spins up a temporary proxy server on GitHub's infrastructure and connects via VLESS + WebSocket. No dedicated server needed. A GitHub PAT must be configured in Settings."
-            />
-          </div>
-        </div>
 
-        {codespaceProgress && (
-          <div className="codespace-progress">{codespaceProgress}</div>
-        )}
-
-        {codespaceError && (
-          <div className="form-message form-message-error">{codespaceError}</div>
-        )}
-
-        <div className="codespace-actions">
-          {codespaceConnected ? (
-            <button
-              className="codespace-disconnect-button"
-              type="button"
-              disabled={codespaceConnecting || processBusy}
-              onClick={onCodespaceDisconnect}
-            >
-              قطع اتصال GitHub
-            </button>
-          ) : (
-            <button
-              className="codespace-connect-button"
-              type="button"
-              disabled={codespaceConnecting || processStatus.running}
-              onClick={onCodespaceConnect}
-            >
-              <span className="codespace-connect-icon">⬡</span>
-              <span>
-                <strong>
-                  {codespaceConnecting ? 'در حال اتصال...' : 'اتصال با GitHub Codespace'}
-                </strong>
-                <small>VLESS · xHTTP · TLS · GitHub Infrastructure</small>
-              </span>
-            </button>
+          {codespaceProgress && (
+            <div className="codespace-progress">{codespaceProgress}</div>
           )}
 
-          <button
-            className="secondary-button codespace-settings-link"
-            type="button"
-            onClick={onOpenSettings}
-          >
-            تنظیمات GitHub
-          </button>
-        </div>
-      </section>
+          {codespaceError && (
+            <div className="form-message form-message-error">{codespaceError}</div>
+          )}
+
+          <div className="codespace-actions">
+            {codespaceConnected ? (
+              <button
+                className="codespace-disconnect-button"
+                type="button"
+                disabled={codespaceConnecting || processBusy}
+                onClick={onCodespaceDisconnect}
+              >
+                قطع اتصال GitHub
+              </button>
+            ) : (
+              <button
+                className="codespace-connect-button"
+                type="button"
+                disabled={codespaceConnecting || processStatus.running}
+                onClick={onCodespaceConnect}
+              >
+                <span className="codespace-connect-icon">⬡</span>
+                <span>
+                  <strong>
+                    {codespaceConnecting ? 'در حال اتصال...' : 'اتصال با GitHub Codespace'}
+                  </strong>
+                  <small>VLESS · WebSocket · TLS · GitHub Infrastructure</small>
+                </span>
+              </button>
+            )}
+          </div>
+        </section>
+
+        <section className="bpb-home-card">
+          <div className="codespace-connect-header">
+            <div>
+              <span className="panel-kicker bpb-home-kicker">BPB Panel</span>
+              <h3>اتصال از طریق BPB</h3>
+            </div>
+            <InfoButton
+              fa="از طریق پنل BPB که قبلاً در تب «اتصال BPB» پیکربندی کرده‌ای به سریع‌ترین سرور وصل می‌شود."
+              en="Connects via a BPB Panel you've already configured in the BPB Connect tab."
+            />
+          </div>
+          <p className="bpb-home-description">
+            اتصال سریع از طریق Cloudflare Workers و پنل BPB — بدون نیاز به سرور اختصاصی.
+          </p>
+          <div className="bpb-home-actions">
+            <button
+              className="bpb-home-connect-button"
+              type="button"
+              onClick={onOpenBpb}
+            >
+              <span>◈</span>
+              <span>
+                <strong>اتصال از طریق BPB</strong>
+                <small>Cloudflare Workers · سریع‌ترین سرور</small>
+              </span>
+            </button>
+          </div>
+        </section>
+      </div>
 
       {processStatus.running && (
         <section
@@ -4493,6 +4531,7 @@ function SettingsPage({
   connected,
   onOpenDirectSites,
   onOpenVirtualLocationExtension,
+  onDownloadExtensionZip,
   currentEngineVersion,
   onCheckEngineUpdate,
   onInstallEngineUpdate,
@@ -4522,6 +4561,12 @@ function SettingsPage({
     Promise<{
       success: boolean
       path: string
+      error: string | null
+    }>
+  onDownloadExtensionZip: () =>
+    Promise<{
+      success: boolean
+      path?: string
       error: string | null
     }>
   currentEngineVersion:
@@ -4564,6 +4609,11 @@ function SettingsPage({
   const [
     openingExtensionFolder,
     setOpeningExtensionFolder,
+  ] = useState(false)
+
+  const [
+    downloadingExtensionZip,
+    setDownloadingExtensionZip,
   ] = useState(false)
 
   const [
@@ -4671,6 +4721,24 @@ function SettingsPage({
           result.error,
       }),
     )
+  }
+
+  async function downloadZip() {
+    if (downloadingExtensionZip) return
+    setDownloadingExtensionZip(true)
+    setExtensionMessage(null)
+    try {
+      const result = await onDownloadExtensionZip()
+      if (result.success) {
+        setExtensionMessage({ type: 'success', text: 'فایل ZIP افزونه با موفقیت ذخیره شد.' })
+      } else {
+        setExtensionMessage({ type: 'error', text: result.error ?? 'دانلود افزونه ناموفق بود.' })
+      }
+    } catch (error) {
+      setExtensionMessage({ type: 'error', text: error instanceof Error ? error.message : 'دانلود افزونه ناموفق بود.' })
+    } finally {
+      setDownloadingExtensionZip(false)
+    }
   }
 
   async function openExtensionFolder() {
@@ -5051,20 +5119,24 @@ function SettingsPage({
           </span>
         </div>
 
-        <button
-          className="primary-button compact-primary"
-          type="button"
-          disabled={
-            openingExtensionFolder
-          }
-          onClick={() => {
-            void openExtensionFolder()
-          }}
-        >
-          {openingExtensionFolder
-            ? 'در حال بازکردن...'
-            : 'بازکردن پوشه افزونه'}
-        </button>
+        <div className="extension-install-row">
+          <button
+            className="primary-button compact-primary"
+            type="button"
+            disabled={openingExtensionFolder}
+            onClick={() => void openExtensionFolder()}
+          >
+            {openingExtensionFolder ? 'در حال بازکردن...' : 'بازکردن پوشه افزونه'}
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={downloadingExtensionZip}
+            onClick={() => void downloadZip()}
+          >
+            {downloadingExtensionZip ? 'در حال ساخت...' : 'دانلود ZIP افزونه'}
+          </button>
+        </div>
 
         {extensionMessage && (
           <div
@@ -5245,6 +5317,153 @@ function GitHubSection() {
         )}
       </div>
     </section>
+  )
+}
+
+function GuidePage() {
+  const { lang } = useContext(LangCtx)
+  const fa = lang === 'fa'
+
+  return (
+    <div className="page-stack">
+      <section className="panel-card guide-section">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">{fa ? 'روش ۱' : 'Method 1'}</span>
+            <h3>{fa ? 'اتصال از طریق Cloudflare' : 'Cloudflare Connection'}</h3>
+          </div>
+          <span className="guide-badge guide-badge-cf">Cloudflare</span>
+        </div>
+        <ol className="guide-steps">
+          <li>{fa ? 'یک دامنه را به Cloudflare اضافه کن.' : 'Add a domain to Cloudflare.'}</li>
+          <li>{fa ? 'یک Worker جدید در Cloudflare ایجاد کن.' : 'Create a new Worker in Cloudflare.'}</li>
+          <li>{fa ? 'در تب «اتصال BPB» آدرس Worker را وارد کن.' : 'Enter the Worker URL in the BPB Connect tab.'}</li>
+          <li>{fa ? 'روی «اتصال» کلیک کن و منتظر تأیید IP بمان.' : 'Click Connect and wait for IP verification.'}</li>
+        </ol>
+        <div className="guide-note">
+          {fa
+            ? 'این روش سریع‌ترین و پایدارترین اتصال را ارائه می‌دهد. برای راه‌اندازی اولیه به اکانت Cloudflare نیاز داری.'
+            : 'This method provides the fastest and most stable connection. You need a Cloudflare account for initial setup.'}
+        </div>
+      </section>
+
+      <section className="panel-card guide-section">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">{fa ? 'روش ۲' : 'Method 2'}</span>
+            <h3>{fa ? 'اتصال از طریق BPB Panel' : 'BPB Panel Connection'}</h3>
+          </div>
+          <span className="guide-badge guide-badge-bpb">BPB</span>
+        </div>
+        <ol className="guide-steps">
+          <li>{fa ? 'لینک اشتراک یا آدرس پنل BPB خود را آماده کن.' : 'Prepare your BPB panel subscription link or URL.'}</li>
+          <li>{fa ? 'به تب «اشتراک‌ها» برو و لینک را اضافه کن.' : 'Go to the Subscriptions tab and add the link.'}</li>
+          <li>{fa ? 'در تب «سرورها» پینگ را تست کن.' : 'Test ping in the Servers tab.'}</li>
+          <li>{fa ? 'از صفحه خانه روی «اتصال با سریع‌ترین سرور» کلیک کن.' : 'Click "Connect to fastest server" on the home screen.'}</li>
+        </ol>
+        <div className="guide-note">
+          {fa
+            ? 'BPB Panel از چندین پروتکل پشتیبانی می‌کند. برنامه به‌صورت خودکار سریع‌ترین سرور را انتخاب می‌کند.'
+            : 'BPB Panel supports multiple protocols. The app automatically selects the fastest server.'}
+        </div>
+      </section>
+
+      <section className="panel-card guide-section">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">{fa ? 'روش ۳' : 'Method 3'}</span>
+            <h3>{fa ? 'اتصال از طریق GitHub Codespace' : 'GitHub Codespace Connection'}</h3>
+          </div>
+          <span className="guide-badge guide-badge-gh">GitHub</span>
+        </div>
+        <ol className="guide-steps">
+          <li>
+            {fa
+              ? 'یک Personal Access Token (PAT) با دسترسی‌های codespace و repo در GitHub بساز.'
+              : 'Create a Personal Access Token (PAT) with codespace and repo scopes on GitHub.'}
+          </li>
+          <li>
+            {fa
+              ? 'به «تنظیمات → GitHub Codespace» برو و توکن را وارد کن.'
+              : 'Go to Settings → GitHub Codespace and enter the token.'}
+          </li>
+          <li>
+            {fa
+              ? 'روی «ذخیره و راه‌اندازی» کلیک کن. برنامه یک مخزن خصوصی می‌سازد.'
+              : 'Click "Save & Setup". The app creates a private repository.'}
+          </li>
+          <li>
+            {fa
+              ? 'از صفحه خانه روی «اتصال با GitHub Codespace» کلیک کن.'
+              : 'Click "Connect via GitHub Codespace" on the home screen.'}
+          </li>
+          <li>
+            {fa
+              ? 'برنامه به‌صورت خودکار Codespace می‌سازد، منتظر راه‌اندازی می‌ماند و وصل می‌شود.'
+              : 'The app automatically creates a Codespace, waits for it to start, and connects.'}
+          </li>
+        </ol>
+        <div className="guide-note">
+          {fa
+            ? 'اتصال از طریق زیرساخت GitHub برقرار می‌شود. اگر اولین اتصال ناموفق بود، برنامه یک‌بار مجدداً تلاش می‌کند.'
+            : 'Connection runs through GitHub infrastructure. If the first attempt fails, the app retries once automatically.'}
+        </div>
+      </section>
+
+      <section className="panel-card guide-section">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">{fa ? 'افزونه مرورگر' : 'Browser Extension'}</span>
+            <h3>{fa ? 'مکان مجازی مرورگر' : 'Browser Virtual Location'}</h3>
+          </div>
+          <span className="guide-badge guide-badge-ext">Chrome / Edge</span>
+        </div>
+
+        <h4 className="guide-subheading">{fa ? 'نصب' : 'Installation'}</h4>
+        <ol className="guide-steps">
+          <li>
+            {fa
+              ? 'در «تنظیمات → مکان مجازی» روی «بازکردن پوشه افزونه» کلیک کن.'
+              : 'In Settings → Virtual Location, click "Open Extension Folder".'}
+          </li>
+          <li>
+            {fa
+              ? 'در Chrome/Edge به «chrome://extensions» برو و «Developer mode» را فعال کن.'
+              : 'In Chrome/Edge, go to chrome://extensions and enable Developer mode.'}
+          </li>
+          <li>
+            {fa
+              ? 'روی «Load unpacked» کلیک کن و پوشه باز‌شده را انتخاب کن.'
+              : 'Click "Load unpacked" and select the opened folder.'}
+          </li>
+        </ol>
+
+        <h4 className="guide-subheading">{fa ? 'نحوه کار' : 'How it works'}</h4>
+        <ul className="guide-steps guide-steps-bullet">
+          <li>
+            {fa
+              ? 'وقتی HamidsDeutsch متصل است، افزونه مختصات HTML5 Geolocation را با IP خروجی VPN هماهنگ می‌کند.'
+              : 'When HamidsDeutsch is connected, the extension aligns HTML5 Geolocation with the VPN exit IP.'}
+          </li>
+          <li>
+            {fa
+              ? 'سایت‌هایی که در فهرست «دسترسی مستقیم» هستند همیشه موقعیت واقعی تو را نشان می‌دهند.'
+              : 'Sites in the direct-access list always show your real location.'}
+          </li>
+          <li>
+            {fa
+              ? 'با قطع اتصال VPN، افزونه به‌طور خودکار غیرفعال می‌شود.'
+              : 'When the VPN disconnects, the extension deactivates automatically.'}
+          </li>
+        </ul>
+
+        <div className="guide-note">
+          {fa
+            ? 'افزونه فقط HTML5 Geolocation API را تغییر می‌دهد. IP مرورگر از طریق System Proxy ویندوز تنظیم می‌شود.'
+            : 'The extension only overrides the HTML5 Geolocation API. Browser IP is routed via Windows System Proxy.'}
+        </div>
+      </section>
+    </div>
   )
 }
 
