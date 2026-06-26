@@ -650,6 +650,43 @@ declare global {
           CheckTunConfigResult
         >
       }
+
+      codespace: {
+        getStatus: () => Promise<CodespaceStatus>
+
+        setup: (token: string) => Promise<{
+          success: boolean
+          username: string | null
+          error: string | null
+        }>
+
+        clearToken: () => Promise<{ success: boolean }>
+
+        connect: (directDomains: string[]) => Promise<{
+          success: boolean
+          codespaceName: string | null
+          host: string | null
+          error: string | null
+        }>
+
+        disconnect: () => Promise<{
+          success: boolean
+          error: string | null
+        }>
+
+        onProgress: (
+          callback: (payload: { step: string; message: string }) => void,
+        ) => () => void
+      }
     }
   }
+}
+
+type CodespaceStatus = {
+  hasToken: boolean
+  username: string | null
+  repoCreated: boolean
+  lastCodespaceName: string | null
+  lastCodespaceState: string | null
+  lastConnectedUuid: string | null
 }

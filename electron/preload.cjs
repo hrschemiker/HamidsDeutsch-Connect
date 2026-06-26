@@ -219,5 +219,40 @@ contextBridge.exposeInMainWorld(
           input,
         ),
     },
+
+    codespace: {
+      getStatus: () =>
+        ipcRenderer.invoke(
+          'codespace:get-status',
+        ),
+
+      setup: (token) =>
+        ipcRenderer.invoke(
+          'codespace:setup',
+          token,
+        ),
+
+      clearToken: () =>
+        ipcRenderer.invoke(
+          'codespace:clear-token',
+        ),
+
+      connect: (directDomains) =>
+        ipcRenderer.invoke(
+          'codespace:connect',
+          directDomains,
+        ),
+
+      disconnect: () =>
+        ipcRenderer.invoke(
+          'codespace:disconnect',
+        ),
+
+      onProgress: (callback) => {
+        const listener = (_event, payload) => callback(payload)
+        ipcRenderer.on('codespace:progress', listener)
+        return () => ipcRenderer.removeListener('codespace:progress', listener)
+      },
+    },
   },
 )

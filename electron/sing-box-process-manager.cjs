@@ -84,6 +84,7 @@ function getTunConfigPath(
 async function startLocalProxy({
   enginePath,
   userDataPath,
+  configPath: overrideConfigPath,
 }) {
   if (
     activeProcess &&
@@ -113,9 +114,8 @@ async function startLocalProxy({
   }
 
   const configPath =
-    getFixedConfigPath(
-      userDataPath,
-    )
+    overrideConfigPath ??
+    getFixedConfigPath(userDataPath)
 
   if (!fs.existsSync(configPath)) {
     throw new Error(

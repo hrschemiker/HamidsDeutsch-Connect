@@ -3195,3 +3195,204 @@ button {
   }
 }
 
+/* ── GitHub Codespace section ──────────────────────────────────────────────── */
+
+.codespace-connect-section {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.12) 0%, rgba(16, 18, 23, 0.95) 60%);
+  border: 1px solid rgba(124, 58, 237, 0.35);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.codespace-connect-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.codespace-connect-header .panel-kicker {
+  color: #a78bfa;
+}
+
+.codespace-connect-header h3 {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.codespace-host-badge {
+  font-size: 0.7rem;
+  background: rgba(124, 58, 237, 0.2);
+  border: 1px solid rgba(124, 58, 237, 0.4);
+  color: #c4b5fd;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.codespace-description {
+  font-size: 0.82rem;
+  color: var(--text-soft);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.codespace-progress {
+  font-size: 0.82rem;
+  color: #a78bfa;
+  background: rgba(124, 58, 237, 0.1);
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.codespace-progress::before {
+  content: '↻';
+  animation: spin 1.2s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.codespace-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.codespace-connect-button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 12px;
+  color: #fff;
+  cursor: pointer;
+  text-align: right;
+  flex: 1;
+  min-width: 240px;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.codespace-connect-button:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.codespace-connect-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.codespace-connect-button strong {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.codespace-connect-button small {
+  display: block;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.65);
+  margin-top: 2px;
+  direction: ltr;
+  text-align: left;
+}
+
+.codespace-connect-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+  color: #c4b5fd;
+}
+
+.codespace-disconnect-button {
+  flex: 1;
+  padding: 12px 20px;
+  background: rgba(212, 70, 70, 0.12);
+  border: 1px solid rgba(212, 70, 70, 0.3);
+  border-radius: 12px;
+  color: var(--red);
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.codespace-disconnect-button:hover:not(:disabled) {
+  background: rgba(212, 70, 70, 0.2);
+}
+
+.codespace-disconnect-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.codespace-settings-link {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+}
+
+/* ── GitHub Settings section ───────────────────────────────────────────────── */
+
+.github-token-field {
+  display: flex;
+  gap: 10px;
+}
+
+.github-token-field input {
+  flex: 1;
+  background: var(--surface-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  outline: none;
+}
+
+.github-token-field input:focus {
+  border-color: rgba(124, 58, 237, 0.5);
+}
+
+.github-status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.github-status-grid > div {
+  background: var(--surface-soft);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.github-status-grid span {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.github-status-grid strong {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.github-section-actions {
+  display: flex;
+  gap: 10px;
+}

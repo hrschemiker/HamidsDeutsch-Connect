@@ -5,6 +5,7 @@ A secure Windows desktop VPN client built with Electron, React, and TypeScript �
 ## Features
 
 - One-click connection to BPB / Cloudflare-based proxies
+- **GitHub Codespace connection** — spin up a private VLESS+WebSocket proxy inside a GitHub Codespace with one click; auto-retries on failure; stops the Codespace on disconnect
 - Automatic sing-box binary management (auto-download & update)
 - Bulk import of direct domains
 - Native Windows system integration (tray icon, auto-start)
@@ -33,6 +34,20 @@ npm run dist:win
 # Build without installer (directory output)
 npm run pack:win
 ```
+
+## GitHub Codespace Connection
+
+This feature lets you connect through a private VLESS proxy running inside a GitHub Codespace — no third-party servers required.
+
+**Setup (one time):**
+1. Go to **Settings → GitHub** and enter a Personal Access Token with `codespace` and `repo` scopes.
+2. Click **راه‌اندازی** — the app creates a private repo (`hd-proxy-node`) in your account.
+
+**Connecting:**
+- Click the purple **اتصال از طریق GitHub Codespace** button on the home screen.
+- The app creates a Codespace, waits for it to be ready, and connects automatically.
+- If the first attempt fails, it retries once with a fresh Codespace.
+- On disconnect, the Codespace is stopped (not deleted) to preserve your free quota.
 
 ## Requirements
 

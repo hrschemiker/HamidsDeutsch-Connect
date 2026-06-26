@@ -1128,6 +1128,13 @@ function buildTransportConfig(params) {
     }
   }
 
+  if (type === 'xhttp' || type === 'splithttp') {
+    return {
+      type: 'splithttp',
+      path: pathValue,
+    }
+  }
+
   throw new Error(
     `نوع انتقال ${type} هنوز پشتیبانی نمی‌شود.`,
   )

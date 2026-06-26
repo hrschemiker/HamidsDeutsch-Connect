@@ -131,6 +131,19 @@ const {
   setCloudflareBpbProgressListener,
 } = require('./cloudflare-bpb-manager.cjs')
 
+const {
+  setupGitHub,
+  connectViaCodespace,
+  disconnectCodespace,
+  getCodespaceStatus,
+  setCodespaceProgressListener,
+} = require('./github-codespace-manager.cjs')
+
+const {
+  loadCodespaceSettings,
+  saveCodespaceSettings,
+} = require('./github-codespace-store.cjs')
+
 const execFileAsync =
   promisify(execFile)
 
@@ -2855,6 +2868,107 @@ function registerIpcHandlers() {
   )
 
   )
+
+  // ── GitHub Codespace handlers ────────────────────────────────────────────
+
+  ipcMain.handle('codespace:get-status', async () => {
+    try {
+      return await getCodespaceStatus(app.getPath('userData'))
+    } catch (error) {
+      return {
+        hasToken: false,
+        username: null,
+        repoCreated: false,
+        lastCodespaceName: null,
+        lastCodespaceState: null,
+        lastConnectedUuid: null,
+      }
+    }
+  })
+
+  ipcMain.handle('codespace:setup', async (_event, token) => {
+    if (typeof token !== 'string' || !token.trim()) {
+      return { success: false, error: 'توکن GitHub خالی است.' }
+    }
+    try {
+      return await setupGitHub(app.getPath('userData'), token.trim())
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'راه‌اندازی GitHub ناموفق بود.',
+      }
+    }
+  })
+
+  ipcMain.handle('codespace:clear-token', async () => {
+    try {
+      const { settings } = await loadCodespaceSettings(app.getPath('userData'))
+      await saveCodespaceSettings(app.getPath('userData'), {
+        ...settings,
+        token: null,
+        username: null,
+        repoCreated: false,
+        lastCodespaceName: null,
+        lastCodespaceState: null,
+        lastConnectedUuid: null,
+      })
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'خطا' }
+    }
+  })
+
+  ipcMain.handle('codespace:connect', async (_event, directDomains) => {
+    try {
+      const connectResult = await connectViaCodespace(
+        app.getPath('userData'),
+        directDomains ?? [],
+      )
+
+      if (!connectResult.success) {
+        return connectResult
+      }
+
+      const startResult = await startLocalProxy({
+        userDataPath: app.getPath('userData'),
+        enginePath: getEnginePath(),
+        configPath: connectResult.configPath,
+      })
+
+      if (!startResult.success) {
+        return { success: false, error: startResult.error ?? 'راه‌اندازی sing-box ناموفق بود.' }
+      }
+
+      return {
+        success: true,
+        codespaceName: connectResult.codespaceName,
+        host: connectResult.host,
+        error: null,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'اتصال Codespace ناموفق بود.',
+      }
+    }
+  })
+
+  ipcMain.handle('codespace:disconnect', async () => {
+    try {
+      const stopResult = await stopLocalProxy({
+        userDataPath: app.getPath('userData'),
+      })
+
+      void disconnectCodespace(app.getPath('userData')).catch(() => {})
+
+      return { success: stopResult?.success ?? true, error: stopResult?.error ?? null }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'قطع اتصال Codespace ناموفق بود.',
+      }
+    }
+  })
 }
 
 function createMainWindow() {
@@ -3229,6 +3343,7 @@ for (
 }
 
 
+
 app.whenReady().then(async () => {
   console.log(
     '[Electron] Application is ready',
@@ -3317,6 +3432,14 @@ app.whenReady().then(async () => {
     (progress) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('bpb-cloudflare:progress', progress)
+      }
+    },
+  )
+
+  setCodespaceProgressListener(
+    (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('codespace:progress', progress)
       }
     },
   )

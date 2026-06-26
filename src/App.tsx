@@ -109,6 +109,12 @@ function App() {
   const connectionWatchdogBusyRef = useRef(false)
   const automaticConnectionBusyRef = useRef(false)
 
+  const [codespaceConnecting, setCodespaceConnecting] = useState(false)
+  const [codespaceConnected, setCodespaceConnected] = useState(false)
+  const [codespaceProgress, setCodespaceProgress] = useState<string | null>(null)
+  const [codespaceError, setCodespaceError] = useState<string | null>(null)
+  const [codespaceHost, setCodespaceHost] = useState<string | null>(null)
+
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
   const engineProcess = useEngineProcess()
@@ -148,6 +154,61 @@ function App() {
         connectionVerified,
       )
   }, [connectionVerified])
+
+  useEffect(() => {
+    return window.hamidsDeutsch.codespace.onProgress(({ message }) => {
+      setCodespaceProgress(message)
+    })
+  }, [])
+
+  async function connectViaCodespace() {
+    if (codespaceConnecting || engineProcess.status.running) return
+    setCodespaceConnecting(true)
+    setCodespaceError(null)
+    setCodespaceProgress(null)
+
+    try {
+      const result = await window.hamidsDeutsch.codespace.connect(
+        directDomains.domains,
+      )
+
+      if (!result.success) {
+        setCodespaceError(result.error ?? 'اتصال GitHub Codespace ناموفق بود.')
+        return
+      }
+
+      setCodespaceHost(result.host)
+      setCodespaceConnected(true)
+
+      // Activate system proxy for the sing-box that's now running
+      await engineProcess.enableSystemProxy()
+      const verification = await ipVerification.verify()
+      if (!verification.success || !verification.changed) {
+        setCodespaceError('پروکسی اجرا شد اما تغییر IP تأیید نشد. اتصال ممکن است فعال باشد.')
+      }
+    } catch (err) {
+      setCodespaceError(
+        err instanceof Error ? err.message : 'خطای ناشناخته در اتصال GitHub',
+      )
+    } finally {
+      setCodespaceConnecting(false)
+      setCodespaceProgress(null)
+    }
+  }
+
+  async function disconnectCodespace() {
+    setCodespaceConnecting(true)
+    setCodespaceError(null)
+    try {
+      await engineProcess.disableSystemProxy(false)
+      await window.hamidsDeutsch.codespace.disconnect()
+      setCodespaceConnected(false)
+      setCodespaceHost(null)
+      ipVerification.reset()
+    } finally {
+      setCodespaceConnecting(false)
+    }
+  }
 
   const automaticLatencyTestKey = useRef<string | null>(null)
 
@@ -1072,6 +1133,14 @@ function App() {
               onOpenServers={() => setActivePage('servers')}
               onOpenDirectSites={() => setActivePage('direct-sites')}
               onOpenRescue={() => setActivePage('rescue')}
+              codespaceConnecting={codespaceConnecting}
+              codespaceConnected={codespaceConnected}
+              codespaceProgress={codespaceProgress}
+              codespaceError={codespaceError}
+              codespaceHost={codespaceHost}
+              onCodespaceConnect={() => void connectViaCodespace()}
+              onCodespaceDisconnect={() => void disconnectCodespace()}
+              onOpenSettings={() => setActivePage('settings')}
             />
           )}
 
@@ -1350,6 +1419,14 @@ type HomePageProps = {
   onOpenServers: () => void
   onOpenDirectSites: () => void
   onOpenRescue: () => void
+  codespaceConnecting: boolean
+  codespaceConnected: boolean
+  codespaceProgress: string | null
+  codespaceError: string | null
+  codespaceHost: string | null
+  onCodespaceConnect: () => void
+  onCodespaceDisconnect: () => void
+  onOpenSettings: () => void
 }
 
 function HomePage({
@@ -1382,6 +1459,14 @@ function HomePage({
   onOpenServers,
   onOpenDirectSites,
   onOpenRescue,
+  codespaceConnecting,
+  codespaceConnected,
+  codespaceProgress,
+  codespaceError,
+  codespaceHost,
+  onCodespaceConnect,
+  onCodespaceDisconnect,
+  onOpenSettings,
 }: HomePageProps) {
   const mainActionAvailable = Boolean(
     processStatus.running || fastestServer || selectedServer,
@@ -1561,6 +1646,67 @@ function HomePage({
           secondaryActionLabel="تست دوباره پینگ"
           onSecondaryAction={onRetestLatency}
         />
+      </section>
+
+      <section className="codespace-connect-section">
+        <div className="codespace-connect-header">
+          <div>
+            <span className="panel-kicker">GitHub Codespace</span>
+            <h3>اتصال از طریق GitHub</h3>
+          </div>
+          {codespaceConnected && codespaceHost && (
+            <span className="codespace-host-badge" dir="ltr">{codespaceHost}</span>
+          )}
+        </div>
+
+        <p className="codespace-description">
+          یک سرور پروکسی موقت روی زیرساخت GitHub می‌سازد و از طریق پروتکل VLESS متصل می‌شود.
+          نیازی به سرور اختصاصی نیست.
+        </p>
+
+        {codespaceProgress && (
+          <div className="codespace-progress">{codespaceProgress}</div>
+        )}
+
+        {codespaceError && (
+          <div className="form-message form-message-error">{codespaceError}</div>
+        )}
+
+        <div className="codespace-actions">
+          {codespaceConnected ? (
+            <button
+              className="codespace-disconnect-button"
+              type="button"
+              disabled={codespaceConnecting || processBusy}
+              onClick={onCodespaceDisconnect}
+            >
+              قطع اتصال GitHub
+            </button>
+          ) : (
+            <button
+              className="codespace-connect-button"
+              type="button"
+              disabled={codespaceConnecting || processStatus.running}
+              onClick={onCodespaceConnect}
+            >
+              <span className="codespace-connect-icon">⬡</span>
+              <span>
+                <strong>
+                  {codespaceConnecting ? 'در حال اتصال...' : 'اتصال با GitHub Codespace'}
+                </strong>
+                <small>VLESS · xHTTP · TLS · GitHub Infrastructure</small>
+              </span>
+            </button>
+          )}
+
+          <button
+            className="secondary-button codespace-settings-link"
+            type="button"
+            onClick={onOpenSettings}
+          >
+            تنظیمات GitHub
+          </button>
+        </div>
       </section>
 
       {processStatus.running && (
@@ -4662,6 +4808,8 @@ function SettingsPage({
         </p>
       </section>
 
+      <GitHubSection />
+
       <section className="panel-card">
         <div className="panel-heading">
           <div>
@@ -4696,6 +4844,136 @@ function SettingsPage({
         />
       </section>
     </div>
+  )
+}
+
+function GitHubSection() {
+  const [token, setToken] = useState('')
+  const [status, setStatus] = useState<{
+    hasToken: boolean
+    username: string | null
+    repoCreated: boolean
+    lastCodespaceName: string | null
+    lastCodespaceState: string | null
+  } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
+
+  useEffect(() => {
+    void window.hamidsDeutsch.codespace.getStatus().then((s) => setStatus(s))
+  }, [])
+
+  async function handleSetup() {
+    if (!token.trim() || busy) return
+    setBusy(true)
+    setMessage(null)
+    const result = await window.hamidsDeutsch.codespace.setup(token.trim())
+    setBusy(false)
+    if (result.success) {
+      setToken('')
+      setMessage({ type: 'success', text: `اتصال به حساب @${result.username} برقرار شد. مخزن اختصاصی آماده است.` })
+      const s = await window.hamidsDeutsch.codespace.getStatus()
+      setStatus(s)
+    } else {
+      setMessage({ type: 'error', text: result.error ?? 'راه‌اندازی ناموفق بود.' })
+    }
+  }
+
+  async function handleClear() {
+    if (busy) return
+    setBusy(true)
+    setMessage(null)
+    await window.hamidsDeutsch.codespace.clearToken()
+    setBusy(false)
+    setMessage({ type: 'success', text: 'توکن GitHub حذف شد.' })
+    const s = await window.hamidsDeutsch.codespace.getStatus()
+    setStatus(s)
+  }
+
+  return (
+    <section className="panel-card">
+      <div className="panel-heading">
+        <div>
+          <span className="panel-kicker">GitHub Codespace</span>
+          <h3>اتصال به GitHub</h3>
+        </div>
+        {status?.hasToken && (
+          <span className="count-badge">متصل</span>
+        )}
+      </div>
+
+      <p className="panel-description">
+        برای استفاده از اتصال Codespace، یک Personal Access Token با دسترسی‌های{' '}
+        <strong>codespace</strong> و <strong>repo</strong> وارد کن.
+        توکن رمزگذاری‌شده ذخیره می‌شود.
+      </p>
+
+      {status?.hasToken ? (
+        <div className="github-status-grid">
+          <div>
+            <span>حساب GitHub</span>
+            <strong dir="ltr">@{status.username ?? '—'}</strong>
+          </div>
+          <div>
+            <span>مخزن اختصاصی</span>
+            <strong>{status.repoCreated ? 'ساخته شده' : 'هنوز ساخته نشده'}</strong>
+          </div>
+          {status.lastCodespaceName && (
+            <div>
+              <span>آخرین Codespace</span>
+              <strong dir="ltr">{status.lastCodespaceName}</strong>
+            </div>
+          )}
+          {status.lastCodespaceState && (
+            <div>
+              <span>وضعیت</span>
+              <strong dir="ltr">{status.lastCodespaceState}</strong>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="github-token-field">
+          <input
+            type="password"
+            placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+            value={token}
+            disabled={busy}
+            onChange={(e) => setToken(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleSetup() }}
+            dir="ltr"
+          />
+        </div>
+      )}
+
+      {message && (
+        <div className={message.type === 'success' ? 'inline-notice' : 'inline-error'}>
+          {message.text}
+        </div>
+      )}
+
+      <div className="github-section-actions">
+        {!status?.hasToken && (
+          <button
+            className="primary-button compact-primary"
+            type="button"
+            disabled={busy || !token.trim()}
+            onClick={() => void handleSetup()}
+          >
+            {busy ? 'در حال راه‌اندازی...' : 'ذخیره و راه‌اندازی'}
+          </button>
+        )}
+        {status?.hasToken && (
+          <button
+            className="remove-domain-button"
+            type="button"
+            disabled={busy}
+            onClick={() => void handleClear()}
+          >
+            حذف توکن و قطع اتصال
+          </button>
+        )}
+      </div>
+    </section>
   )
 }
 
