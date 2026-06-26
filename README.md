@@ -1,144 +1,315 @@
 <div align="center">
 
-<img src="assets/icon.png" alt="HamidsDeutsch Connect" width="80" height="80" onerror="this.style.display='none'">
+<img src="public/logo.png" alt="HamidsDeutsch Connect" width="100" height="100">
 
 # HamidsDeutsch Connect
 
-**برنامه دسکتاپ VPN برای ویندوز — سریع، امن و رایگان**
+**نرم‌افزار اتصال به اینترنت آزاد برای ویندوز**
 
-[![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-[![Electron](https://img.shields.io/badge/Electron-v32-47848F?logo=electron&logoColor=white)](https://www.electronjs.org)
-[![sing-box](https://img.shields.io/badge/sing--box-v1.13-FF6B35)](https://github.com/SagerNet/sing-box)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D4?logo=windows&logoColor=white)](https://microsoft.com/windows)
+[![Electron](https://img.shields.io/badge/Electron-v32-47848F?logo=electron&logoColor=white)](https://electronjs.org)
+[![sing‑box](https://img.shields.io/badge/sing--box-v1.13-FF6B35)](https://github.com/SagerNet/sing-box)
+[![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
 
-[🇬🇧 English Description](#english-description) | [⬇ دانلود](#نصب-و-راه‌اندازی)
+[🇬🇧 English](#english) · [⬇ دانلود آخرین نسخه](../../releases/latest)
 
 </div>
 
 ---
 
-## توضیحات فارسی
+## 🇮🇷 توضیحات فارسی
 
-**HamidsDeutsch Connect** یک برنامه دسکتاپ ویندوزی است که دسترسی به اینترنت آزاد را با چند روش مختلف، به صورت ساده و یک‌کلیکی فراهم می‌کند.
-
-### ✨ قابلیت‌های اصلی
-
-| قابلیت | توضیح |
-|--------|-------|
-| 🆓 **سرور رایگان** | دریافت خودکار بهترین کانفیگ از مخازن عمومی و اتصال به سریع‌ترین سرور |
-| 🐙 **GitHub Codespace** | اتصال از طریق یک پروکسی خصوصی داخل GitHub — بدون سرور شخصی |
-| ☁️ **BPB Panel** | پشتیبانی کامل از پنل BPB مبتنی بر Cloudflare Workers |
-| 📋 **اشتراک** | وارد کردن لینک اشتراک V2Ray و اتصال خودکار به سریع‌ترین سرور |
-| 🔄 **اتصال مجدد خودکار** | در صورت قطع ناخواسته، سرور جدید را پیدا و دوباره متصل می‌شود |
-| 🛡️ **هسته sing-box** | موتور پروکسی حرفه‌ای با پشتیبانی از VLESS، VMess، Trojan و ... |
-| 🌐 **مدیریت خودکار Proxy ویندوز** | بدون نیاز به تنظیم دستی؛ پس از قطع اتصال، تنظیمات پروکسی به حالت قبل بازمی‌گردد |
-| 🇮🇷 / 🇬🇧 / 🇩🇪 **سه‌زبانه** | رابط کاربری به فارسی (RTL)، انگلیسی و آلمانی |
-
-### نصب و راه‌اندازی
-
-#### روش اول — دانلود نصب‌کننده
-
-1. آخرین نسخه را از [Releases](../../releases) دانلود کنید.
-2. فایل `HamidsDeutsch-Connect-Setup.exe` را اجرا کنید.
-3. پس از نصب، برنامه را باز کرده و روش اتصال دلخواه را انتخاب کنید.
-
-#### روش دوم — اتصال سریع با سرور رایگان
-
-1. برنامه را باز کنید.
-2. روی دکمه **Get Free Config** در صفحه اصلی کلیک کنید.
-3. برنامه به طور خودکار بهترین سرور را پیدا کرده و متصل می‌شود.
-
-#### روش سوم — اتصال از طریق GitHub
-
-برای کاربرانی که حساب GitHub دارند، این روش امنیت بیشتری فراهم می‌کند:
-
-1. به **Settings → GitHub** بروید.
-2. یک Personal Access Token با دسترسی `codespace` و `repo` وارد کنید.
-3. روی دکمه **اتصال از طریق GitHub Codespace** کلیک کنید.
-
-### پیش‌نیازها
-
-- ویندوز ۱۰ یا ۱۱ (x64)
-- اتصال اینترنت (برای دریافت موتور sing-box در اولین اجرا)
+**HamidsDeutsch Connect** یک نرم‌افزار دسکتاپ ویندوزی است که اتصال به اینترنت آزاد را از چند روش مختلف، به شکل ساده و بدون نیاز به دانش فنی فراهم می‌کند.
+هسته اصلی نرم‌افزار از موتور حرفه‌ای **sing-box** استفاده می‌کند و تمام تنظیمات پروکسی سیستم را به صورت خودکار مدیریت می‌کند — بدون اینکه چیزی روی سیستم شما باقی بماند.
 
 ---
 
-<a name="english-description"></a>
+### ✨ امکانات
 
-## English Description
+| امکان | توضیح |
+|-------|-------|
+| 🆓 **سرور رایگان** | دریافت خودکار بهترین کانفیگ از مخازن عمومی و اتصال یک‌کلیکی |
+| 🐙 **GitHub Codespace** | پروکسی خصوصی داخل GitHub — بدون نیاز به سرور شخصی |
+| ☁️ **پنل BPB** | پشتیبانی کامل از BPB Panel مبتنی بر Cloudflare Workers |
+| 📋 **اشتراک V2Ray** | وارد کردن لینک اشتراک و اتصال به سریع‌ترین سرور |
+| 🔄 **اتصال مجدد هوشمند** | در صورت قطع، سرور جایگزین پیدا می‌کند و دوباره متصل می‌شود |
+| 🛡️ **هسته sing-box** | موتور پروکسی با پشتیبانی از VLESS · VMess · Trojan · Shadowsocks |
+| 🌐 **مدیریت خودکار Proxy** | تنظیمات پروکسی ویندوز پس از قطع اتصال به حالت اول بازمی‌گردد |
+| 🔘 **دکمه اتصال هوشمند** | اولویت‌بندی خودکار: اشتراک ← رایگان ← BPB ← GitHub |
+| 🇮🇷 / 🇬🇧 / 🇩🇪 **سه‌زبانه** | رابط کاربری به فارسی (RTL)، انگلیسی و آلمانی |
 
-**HamidsDeutsch Connect** is a Windows desktop VPN client that provides easy, one-click access to the free internet through multiple connection methods.
+---
+
+### 🚀 نصب و راه‌اندازی
+
+#### ۱. دانلود نصب‌کننده
+
+1. از [صفحه Releases](../../releases/latest) آخرین فایل `HamidsDeutsch-Connect-Setup-x64.exe` را دانلود کنید
+2. فایل نصب‌کننده را اجرا کنید
+3. پس از نصب، برنامه به صورت خودکار اجرا می‌شود
+
+---
+
+### 📡 روش‌های اتصال
+
+<details>
+<summary><b>🆓 روش اول — سرور رایگان (آسان‌ترین روش، بدون نیاز به حساب کاربری)</b></summary>
+
+این روش کاملاً خودکار است و نیازی به ثبت‌نام یا تنظیم ندارد.
+
+1. برنامه را باز کنید
+2. روی دکمه اصلی **«اتصال»** در صفحه اصلی کلیک کنید
+3. برنامه به طور خودکار:
+   - لیستی از سرورهای رایگان دریافت می‌کند
+   - سرعت همه را آزمایش می‌کند
+   - به سریع‌ترین سرور متصل می‌شود
+4. پس از اتصال، تغییر IP در همان صفحه تأیید می‌شود
+
+> **نکته:** اگر سرور اصلی قطع شود، برنامه به صورت خودکار سرور جدیدی پیدا می‌کند.
+
+</details>
+
+<details>
+<summary><b>📋 روش دوم — لینک اشتراک V2Ray (پیشنهادی برای کاربران با اشتراک)</b></summary>
+
+اگر لینک اشتراک V2Ray دارید، این روش پایدارترین اتصال را می‌دهد.
+
+1. به تب **«اشتراک‌ها»** بروید
+2. روی **«افزودن اشتراک»** کلیک کنید
+3. لینک اشتراک خود را وارد کنید (معمولاً با `https://` یا `vmess://` شروع می‌شود)
+4. روی **«بارگذاری»** کلیک کنید تا لیست سرورها دریافت شود
+5. به تب **«سرورها»** بروید و روی **«آزمایش سرعت»** کلیک کنید
+6. حالا روی دکمه اصلی **«اتصال»** در صفحه اصلی کلیک کنید
+
+</details>
+
+<details>
+<summary><b>🐙 روش سوم — GitHub Codespace (پروکسی خصوصی با حساب GitHub)</b></summary>
+
+این روش یک پروکسی کاملاً خصوصی ایجاد می‌کند که فقط برای شماست.
+
+**پیش‌نیاز:** حساب GitHub (رایگان کافی است)
+
+#### ساخت Personal Access Token
+
+1. وارد [github.com](https://github.com) شوید
+2. از بالا-راست روی تصویر پروفایل خود کلیک کنید → **Settings**
+3. از منوی چپ تا پایین بروید → **Developer settings**
+4. **Personal access tokens** → **Tokens (classic)**
+5. روی **Generate new token (classic)** کلیک کنید
+6. یک نام دلخواه وارد کنید (مثلاً: `HamidsDeutsch`)
+7. تاریخ انقضا را روی **No expiration** یا ۱ سال تنظیم کنید
+8. تیک این دسترسی‌ها را بزنید:
+   - ✅ `repo` — دسترسی کامل به مخازن
+   - ✅ `codespace` — مدیریت Codespace
+9. روی **Generate token** کلیک کنید
+10. توکن را **همین‌جا کپی کنید** — دیگر نمایش داده نمی‌شود
+
+#### اتصال در نرم‌افزار
+
+1. به تب **«تنظیمات»** → **GitHub** بروید
+2. توکن کپی‌شده را در فیلد **Personal Access Token** جای‌گذاری کنید
+3. روی **«ذخیره»** کلیک کنید
+4. به صفحه اصلی برگردید و روی دکمه **«اتصال از طریق GitHub»** کلیک کنید
+5. اولین بار ممکن است ۲–۳ دقیقه طول بکشد (ساخت Codespace جدید)
+6. پس از اتصال، IP خروجی تأیید می‌شود
+
+> **نکته:** Codespace رایگان GitHub ماهانه ۱۲۰ ساعت استفاده دارد. برای استفاده بیشتر باید اشتراک GitHub Pro تهیه کنید.
+
+</details>
+
+<details>
+<summary><b>☁️ روش چهارم — پنل BPB روی Cloudflare (پیشرفته)</b></summary>
+
+BPB یک پنل پروکسی رایگان است که روی Cloudflare Workers اجرا می‌شود.
+
+**پیش‌نیاز:** حساب Cloudflare (رایگان)
+
+#### راه‌اندازی Cloudflare
+
+1. در [cloudflare.com](https://cloudflare.com) ثبت‌نام کنید
+2. به تب **«BPB Panel»** در نرم‌افزار بروید
+3. روی **«ورود به Cloudflare»** کلیک کنید و مجوز دسترسی دهید
+4. روی **«استقرار پنل BPB»** کلیک کنید
+5. پس از اتمام، آدرس پنل به صورت خودکار ذخیره می‌شود
+6. روی **«اتصال»** کلیک کنید تا به سریع‌ترین سرور BPB متصل شوید
+
+> **نکته:** Cloudflare Workers روزانه ۱۰۰,۰۰۰ درخواست رایگان دارد که برای استفاده معمول کافی است.
+
+</details>
+
+---
+
+### ⚙️ پیش‌نیازها
+
+- ویندوز ۱۰ یا ۱۱ (نسخه ۶۴ بیتی)
+- اتصال اینترنت (برای دریافت موتور sing-box در اولین اجرا)
+- حساب GitHub (فقط برای روش GitHub Codespace)
+- حساب Cloudflare (فقط برای روش BPB)
+
+---
+
+<a name="english"></a>
+
+---
+
+## 🇬🇧 English
+
+**HamidsDeutsch Connect** is a Windows desktop application that provides easy, one-click access to the free internet through multiple connection methods — with no technical knowledge required.
+
+The core engine is **sing-box**, a professional-grade proxy runtime. All Windows proxy settings are managed automatically and fully restored when you disconnect.
+
+---
 
 ### ✨ Features
 
 | Feature | Description |
 |---------|-------------|
-| 🆓 **Free Config** | Automatically fetches and connects to the fastest free proxy from public repositories |
-| 🐙 **GitHub Codespace** | Private VLESS+WebSocket proxy inside a GitHub Codespace — no personal server needed |
+| 🆓 **Free Config** | Automatically fetches and connects to the fastest free proxy server |
+| 🐙 **GitHub Codespace** | Private VLESS+WebSocket proxy inside a GitHub Codespace — no personal server |
 | ☁️ **BPB Panel** | Full support for BPB Panel (Cloudflare Workers-based proxy) |
-| 📋 **Subscriptions** | Import V2Ray subscription links and auto-connect to the fastest server |
-| 🔄 **Auto-Reconnect** | Automatically finds and connects to a new server if the connection drops |
-| 🛡️ **sing-box Core** | Professional proxy engine supporting VLESS, VMess, Trojan, Shadowsocks and more |
-| 🌐 **Windows Proxy Management** | No manual proxy settings needed; automatically restores proxy state on disconnect |
-| 🇮🇷 / 🇬🇧 / 🇩🇪 **Trilingual** | Full UI in Persian (RTL), English, and German |
+| 📋 **V2Ray Subscription** | Import subscription links and auto-connect to the fastest server |
+| 🔄 **Auto-Reconnect** | Automatically finds and switches to a new server if the connection drops |
+| 🛡️ **sing-box Core** | Supports VLESS · VMess · Trojan · Shadowsocks · Hysteria2 and more |
+| 🌐 **Windows Proxy Manager** | Proxy settings are automatically restored after disconnect |
+| 🔘 **Smart Connect Button** | Auto-priority: Subscription → Free → BPB → GitHub Codespace |
+| 🇮🇷 / 🇬🇧 / 🇩🇪 **Trilingual UI** | Full interface in Persian (RTL), English, and German |
 
-### Installation
+---
 
-#### Option 1 — Installer
+### 🚀 Installation
 
-1. Download the latest release from [Releases](../../releases).
-2. Run `HamidsDeutsch-Connect-Setup.exe`.
-3. Open the app and choose a connection method.
+1. Download the latest `HamidsDeutsch-Connect-Setup-x64.exe` from [Releases](../../releases/latest)
+2. Run the installer
+3. The app launches automatically after installation
 
-#### Option 2 — Free Config (Quick Start)
+---
 
-1. Open the app.
-2. Click **Get Free Config** on the home screen.
-3. The app automatically finds and connects to the fastest available server.
+### 📡 Connection Methods
 
-#### Option 3 — GitHub Codespace
+<details>
+<summary><b>🆓 Method 1 — Free Config (Easiest, no account needed)</b></summary>
 
-1. Go to **Settings → GitHub** and enter a Personal Access Token with `codespace` and `repo` scopes.
-2. Click **Connect via GitHub Codespace** on the home screen.
+This method is fully automatic — no registration or configuration required.
 
-### Tech Stack
+1. Open the app
+2. Click the main **Connect** button on the home screen
+3. The app automatically:
+   - Downloads a list of free proxy servers from public repositories
+   - Tests latency on all servers
+   - Connects to the fastest one
+4. IP change is verified and shown in the app
+
+> If the connected server drops, the app automatically reconnects to another one.
+
+</details>
+
+<details>
+<summary><b>📋 Method 2 — V2Ray Subscription (Recommended for subscription users)</b></summary>
+
+If you have a V2Ray subscription link, this method gives the most stable connection.
+
+1. Go to the **Subscriptions** tab
+2. Click **Add Subscription** and paste your subscription URL
+3. Click **Load** to fetch the server list
+4. Go to the **Servers** tab and click **Test Latency**
+5. Return to the home screen and click **Connect**
+
+</details>
+
+<details>
+<summary><b>🐙 Method 3 — GitHub Codespace (Private proxy with your GitHub account)</b></summary>
+
+This method creates a fully private proxy that only you can use.
+
+**Requirement:** A GitHub account (free tier is sufficient)
+
+#### Create a Personal Access Token
+
+1. Sign in at [github.com](https://github.com)
+2. Click your profile picture (top right) → **Settings**
+3. Scroll to the bottom of the left sidebar → **Developer settings**
+4. **Personal access tokens** → **Tokens (classic)**
+5. Click **Generate new token (classic)**
+6. Enter a note (e.g. `HamidsDeutsch`)
+7. Set expiration to **No expiration** or 1 year
+8. Check these scopes:
+   - ✅ `repo` — Full control of private repositories
+   - ✅ `codespace` — Manage Codespaces
+9. Click **Generate token**
+10. **Copy the token immediately** — it will not be shown again
+
+#### Connect in the app
+
+1. Go to **Settings → GitHub** in the app
+2. Paste your token in the **Personal Access Token** field and save
+3. Return to the home screen and click **Connect via GitHub**
+4. The first connection may take 2–3 minutes (creating a new Codespace)
+5. IP verification is shown after a successful connection
+
+> GitHub Free includes 120 core-hours/month for Codespaces. Upgrade to GitHub Pro for more.
+
+</details>
+
+<details>
+<summary><b>☁️ Method 4 — BPB Panel on Cloudflare (Advanced)</b></summary>
+
+BPB is a free proxy panel that runs on Cloudflare Workers infrastructure.
+
+**Requirement:** A free Cloudflare account
+
+1. Sign up at [cloudflare.com](https://cloudflare.com)
+2. Go to the **BPB Panel** tab in the app
+3. Click **Login with Cloudflare** and authorize
+4. Click **Deploy BPB Panel** — the app sets everything up automatically
+5. Once deployed, click **Connect** to use your BPB servers
+
+> Cloudflare Workers free tier includes 100,000 requests/day — sufficient for normal usage.
+
+</details>
+
+---
+
+### 🔧 Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 19, TypeScript |
-| Desktop | Electron |
-| Bundler | Vite |
-| Proxy Core | sing-box v1.13 |
-| Packaging | electron-builder (NSIS installer) |
+| Frontend | React 19 + TypeScript |
+| Desktop shell | Electron v32 |
+| Build tool | Vite |
+| Proxy engine | sing-box v1.13 |
+| Packaging | electron-builder · NSIS installer |
 
-### Development
+---
+
+### 🛠 Development
 
 ```bash
 # Install dependencies
 npm install
 
-# Development mode (Vite + Electron hot-reload)
+# Start in development mode (hot reload)
 npm run start
 
-# Build Windows installer
+# Build Windows installer (.exe)
 npm run dist:win
 
 # Build without installer (directory output)
 npm run pack:win
 ```
 
-### Requirements
-
+**Requirements for development:**
+- Node.js 18+
 - Windows 10/11 x64
-- Node.js 18+ (for development only)
-- Internet connection (to download sing-box engine on first run)
 
-### License
+---
 
-[MIT](LICENSE)
+### 📄 License
+
+[MIT](LICENSE) — free to use, modify, and distribute.
 
 ---
 
 <div align="center">
-  <sub>Built with ❤️ for free internet access</sub>
+  <sub>Built with care for free internet access · HamidsDeutsch 2026</sub>
 </div>

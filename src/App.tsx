@@ -270,6 +270,10 @@ function App() {
   const [freeError, setFreeError] = useState<string | null>(null)
   const [freePool, setFreePool] = useState<FreePoolServer[]>([])
 
+  // For smart hero-button priority: know if BPB/codespace are configured
+  const [bpbHasConfig, setBpbHasConfig] = useState(false)
+  const [codespaceHasToken, setCodespaceHasToken] = useState(false)
+
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
   const engineProcess = useEngineProcess()
@@ -314,6 +318,16 @@ function App() {
     return window.hamidsDeutsch.codespace.onProgress(({ message }) => {
       setCodespaceProgress(message)
     })
+  }, [])
+
+  // Load BPB and codespace config state once on mount for smart hero button
+  useEffect(() => {
+    void window.hamidsDeutsch.bpb.getProfile().then((profile) => {
+      setBpbHasConfig(Boolean(profile?.panelUrl?.trim()))
+    }).catch(() => {})
+    void window.hamidsDeutsch.codespace.getStatus().then((s) => {
+      setCodespaceHasToken(Boolean(s?.hasToken))
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -968,6 +982,56 @@ function App() {
     }
   }
 
+  // Smart hero-button connect: priority order
+  //   1. Subscription servers (user-configured) → fastest server
+  //   2. Free configs (fetch and connect)
+  //   3. BPB Panel (if panelUrl saved) → quick-connect
+  //   4. GitHub Codespace (if token saved)
+  async function smartHeroConnect() {
+    // Priority 1: user has valid subscription servers
+    if (serverNodes.nodes.some((n) => n.valid)) {
+      void connectToFirstHealthyServer()
+      return
+    }
+
+    // Priority 2: try free config
+    try {
+      const freeResult = await window.hamidsDeutsch.free.fetchAndConnect({
+        directDomains: directDomains.domains,
+      })
+      if (freeResult.success) {
+        setFreeNodeName(freeResult.nodeName)
+        setFreeLatencyMs(freeResult.latencyMs)
+        setFreePhase('connected')
+        void window.hamidsDeutsch.free.getPool().then((r) => {
+          if (r.success) setFreePool(r.servers)
+        })
+        return
+      }
+    } catch {
+      // fall through
+    }
+
+    // Priority 3: BPB panel if configured
+    try {
+      const profile = await window.hamidsDeutsch.bpb.getProfile()
+      if (profile?.panelUrl?.trim()) {
+        const result = await window.hamidsDeutsch.bpb.quickConnect({
+          panelUrl: profile.panelUrl,
+          directDomains: directDomains.domains,
+        })
+        if (result?.success) return
+      }
+    } catch {
+      // fall through
+    }
+
+    // Priority 4: GitHub Codespace if token configured
+    if (codespaceHasToken) {
+      void connectViaCodespace()
+    }
+  }
+
   async function recoverConnection(
     failedNodeId: string | null,
   ) {
@@ -1185,7 +1249,7 @@ function App() {
     <div className="application-shell" data-theme={theme} dir={lang === 'fa' ? 'rtl' : 'ltr'}>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark"><span>H</span></div>
+          <div className="brand-mark"><img src="logo.png" alt="HamidsDeutsch Connect" className="brand-logo-img" /></div>
           <div className="brand-text">
             <strong>HamidsDeutsch</strong>
             <span>Connect</span>
@@ -1244,25 +1308,39 @@ function App() {
           </div>
 
           <div className="topbar-controls">
+            {/* Day/Night slider toggle */}
             <button
-              className="topbar-theme-btn"
+              className={`theme-slider-toggle${theme === 'light' ? ' theme-slider-day' : ' theme-slider-night'}`}
               type="button"
               title={theme === 'dark' ? t('toggle.themeToLight') : t('toggle.themeToDark')}
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               aria-label={theme === 'dark' ? t('toggle.themeToLight') : t('toggle.themeToDark')}
             >
-              <span className="topbar-theme-icon">{theme === 'dark' ? '☀' : '☽'}</span>
-              <span className="topbar-theme-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+              <span className="theme-slider-track">
+                <span className="theme-slider-scene" />
+                <span className="theme-slider-knob" />
+              </span>
             </button>
+
+            {/* Language cycle toggle: FA → EN → DE → FA */}
             <button
-              className="topbar-lang-btn"
+              className="lang-slider-toggle"
               type="button"
               title={t('toggle.lang')}
               onClick={() => setLang(lang === 'fa' ? 'en' : lang === 'en' ? 'de' : 'fa')}
               aria-label={t('toggle.lang')}
+              data-lang={lang}
             >
-              {lang === 'fa' ? '🇮🇷' : lang === 'en' ? '🇬🇧' : '🇩🇪'}
-              <span className="topbar-lang-label">{lang === 'fa' ? 'FA' : lang === 'en' ? 'EN' : 'DE'}</span>
+              <span className="lang-slider-label lang-slider-label-left">
+                {lang === 'fa' ? 'EN' : lang === 'en' ? 'DE' : 'FA'}
+              </span>
+              <span className="lang-slider-track">
+                <span className="lang-slider-flag" />
+                <span className="lang-slider-knob" />
+              </span>
+              <span className="lang-slider-label lang-slider-label-right">
+                {lang === 'fa' ? 'FA' : lang === 'en' ? 'EN' : 'DE'}
+              </span>
             </button>
           </div>
 
@@ -1352,7 +1430,7 @@ function App() {
                 } else if (engineProcess.status.running) {
                   void stopLocalProxy()
                 } else {
-                  void connectToFirstHealthyServer()
+                  void smartHeroConnect()
                 }
               }}
               onStartFastest={() => {
@@ -2083,9 +2161,6 @@ function HomePage({
               />
             </div>
           </div>
-          <p className="bpb-home-description">
-            {t('home.bpb.hint')}
-          </p>
           <div className="bpb-home-actions">
             <button
               className={`bpb-home-connect-button${otherMethodActive ? ' method-faded' : ''}`}
@@ -2095,7 +2170,6 @@ function HomePage({
               <span>◈</span>
               <span>
                 <strong>{t('home.bpb.connect')}</strong>
-                <small>Cloudflare Workers</small>
               </span>
             </button>
           </div>

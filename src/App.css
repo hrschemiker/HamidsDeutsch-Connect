@@ -164,6 +164,14 @@ button {
   font-size: 20px;
   font-weight: 900;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.brand-logo-img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  display: block;
 }
 
 .brand-text {
@@ -3844,48 +3852,236 @@ button {
   flex-shrink: 0;
 }
 
-/* ── Topbar redesigned buttons ────────────────────────────────────────────── */
+/* ── Day/Night theme slider ───────────────────────────────────────────────── */
 
-.topbar-theme-btn,
-.topbar-lang-btn {
+.theme-slider-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.theme-slider-track {
+  position: relative;
+  display: block;
+  width: 45px;
+  height: 21px;
+  border-radius: 11px;
+  overflow: hidden;
+  border: 1.5px solid rgba(255,255,255,0.18);
+  transition: border-color 300ms;
+}
+
+/* DAY: sky blue background with cloud-like right edge */
+.theme-slider-day .theme-slider-track {
+  background: linear-gradient(120deg, #5bc0eb 0%, #87ceeb 55%, #c8e8f7 100%);
+  border-color: rgba(91,192,235,0.4);
+}
+
+/* NIGHT: dark background with stars */
+.theme-slider-night .theme-slider-track {
+  background: linear-gradient(120deg, #0d1b2a 0%, #1a2a40 55%, #22374f 100%);
+  border-color: rgba(100,130,180,0.3);
+}
+
+/* Stars in night mode */
+.theme-slider-night .theme-slider-scene::before {
+  content: '✦ · ✦ ·';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+  font-size: 7px;
+  letter-spacing: 3px;
+  color: rgba(255,255,255,0.75);
+  pointer-events: none;
+}
+
+/* Clouds in day mode */
+.theme-slider-day .theme-slider-scene::before {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  right: 10px;
+  width: 28px;
+  height: 12px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.85);
+  pointer-events: none;
+}
+.theme-slider-day .theme-slider-scene::after {
+  content: '';
+  position: absolute;
+  bottom: 8px;
+  right: 18px;
+  width: 18px;
+  height: 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.7);
+  pointer-events: none;
+}
+
+.theme-slider-scene {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Knob */
+.theme-slider-knob {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  transition: left 280ms cubic-bezier(0.34, 1.56, 0.64, 1), background 280ms, box-shadow 280ms;
+}
+
+/* DAY: knob is sun (yellow), on the left */
+.theme-slider-day .theme-slider-knob {
+  left: 1px;
+  background: #f9c623;
+  box-shadow: 0 0 0 2px rgba(249,198,35,0.35), 0 2px 6px rgba(0,0,0,0.18);
+}
+
+/* NIGHT: knob is moon (light gray), on the right */
+.theme-slider-night .theme-slider-knob {
+  left: 25px;
+  background: #dde4ec;
+  box-shadow: 0 0 0 2px rgba(200,215,235,0.3), 0 2px 6px rgba(0,0,0,0.35);
+}
+
+/* Moon craters */
+.theme-slider-night .theme-slider-knob::before {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: rgba(160,175,195,0.6);
+}
+.theme-slider-night .theme-slider-knob::after {
+  content: '';
+  position: absolute;
+  top: 8px; left: 9px;
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: rgba(160,175,195,0.5);
+}
+
+.theme-slider-toggle:hover .theme-slider-track {
+  opacity: 0.88;
+}
+
+/* ── Language slider toggle ───────────────────────────────────────────────── */
+
+.lang-slider-toggle {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 12px;
-  border-radius: 20px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-soft);
-  color: var(--text-soft);
+  background: none;
+  border: none;
+  padding: 0;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition:
-    background 160ms,
-    border-color 160ms,
-    color 160ms,
-    transform 120ms;
-  white-space: nowrap;
 }
 
-.topbar-theme-btn:hover,
-.topbar-lang-btn:hover {
-  border-color: var(--gold);
-  color: var(--gold);
-  background: var(--gold-soft);
-  transform: scale(1.04);
-}
-
-.topbar-theme-icon {
-  font-size: 15px;
-  line-height: 1;
-}
-
-.topbar-theme-label,
-.topbar-lang-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+.lang-slider-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  transition: color 220ms, opacity 220ms;
+  min-width: 14px;
+}
+
+.lang-slider-label-left {
+  text-align: right;
+  color: var(--text-soft);
+  opacity: 0.5;
+}
+
+.lang-slider-label-right {
+  text-align: left;
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+.lang-slider-track {
+  position: relative;
+  display: block;
+  width: 39px;
+  height: 20px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1.5px solid var(--border-strong);
+  transition: border-color 220ms;
+}
+
+/* Flag background fills — one per lang value */
+[data-lang="fa"] .lang-slider-flag {
+  position: absolute;
+  inset: 0;
+  /* Iran flag: green top, white middle, red bottom */
+  background: linear-gradient(180deg, #239f40 33%, #ffffff 33% 67%, #da0000 67%);
+}
+
+[data-lang="en"] .lang-slider-flag {
+  position: absolute;
+  inset: 0;
+  /* UK flag simplified: blue with red cross */
+  background: #012169;
+}
+[data-lang="en"] .lang-slider-flag::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom right, transparent 43%, #c8102e 43% 57%, transparent 57%),
+    linear-gradient(to bottom left,  transparent 43%, #c8102e 43% 57%, transparent 57%);
+}
+[data-lang="en"] .lang-slider-flag::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, transparent 42%, #ffffff 42% 58%, transparent 58%),
+    linear-gradient(to bottom, transparent 38%, #ffffff 38% 62%, transparent 62%);
+}
+
+[data-lang="de"] .lang-slider-flag {
+  position: absolute;
+  inset: 0;
+  /* Germany flag: black top, red middle, yellow bottom */
+  background: linear-gradient(180deg, #000000 33%, #dd0000 33% 67%, #ffce00 67%);
+}
+
+/* Knob */
+.lang-slider-knob {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.28);
+  transition: left 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 1;
+}
+
+/* Knob always on right (active flag visible) */
+[data-lang="fa"] .lang-slider-knob  { left: 21px; }
+[data-lang="en"] .lang-slider-knob  { left: 21px; }
+[data-lang="de"] .lang-slider-knob  { left: 21px; }
+
+.lang-slider-toggle:hover .lang-slider-track {
+  border-color: var(--gold);
+  opacity: 0.88;
 }
 
 /* ── Method-faded: another connection is active ───────────────────────────── */
