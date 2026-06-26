@@ -546,6 +546,7 @@ async function stopLocalProxy({
     activeProcess
 
   const shouldRestoreWindowsProxy =
+    processState.systemProxyEnabled &&
     typeof userDataPath === 'string' &&
     userDataPath.trim()
 
@@ -593,9 +594,6 @@ async function stopLocalProxy({
   try {
     const stoppedPid =
       child.pid ?? null
-
-    // Clear before stopping so the exit handler won't double-restore.
-    processState.systemProxyEnabled = false
 
     await stopSpecificProcess(
       child,
