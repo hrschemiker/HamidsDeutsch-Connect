@@ -118,33 +118,7 @@ function InfoButton({ fa, en }: { fa: string; en: string }) {
   )
 }
 
-// ── Navigation items (with i18n keys) ────────────────────────────────────────
-
-const NAV_I18N: Record<string, string> = {
-  home: 'nav.home',
-  servers: 'nav.servers',
-  subscriptions: 'nav.subscriptions',
-  bpb: 'nav.bpb',
-  'direct-sites': 'nav.directSites',
-  rescue: 'nav.rescue',
-  statistics: 'nav.statistics',
-  logs: 'nav.logs',
-  guide: 'nav.guide',
-  settings: 'nav.settings',
-}
-
-const PAGE_I18N: Record<string, string> = {
-  home: 'page.home',
-  servers: 'page.servers',
-  subscriptions: 'page.subscriptions',
-  bpb: 'page.bpb',
-  'direct-sites': 'page.directSites',
-  rescue: 'page.rescue',
-  statistics: 'page.statistics',
-  logs: 'page.logs',
-  guide: 'page.guide',
-  settings: 'page.settings',
-}
+// ── Page / navigation types ───────────────────────────────────────────────────
 
 type PageId =
   | 'home'
@@ -271,7 +245,6 @@ function App() {
   const [freePool, setFreePool] = useState<FreePoolServer[]>([])
 
   // For smart hero-button priority: know if BPB/codespace are configured
-  const [bpbHasConfig, setBpbHasConfig] = useState(false)
   const [codespaceHasToken, setCodespaceHasToken] = useState(false)
 
   const directDomains = useDirectDomains()
@@ -320,11 +293,8 @@ function App() {
     })
   }, [])
 
-  // Load BPB and codespace config state once on mount for smart hero button
+  // Load codespace token state once on mount for smart hero button
   useEffect(() => {
-    void window.hamidsDeutsch.bpb.getProfile().then((profile) => {
-      setBpbHasConfig(Boolean(profile?.panelUrl?.trim()))
-    }).catch(() => {})
     void window.hamidsDeutsch.codespace.getStatus().then((s) => {
       setCodespaceHasToken(Boolean(s?.hasToken))
     }).catch(() => {})
@@ -1014,10 +984,11 @@ function App() {
 
     // Priority 3: BPB panel if configured
     try {
-      const profile = await window.hamidsDeutsch.bpb.getProfile()
-      if (profile?.panelUrl?.trim()) {
+      const profileResult = await window.hamidsDeutsch.bpb.getProfile()
+      const bpbPanelUrl = profileResult?.profile?.panelUrl?.trim()
+      if (bpbPanelUrl) {
         const result = await window.hamidsDeutsch.bpb.quickConnect({
-          panelUrl: profile.panelUrl,
+          panelUrl: bpbPanelUrl,
           directDomains: directDomains.domains,
         })
         if (result?.success) return
