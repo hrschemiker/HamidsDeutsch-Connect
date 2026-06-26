@@ -279,6 +279,28 @@ function App() {
       : ipVerification.connected &&
         engineProcess.status.systemProxyEnabled
 
+  // ── Toast on disconnect ───────────────────────────────────────────────────
+  const appHeroConnected = connectionVerified || codespaceConnected || freePhase === 'connected'
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prevHeroConnectedRef = useRef(false)
+  const hasConnectedRef = useRef(false)
+
+  useEffect(() => {
+    if (appHeroConnected) {
+      hasConnectedRef.current = true
+      prevHeroConnectedRef.current = true
+    } else if (prevHeroConnectedRef.current && hasConnectedRef.current) {
+      prevHeroConnectedRef.current = false
+      setToastMessage('اتصال قطع شد · پراکسی ویندوز بازگردانی شد')
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      toastTimerRef.current = setTimeout(() => setToastMessage(null), 3200)
+    }
+  }, [appHeroConnected])
+
+  // ── Sidebar hover state ───────────────────────────────────────────────────
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
   useEffect(() => {
     void window.hamidsDeutsch.system.setVirtualLocationConnected(connectionVerified)
   }, [connectionVerified])
@@ -1218,7 +1240,11 @@ function App() {
     <ThemeCtx.Provider value={{ theme, setTheme }}>
       <LangCtx.Provider value={{ lang, setLang }}>
     <div className="application-shell" data-theme={theme} dir={lang === 'fa' ? 'rtl' : 'ltr'}>
-      <aside className="sidebar">
+      <aside
+        className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}
+        onMouseEnter={() => setSidebarOpen(true)}
+        onMouseLeave={() => setSidebarOpen(false)}
+      >
         <div className="brand">
           <div className="brand-mark"><img src="logo.png" alt="HamidsDeutsch Connect" className="brand-logo-img" /></div>
           <div className="brand-text">
@@ -1237,10 +1263,11 @@ function App() {
               }
               key={item.id}
               type="button"
+              title={item.label}
               onClick={() => setActivePage(item.id)}
             >
               <span className="navigation-icon">{item.icon}</span>
-              <span>{item.label}</span>
+              <span className="navigation-label">{item.label}</span>
             </button>
           ))}
         </nav>
@@ -1654,6 +1681,12 @@ function App() {
           )}
         </main>
       </section>
+      {toastMessage && (
+        <div className="toast" role="status" aria-live="polite">
+          <span className="toast-icon">✓</span>
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
       </LangCtx.Provider>
     </ThemeCtx.Provider>
@@ -1815,6 +1848,37 @@ function HomePage({
     processStatus.running || codespaceConnected || freePhase === 'connected' || fastestServer || selectedServer,
   )
 
+  // ── Session timer ──────────────────────────────────────────────────────────
+  const freeConnectedLocal = freePhase === 'connected'
+  const heroConnectedLocal = isConnected || codespaceConnected || freeConnectedLocal
+  const [sessionStart, setSessionStart] = useState<number | null>(null)
+  const [elapsedSecs, setElapsedSecs] = useState(0)
+
+  useEffect(() => {
+    if (heroConnectedLocal) {
+      setSessionStart((s) => s ?? Date.now())
+    } else {
+      setSessionStart(null)
+      setElapsedSecs(0)
+    }
+  }, [heroConnectedLocal])
+
+  useEffect(() => {
+    if (sessionStart == null) return
+    const id = window.setInterval(() => {
+      setElapsedSecs(Math.floor((Date.now() - sessionStart) / 1000))
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [sessionStart])
+
+  function formatElapsed(s: number) {
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = s % 60
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`
+  }
+
   const [switchConfirm, setSwitchConfirm] = useState<{
     title: string
     message: string
@@ -1870,11 +1934,20 @@ function HomePage({
     }
   }
 
-  const freeConnected = freePhase === 'connected'
+  const freeConnected = freeConnectedLocal
   const otherMethodActive = processStatus.running || codespaceConnected || freeConnected
-  const heroConnected = isConnected || codespaceConnected || freeConnected
+  const heroConnected = heroConnectedLocal
   const activeMethod: 'codespace' | 'free' | 'subscription' | null =
     codespaceConnected ? 'codespace' : freeConnected ? 'free' : processStatus.running ? 'subscription' : null
+
+  const isConnecting = processBusy && !heroConnected
+  const isReconnecting = freePhase === 'reconnecting'
+  const orbitClass = [
+    'connection-orbit',
+    isReconnecting ? 'connection-orbit-reconnecting' :
+      heroConnected ? 'connection-orbit-online' :
+      isConnecting ? 'connection-orbit-connecting' : '',
+  ].filter(Boolean).join(' ')
 
   return (
     <div className="home-layout">
@@ -1903,6 +1976,9 @@ function HomePage({
                       : processStatus.running
                         ? t('home.proxy.title.running')
                         : t('status.disconnected')}
+            {heroConnected && elapsedSecs >= 0 && (
+              <span className="session-timer" dir="ltr">{formatElapsed(elapsedSecs)}</span>
+            )}
           </div>
 
           {!administratorAvailable && !processStatus.running && (
@@ -1972,19 +2048,29 @@ function HomePage({
               </small>
             </span>
           </button>
+
+          {(isConnecting || isReconnecting ||
+            freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting') && (
+            <div className="hero-progress">
+              <div className={`hero-progress-fill ${
+                freePhase === 'fetching' ? 'hero-progress-p1' :
+                freePhase === 'testing'  ? 'hero-progress-p2' :
+                freePhase === 'connecting' ? 'hero-progress-p3' :
+                'hero-progress-indeterminate'
+              }`} />
+            </div>
+          )}
         </div>
 
         <div className="hero-visual" aria-hidden="true">
-          <div
-            className={
-              heroConnected
-                ? 'connection-orbit connection-orbit-online'
-                : 'connection-orbit'
-            }
-          >
+          <div className={orbitClass}>
             <div className="connection-orbit-middle">
               <div className="connection-orbit-core">
-                <span>{heroConnected ? '✓' : 'H'}</span>
+                <img
+                  src="logo.png"
+                  className={`orbit-logo${heroConnected ? ' orbit-logo-online' : ''}${isConnecting ? ' orbit-logo-connecting' : ''}`}
+                  alt=""
+                />
               </div>
             </div>
           </div>
@@ -1996,13 +2082,18 @@ function HomePage({
           <span className="statistic-icon">◎</span>
           <div>
             <span className="statistic-label">{t('stats.outputIp')}</span>
-            <strong dir="ltr">
-              {isConnected
-                ? ipVerificationResult.proxyIp ?? t('stats.confirmed')
-                : processStatus.ready
-                  ? t('stats.pendingVerify')
-                  : '—'}
-            </strong>
+            <div className="statistic-value-row">
+              <strong dir="ltr">
+                {isConnected
+                  ? ipVerificationResult.proxyIp ?? t('stats.confirmed')
+                  : processStatus.ready
+                    ? t('stats.pendingVerify')
+                    : '—'}
+              </strong>
+              {isConnected && ipVerificationResult.proxyIp && (
+                <CopyButton text={ipVerificationResult.proxyIp} />
+              )}
+            </div>
           </div>
         </article>
         <article className="statistic-card">
@@ -2178,7 +2269,7 @@ function HomePage({
           <div className="free-config-connected-info">
             <span className="free-connected-dot" />
             <span>{freeNodeName}</span>
-            {freeLatencyMs != null && <span className="free-latency">{freeLatencyMs} ms</span>}
+            {freeLatencyMs != null && <LatencyBadge latencyMs={freeLatencyMs} />}
           </div>
         )}
 
@@ -2466,6 +2557,29 @@ function ConnectionChoiceCard({
     </article>
   )
 }
+
+// ── CopyButton ────────────────────────────────────────────────────────────────
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  if (!text) return null
+  return (
+    <button
+      className={`copy-btn${copied ? ' copy-btn-done' : ''}`}
+      type="button"
+      aria-label="Copy"
+      onClick={() => {
+        void navigator.clipboard.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1600)
+      }}
+    >
+      {copied ? '✓' : '⎘'}
+    </button>
+  )
+}
+
+// ── LatencyBadge ──────────────────────────────────────────────────────────────
 
 function LatencyBadge({
   latencyMs,
@@ -3167,13 +3281,23 @@ function ServersPage({
 
   if (nodes.length === 0) {
     return (
-      <EmptyPage
-        icon="◉"
-        title={t('servers.empty.title')}
-        description={t('servers.empty.desc')}
-        actionLabel={t('servers.goSubs')}
-        onAction={onOpenSubscriptions}
-      />
+      <section className="empty-state">
+        <div className="empty-state-icon empty-state-icon-servers">◉</div>
+        <h2>{t('servers.empty.title')}</h2>
+        <p>{t('servers.empty.desc')}</p>
+        <ol className="empty-state-steps">
+          <li>{t('servers.empty.step1', 'به تب «اشتراک‌ها» بروید')}</li>
+          <li>{t('servers.empty.step2', 'لینک اشتراک V2Ray را وارد کنید')}</li>
+          <li>{t('servers.empty.step3', 'سرورها به‌طور خودکار بارگذاری می‌شوند')}</li>
+        </ol>
+        <button
+          className="primary-button"
+          type="button"
+          onClick={onOpenSubscriptions}
+        >
+          {t('servers.goSubs')}
+        </button>
+      </section>
     )
   }
 
