@@ -163,6 +163,11 @@ export function BpbPage({
       text: string
     } | null>(null)
 
+  const [switchConfirm, setSwitchConfirm] =
+    useState<{
+      node: BpbNode
+    } | null>(null)
+
   useEffect(() => {
     const unsubscribe =
       window.hamidsDeutsch.bpb.cloudflare
@@ -775,15 +780,15 @@ export function BpbPage({
                     .join(' ')}
                   disabled={
                     mainConnected ||
-                    Boolean(connectingMode) ||
-                    status?.connected
+                    Boolean(connectingMode)
                   }
-                  onClick={() =>
-                    void connectNode(
-                      node,
-                      'selected',
-                    )
-                  }
+                  onClick={() => {
+                    if (status?.connected) {
+                      setSwitchConfirm({ node })
+                    } else {
+                      void connectNode(node, 'selected')
+                    }
+                  }}
                 >
                   <span className="bpb-server-rank">
                     {(index + 1).toLocaleString(
@@ -824,6 +829,25 @@ export function BpbPage({
           </div>
         )}
       </section>
+
+      {switchConfirm && (
+        <div className="confirm-overlay" onClick={() => setSwitchConfirm(null)}>
+          <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <p className="confirm-title">تغییر سرور BPB</p>
+            <p className="confirm-message">
+              اتصال فعلی BPB قطع می‌شود و از طریق سرور «{switchConfirm.node.name}» مجدداً متصل می‌شوید. ادامه می‌دهید؟
+            </p>
+            <div className="confirm-actions">
+              <button className="confirm-cancel-btn" type="button" onClick={() => setSwitchConfirm(null)}>انصراف</button>
+              <button className="confirm-ok-btn" type="button" onClick={() => {
+                const node = switchConfirm.node
+                setSwitchConfirm(null)
+                void connectNode(node, 'selected')
+              }}>بله، تغییر بده</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

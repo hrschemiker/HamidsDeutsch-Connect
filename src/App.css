@@ -3826,3 +3826,222 @@ button {
   color: var(--text-muted);
   line-height: 1.7;
 }
+
+/* ── Free badge ───────────────────────────────────────────────────────────── */
+
+.free-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow: 0 1px 4px rgba(34, 197, 94, 0.3);
+  flex-shrink: 0;
+}
+
+/* ── Topbar redesigned buttons ────────────────────────────────────────────── */
+
+.topbar-theme-btn,
+.topbar-lang-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background 160ms,
+    border-color 160ms,
+    color 160ms,
+    transform 120ms;
+  white-space: nowrap;
+}
+
+.topbar-theme-btn:hover,
+.topbar-lang-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: var(--gold-soft);
+  transform: scale(1.04);
+}
+
+.topbar-theme-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.topbar-theme-label,
+.topbar-lang-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Method-faded: another connection is active ───────────────────────────── */
+
+.method-faded {
+  opacity: 0.45;
+  filter: saturate(0.4);
+}
+
+.method-faded:hover {
+  opacity: 0.65;
+  filter: saturate(0.6);
+}
+
+/* ── Confirm dialog ───────────────────────────────────────────────────────── */
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.confirm-dialog {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  padding: 24px 28px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+}
+
+.confirm-title {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.confirm-message {
+  margin: 0 0 20px;
+  font-size: 0.86rem;
+  color: var(--text-soft);
+  line-height: 1.65;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.confirm-cancel-btn {
+  padding: 8px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 140ms, color 140ms;
+}
+
+.confirm-cancel-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.confirm-ok-btn {
+  padding: 8px 18px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, var(--gold), rgba(230, 184, 79, 0.85));
+  color: #1a1200;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: opacity 140ms, transform 120ms;
+}
+
+.confirm-ok-btn:hover {
+  opacity: 0.88;
+  transform: scale(1.02);
+}
+
+/* ── Light theme: BPB page fixes ─────────────────────────────────────────── */
+
+[data-theme="light"] .bpb-auto-dashboard {
+  background: linear-gradient(145deg, rgba(250, 204, 21, 0.07), var(--surface));
+  border-color: rgba(250, 204, 21, 0.3);
+}
+
+[data-theme="light"] .bpb-auto-summary > div {
+  background: rgba(230, 184, 79, 0.06);
+  border-color: rgba(0, 0, 0, 0.09);
+}
+
+[data-theme="light"] .bpb-server-row {
+  background: var(--surface);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .bpb-server-row:hover:not(:disabled) {
+  background: rgba(230, 184, 79, 0.08);
+  border-color: rgba(230, 184, 79, 0.5);
+}
+
+[data-theme="light"] .bpb-server-row.is-active {
+  background: rgba(34, 197, 94, 0.06);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+[data-theme="light"] .bpb-ping.is-online {
+  color: #15803d;
+}
+
+/* ── Light theme: inline notice/error boxes ───────────────────────────────── */
+
+[data-theme="light"] .inline-notice {
+  background: rgba(230, 184, 79, 0.1);
+  border: 1px solid rgba(230, 184, 79, 0.3);
+  color: #7c5f00;
+}
+
+[data-theme="light"] .inline-error {
+  background: rgba(212, 70, 70, 0.07);
+  border: 1px solid rgba(212, 70, 70, 0.25);
+  color: #9b2020;
+}
+
+/* ── Light theme: general grey-background boxes → pastels ────────────────── */
+
+[data-theme="light"] .local-proxy-status-card {
+  background: rgba(124, 58, 237, 0.05);
+  border-color: rgba(124, 58, 237, 0.15);
+}
+
+[data-theme="light"] .statistic-card {
+  background: var(--surface);
+  border-color: rgba(0, 0, 0, 0.09);
+}
+
+[data-theme="light"] .github-status-grid > div {
+  background: rgba(34, 197, 94, 0.05);
+  border-color: rgba(34, 197, 94, 0.15);
+}
+
+[data-theme="light"] .bpb-server-rank {
+  background: rgba(230, 184, 79, 0.08);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .confirm-dialog {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.14);
+}

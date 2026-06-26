@@ -154,6 +154,37 @@ function useT() {
   return (key: string, fallback?: string) => TR[lang][key] ?? fallback ?? key
 }
 
+// ── ConfirmDialog — generic warning/confirm modal ────────────────────────────
+
+function ConfirmDialog({
+  title,
+  message,
+  confirmLabel = 'تأیید',
+  cancelLabel = 'انصراف',
+  onConfirm,
+  onCancel,
+}: {
+  title: string
+  message: string
+  confirmLabel?: string
+  cancelLabel?: string
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="confirm-overlay" onClick={onCancel}>
+      <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+        <p className="confirm-title">{title}</p>
+        <p className="confirm-message">{message}</p>
+        <div className="confirm-actions">
+          <button className="confirm-cancel-btn" type="button" onClick={onCancel}>{cancelLabel}</button>
+          <button className="confirm-ok-btn" type="button" onClick={onConfirm}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── InfoButton — hides description by default, shown on click ────────────────
 
 function InfoButton({ fa, en }: { fa: string; en: string }) {
@@ -1243,22 +1274,24 @@ function App() {
 
           <div className="topbar-controls">
             <button
-              className="topbar-icon-btn"
+              className="topbar-theme-btn"
               type="button"
               title={theme === 'dark' ? t('toggle.themeToLight') : t('toggle.themeToDark')}
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               aria-label={theme === 'dark' ? t('toggle.themeToLight') : t('toggle.themeToDark')}
             >
-              {theme === 'dark' ? '☀' : '☽'}
+              <span className="topbar-theme-icon">{theme === 'dark' ? '☀' : '☽'}</span>
+              <span className="topbar-theme-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
             </button>
             <button
-              className="topbar-icon-btn"
+              className="topbar-lang-btn"
               type="button"
               title={t('toggle.lang', 'تغییر زبان')}
               onClick={() => setLang(lang === 'fa' ? 'en' : 'fa')}
               aria-label={t('toggle.lang', 'تغییر زبان')}
             >
-              🌐
+              {lang === 'fa' ? '🇮🇷' : '🇬🇧'}
+              <span className="topbar-lang-label">{lang === 'fa' ? 'FA' : 'EN'}</span>
             </button>
           </div>
 
@@ -1400,6 +1433,7 @@ function App() {
                     rescueSettings.settings,
                 })
               }}
+              processRunning={engineProcess.status.running}
               onTestLatency={() => void latency.testAll()}
               onSelectServer={selectedServer.selectServer}
               onClearSelectedServer={selectedServer.clearSelectedServer}
@@ -1708,6 +1742,48 @@ function HomePage({
     processStatus.running || fastestServer || selectedServer,
   )
 
+  const [switchConfirm, setSwitchConfirm] = useState<{
+    title: string
+    message: string
+    onConfirm: () => void
+  } | null>(null)
+
+  function requireSwitch(title: string, message: string, onConfirm: () => void) {
+    setSwitchConfirm({ title, message, onConfirm })
+  }
+
+  function handleCodespaceConnect() {
+    if (processStatus.running || codespaceConnected) {
+      requireSwitch(
+        'تغییر روش اتصال',
+        'اتصال فعلی قطع می‌شود و از طریق GitHub Codespace مجدداً متصل می‌شوید. ادامه می‌دهید؟',
+        () => {
+          setSwitchConfirm(null)
+          onCodespaceConnect()
+        },
+      )
+    } else {
+      onCodespaceConnect()
+    }
+  }
+
+  function handleBpbOpen() {
+    if (processStatus.running || codespaceConnected) {
+      requireSwitch(
+        'تغییر روش اتصال',
+        'اتصال فعلی قطع می‌شود و از طریق پنل BPB مجدداً متصل می‌شوید. ادامه می‌دهید؟',
+        () => {
+          setSwitchConfirm(null)
+          onOpenBpb()
+        },
+      )
+    } else {
+      onOpenBpb()
+    }
+  }
+
+  const otherMethodActive = processStatus.running || codespaceConnected
+
   return (
     <div className="home-layout">
       <section className="hero-card">
@@ -1895,6 +1971,7 @@ function HomePage({
               {codespaceConnected && codespaceHost && (
                 <span className="codespace-host-badge" dir="ltr">{codespaceHost}</span>
               )}
+              <span className="free-badge">Free</span>
               <InfoButton
                 fa="یک سرور پروکسی موقت روی زیرساخت GitHub می‌سازد و از طریق پروتکل VLESS + WebSocket متصل می‌شود. نیازی به سرور اختصاصی نیست. توکن GitHub باید در تنظیمات وارد شده باشد."
                 en="Spins up a temporary proxy server on GitHub's infrastructure and connects via VLESS + WebSocket. No dedicated server needed. A GitHub PAT must be configured in Settings."
@@ -1922,10 +1999,10 @@ function HomePage({
               </button>
             ) : (
               <button
-                className="codespace-connect-button"
+                className={`codespace-connect-button${!codespaceConnecting && processStatus.running ? ' method-faded' : ''}`}
                 type="button"
-                disabled={codespaceConnecting || processStatus.running}
-                onClick={onCodespaceConnect}
+                disabled={codespaceConnecting}
+                onClick={handleCodespaceConnect}
               >
                 <span className="codespace-connect-icon">⬡</span>
                 <span>
@@ -1945,19 +2022,19 @@ function HomePage({
               <span className="panel-kicker bpb-home-kicker">BPB Panel</span>
               <h3>اتصال از طریق BPB</h3>
             </div>
-            <InfoButton
-              fa="از طریق پنل BPB که قبلاً در تب «اتصال BPB» پیکربندی کرده‌ای به سریع‌ترین سرور وصل می‌شود."
-              en="Connects via a BPB Panel you've already configured in the BPB Connect tab."
-            />
+            <div className="codespace-header-end">
+              <span className="free-badge">Free</span>
+              <InfoButton
+                fa="از طریق پنل BPB که قبلاً در تب «اتصال BPB» پیکربندی کرده‌ای به سریع‌ترین سرور وصل می‌شود."
+                en="Connects via a BPB Panel you've already configured in the BPB Connect tab."
+              />
+            </div>
           </div>
-          <p className="bpb-home-description">
-            اتصال سریع از طریق Cloudflare Workers و پنل BPB — بدون نیاز به سرور اختصاصی.
-          </p>
           <div className="bpb-home-actions">
             <button
-              className="bpb-home-connect-button"
+              className={`bpb-home-connect-button${otherMethodActive ? ' method-faded' : ''}`}
               type="button"
-              onClick={onOpenBpb}
+              onClick={handleBpbOpen}
             >
               <span>◈</span>
               <span>
@@ -1968,6 +2045,17 @@ function HomePage({
           </div>
         </section>
       </div>
+
+      {switchConfirm && (
+        <ConfirmDialog
+          title={switchConfirm.title}
+          message={switchConfirm.message}
+          confirmLabel="بله، تغییر بده"
+          cancelLabel="انصراف"
+          onConfirm={switchConfirm.onConfirm}
+          onCancel={() => setSwitchConfirm(null)}
+        />
+      )}
 
       {processStatus.running && (
         <section
@@ -2822,6 +2910,7 @@ function ServersPage({
   directDomains,
   configCheckingNodeId,
   configCheckResults,
+  processRunning,
   onCheckConfig,
   onTestLatency,
   onSelectServer,
@@ -2856,6 +2945,7 @@ function ServersPage({
       error: string | null
     }
   >
+  processRunning: boolean
   onCheckConfig: (
     node: SafeServerNode,
   ) => void
@@ -2868,6 +2958,9 @@ function ServersPage({
 }) {
   const [expandedServerId, setExpandedServerId] =
     useState<string | null>(null)
+
+  const [switchConfirm, setSwitchConfirm] =
+    useState<{ server: PublicServer } | null>(null)
 
   if (loading) {
     return (
@@ -3214,9 +3307,12 @@ function ServersPage({
                       type="button"
                       disabled={!node.valid}
                       onClick={() => {
-                        onSelectServer(
-                          toPublicServer(node),
-                        )
+                        const pub = toPublicServer(node)
+                        if (processRunning && !isSelected) {
+                          setSwitchConfirm({ server: pub })
+                        } else {
+                          onSelectServer(pub)
+                        }
                       }}
                     >
                       {isSelected
@@ -3248,6 +3344,20 @@ function ServersPage({
           )
         })}
       </section>
+
+      {switchConfirm && (
+        <ConfirmDialog
+          title="تغییر سرور"
+          message={`اتصال فعلی قطع می‌شود و سرور «${switchConfirm.server.name}» انتخاب می‌شود. ادامه می‌دهید؟`}
+          confirmLabel="بله، تغییر بده"
+          cancelLabel="انصراف"
+          onConfirm={() => {
+            onSelectServer(switchConfirm.server)
+            setSwitchConfirm(null)
+          }}
+          onCancel={() => setSwitchConfirm(null)}
+        />
+      )}
     </div>
   )
 }
