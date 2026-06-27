@@ -5254,3 +5254,290 @@ button {
   margin-bottom: 6px;
 }
 
+/* ── Admin warning banner ─────────────────────────────────────────────────── */
+
+.admin-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: rgba(212, 70, 70, 0.13);
+  border-bottom: 1px solid rgba(212, 70, 70, 0.28);
+  border-radius: 10px 10px 0 0;
+}
+
+.admin-banner > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-banner strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ff7b7b;
+}
+
+.admin-banner span {
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.admin-banner-relaunch {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(212, 70, 70, 0.4);
+  background: rgba(212, 70, 70, 0.18);
+  color: #ff9090;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.admin-banner-relaunch:hover:not(:disabled) {
+  background: rgba(212, 70, 70, 0.28);
+}
+
+.admin-banner-close {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.admin-banner-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* ── 4 German-flag method buttons ─────────────────────────────────────────── */
+
+.connect-method-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.method-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: start;
+  transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+  min-height: 64px;
+}
+
+.method-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.method-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.method-btn-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.12);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.method-btn-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.method-btn-label strong {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.method-btn-label small {
+  font-size: 10px;
+  opacity: 0.72;
+  line-height: 1.3;
+}
+
+/* Black — Personal Subscription */
+.method-btn-black {
+  background: #1a1a1a;
+  border-color: rgba(255,255,255,0.14);
+  color: #f0f0f0;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.35);
+}
+.method-btn-black:hover:not(:disabled) {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.method-btn-black.method-btn-active {
+  border-color: rgba(255,255,255,0.3);
+  background: #2a2a2a;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 8px 24px rgba(0,0,0,0.5);
+}
+
+/* Red — GitHub Subscription */
+.method-btn-red {
+  background: #a50000;
+  border-color: rgba(255,255,255,0.12);
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(165,0,0,0.35);
+}
+.method-btn-red:hover:not(:disabled) {
+  box-shadow: 0 8px 24px rgba(165,0,0,0.5);
+}
+.method-btn-red.method-btn-active {
+  background: #cc0000;
+  border-color: rgba(255,200,200,0.3);
+  box-shadow: 0 0 0 2px rgba(255,100,100,0.2), 0 8px 24px rgba(165,0,0,0.5);
+}
+
+/* Gold — BPB Subscription */
+.method-btn-gold {
+  background: #d4a800;
+  border-color: rgba(255,255,255,0.12);
+  color: #1a1200;
+  box-shadow: 0 4px 18px rgba(212,168,0,0.35);
+}
+.method-btn-gold:hover:not(:disabled) {
+  box-shadow: 0 8px 24px rgba(212,168,0,0.5);
+}
+.method-btn-gold.method-btn-active {
+  background: #ffce00;
+  border-color: rgba(255,240,100,0.4);
+  box-shadow: 0 0 0 2px rgba(255,220,0,0.25), 0 8px 24px rgba(212,168,0,0.5);
+}
+.method-btn-gold .method-btn-icon {
+  background: rgba(0,0,0,0.12);
+}
+
+/* Teal — Free Subscription */
+.method-btn-teal {
+  background: rgba(54, 179, 126, 0.15);
+  border-color: rgba(54, 179, 126, 0.35);
+  color: var(--text);
+  box-shadow: 0 4px 18px rgba(54,179,126,0.12);
+}
+.method-btn-teal:hover:not(:disabled) {
+  background: rgba(54, 179, 126, 0.22);
+  box-shadow: 0 8px 24px rgba(54,179,126,0.22);
+}
+.method-btn-teal.method-btn-active {
+  background: rgba(54, 179, 126, 0.25);
+  border-color: rgba(54, 179, 126, 0.55);
+  box-shadow: 0 0 0 2px rgba(54,179,126,0.15), 0 8px 24px rgba(54,179,126,0.22);
+}
+.method-btn-teal .method-btn-icon {
+  background: rgba(54, 179, 126, 0.2);
+  color: #36b37e;
+}
+
+/* Active state shared pulse */
+.method-btn-active .method-btn-icon {
+  position: relative;
+}
+.method-btn-active .method-btn-icon::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 10px;
+  border: 2px solid currentColor;
+  opacity: 0.3;
+  animation: method-pulse 1.8s ease-in-out infinite;
+}
+@keyframes method-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.08; transform: scale(1.12); }
+}
+
+/* ── Connection stages ────────────────────────────────────────────────────── */
+
+.connection-stages {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  max-width: 420px;
+  margin: 12px auto 0;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 11px;
+}
+
+.connection-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 6px;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border);
+  transition: background 240ms ease, color 240ms ease;
+}
+
+.connection-stage:last-child {
+  border-right: none;
+}
+
+.connection-stage-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.connection-stage-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.connection-stage-active {
+  background: rgba(230, 184, 79, 0.09);
+  color: var(--gold);
+}
+
+.connection-stage-done {
+  background: rgba(54, 179, 126, 0.08);
+  color: var(--green);
+}
+
+.connection-stage-error {
+  background: rgba(212, 70, 70, 0.08);
+  color: var(--red);
+}
+
+.connection-stage-spinner {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+

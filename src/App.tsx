@@ -2066,7 +2066,7 @@ type HomePageProps = {
 function HomePage({
   directDomains,
   engineInfo,
-  tunBaselineIp,
+  tunBaselineIp: _tunBaselineIp,
   tunCurrentIp,
   administratorAvailable,
   elevationRequesting,
@@ -2106,7 +2106,7 @@ function HomePage({
   freePhase,
   freeNodeName,
   freeLatencyMs,
-  freeProgress,
+  freeProgress: _freeProgress,
   freeError,
   onFreeConnect,
   onFreeDisconnect,
@@ -2118,9 +2118,6 @@ function HomePage({
   dataLoading,
 }: HomePageProps) {
   const t = useT()
-  const mainActionAvailable = Boolean(
-    processStatus.running || codespaceConnected || freePhase === 'connected' || fastestServer || selectedServer,
-  )
 
   // ── Local reconnect dismiss ───────────────────────────────────────────────
   const [reconnectDismissed, setReconnectDismissed] = useState(false)
@@ -2239,8 +2236,125 @@ function HomePage({
       isConnecting ? 'connection-orbit-connecting' : '',
   ].filter(Boolean).join(' ')
 
+  const [adminBannerDismissed, setAdminBannerDismissed] = useState(false)
+
+  function handleSubscriptionConnect() {
+    if (activeMethod === 'subscription') {
+      requireSwitch(
+        t('btn.disconnect'),
+        'اتصال اشتراک شخصی قطع می‌شود. ادامه می‌دهید؟',
+        () => { setSwitchConfirm(null); void onStop() },
+      )
+    } else if (activeMethod) {
+      requireSwitch(
+        'تغییر روش اتصال',
+        'اتصال فعلی قطع می‌شود و از طریق اشتراک شخصی متصل می‌شوید. ادامه می‌دهید؟',
+        () => { setSwitchConfirm(null); void onStartFastest() },
+      )
+    } else {
+      void onStartFastest()
+    }
+  }
+
+  function handleBpbConnect() {
+    if (activeMethod === 'bpb') {
+      requireSwitch(
+        t('btn.disconnect'),
+        'اتصال BPB قطع می‌شود. ادامه می‌دهید؟',
+        () => { setSwitchConfirm(null); onMainAction() },
+      )
+    } else {
+      handleBpbOpen()
+    }
+  }
+
+  function handleCodespaceToggle() {
+    if (codespaceConnected) {
+      requireSwitch(
+        t('btn.disconnect'),
+        'اتصال GitHub Codespace قطع می‌شود. ادامه می‌دهید؟',
+        () => { setSwitchConfirm(null); onCodespaceDisconnect() },
+      )
+    } else {
+      handleCodespaceConnect()
+    }
+  }
+
+  function handleFreeToggle() {
+    if (freeConnected) {
+      requireSwitch(
+        t('btn.disconnect'),
+        'اتصال سرور رایگان قطع می‌شود. ادامه می‌دهید؟',
+        () => { setSwitchConfirm(null); onFreeDisconnect() },
+      )
+    } else {
+      handleFreeConnect()
+    }
+  }
+
+  // ── Connection stages ──────────────────────────────────────────────────────
+  type StageStatus = 'idle' | 'active' | 'done' | 'error'
+  function getSubStages(): { icon: string; label: string; status: StageStatus }[] {
+    if (activeMethod === 'free' || (!activeMethod && (freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting'))) {
+      const fetching = freePhase === 'fetching'
+      const testing = freePhase === 'testing'
+      const connecting = freePhase === 'connecting' || freePhase === 'reconnecting'
+      const connected = freePhase === 'connected'
+      return [
+        { icon: '↓', label: 'دریافت سرورها', status: fetching ? 'active' : (testing || connecting || connected) ? 'done' : 'idle' },
+        { icon: '◎', label: 'آزمون پینگ', status: testing ? 'active' : (connecting || connected) ? 'done' : 'idle' },
+        { icon: '⬡', label: 'اتصال', status: connecting ? 'active' : connected ? 'done' : 'idle' },
+        { icon: '✓', label: 'تأیید IP', status: connected && isConnected ? 'done' : connected ? 'active' : 'idle' },
+      ]
+    }
+    if (activeMethod === 'codespace' || codespaceConnecting) {
+      const done = codespaceConnected
+      return [
+        { icon: '⬡', label: 'ساخت Codespace', status: codespaceConnecting ? 'active' : done ? 'done' : 'idle' },
+        { icon: '⇄', label: 'اتصال تونل', status: codespaceConnecting ? 'active' : done ? 'done' : 'idle' },
+        { icon: '✓', label: 'تأیید IP', status: done && isConnected ? 'done' : done ? 'active' : 'idle' },
+      ]
+    }
+    if (isConnecting || activeMethod === 'subscription' || activeMethod === 'bpb') {
+      return [
+        { icon: '◌', label: 'شروع sing-box', status: processBusy && !processStatus.ready ? 'active' : (processStatus.ready || isConnected) ? 'done' : 'idle' },
+        { icon: '⇄', label: 'پراکسی محلی', status: processStatus.ready && !isConnected ? 'active' : isConnected ? 'done' : 'idle' },
+        { icon: '✓', label: 'تأیید IP', status: ipVerificationChecking ? 'active' : isConnected ? 'done' : 'idle' },
+      ]
+    }
+    return []
+  }
+
+  const subStages = getSubStages()
+  const showStages = subStages.length > 0 && (isConnecting || codespaceConnecting ||
+    freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' ||
+    (heroConnected && subStages.some(s => s.status !== 'idle')))
+
   return (
     <div className="home-layout">
+      {!administratorAvailable && !processStatus.running && !adminBannerDismissed && (
+        <div className="admin-banner">
+          <div>
+            <strong>{t('hero.adminRequired')}</strong>
+            <span>{t('hero.adminDesc')}</span>
+          </div>
+          <button
+            className="admin-banner-relaunch"
+            type="button"
+            disabled={elevationRequesting}
+            onClick={onRelaunchAsAdministrator}
+          >
+            {elevationRequesting ? t('hero.requestingAccess') : t('hero.relaunchAdmin')}
+          </button>
+          <button
+            className="admin-banner-close"
+            type="button"
+            onClick={() => setAdminBannerDismissed(true)}
+            aria-label="بستن"
+          >✕</button>
+        </div>
+      )}
+
       <section className="hero-card">
         <div className="hero-content">
           <div className="status-label">
@@ -2271,85 +2385,108 @@ function HomePage({
             )}
           </div>
 
-          {!administratorAvailable && !processStatus.running && (
-            <div className="elevation-panel">
-              <div>
-                <strong>{t('hero.adminRequired')}</strong>
-                <span>{t('hero.adminDesc')}</span>
-              </div>
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={elevationRequesting}
-                onClick={onRelaunchAsAdministrator}
-              >
-                {elevationRequesting
-                  ? t('hero.requestingAccess')
-                  : t('hero.relaunchAdmin')}
-              </button>
-            </div>
-          )}
-
           {elevationError && (
             <div className="inline-error">
               {elevationError}
             </div>
           )}
 
-          <button
-            className={
-              heroConnected
-                ? 'connect-button connect-button-active'
-                : 'connect-button'
-            }
-            type="button"
-            disabled={processBusy || ipVerificationChecking || (!activeMethod && !mainActionAvailable)}
-            onClick={onMainAction}
-          >
-            <span className="connect-button-icon">
-              {processBusy || ipVerificationChecking ? '…' : activeMethod ? '■' : '▶'}
-            </span>
-            <span>
-              <strong>
-                {processBusy
-                  ? t('btn.processing')
-                  : ipVerificationChecking
-                    ? t('btn.verifyingIp')
-                    : activeMethod === 'codespace'
-                      ? t('hero.disconnectGithub')
-                      : activeMethod === 'free'
-                        ? t('hero.disconnectFree')
-                        : activeMethod === 'subscription' || activeMethod === 'bpb'
-                          ? t('btn.disconnect')
-                          : t('hero.connectFastest')}
-              </strong>
-              <small>
-                {activeMethod === 'codespace'
-                  ? `GitHub Codespace${codespaceHost ? ` · ${codespaceHost}` : ''}`
-                  : activeMethod === 'free'
-                    ? `${freeNodeName ?? t('home.free.title')}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}`
-                    : activeMethod === 'bpb'
-                      ? 'BPB Panel'
-                      : isConnected
-                      ? processStatus.connectionMode === 'tun'
-                        ? `${tunBaselineIp ?? '—'} ← ${tunCurrentIp ?? '—'}`
-                        : `${ipVerificationResult.directIp ?? '—'} ← ${ipVerificationResult.proxyIp ?? '—'}`
-                      : processStatus.ready
-                        ? t('hero.proxyReady')
-                        : t('hero.configHint')}
-              </small>
-            </span>
-          </button>
+          <div className="connect-method-buttons">
+            {/* ── Personal Subscription — Black ── */}
+            <button
+              className={`method-btn method-btn-black${activeMethod === 'subscription' ? ' method-btn-active' : ''}`}
+              type="button"
+              disabled={processBusy && activeMethod !== 'subscription'}
+              onClick={handleSubscriptionConnect}
+            >
+              <span className="method-btn-icon">
+                {activeMethod === 'subscription' && processBusy ? <span className="connection-stage-spinner">◌</span> : activeMethod === 'subscription' ? '■' : '▶'}
+              </span>
+              <span className="method-btn-label">
+                <strong>{activeMethod === 'subscription' ? t('btn.disconnect') : t('hero.connectFastest')}</strong>
+                <small>
+                  {activeMethod === 'subscription' && isConnected
+                    ? (processStatus.connectionMode === 'tun' ? `TUN · ${tunCurrentIp ?? '—'}` : `IP ${ipVerificationResult.proxyIp ?? '—'}`)
+                    : fastestServer ? fastestServer.name : t('home.fastest.unknown')}
+                </small>
+              </span>
+            </button>
 
-          {(isConnecting || isReconnecting ||
-            freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting') && (
-            <div className="hero-progress">
-              <div className={`hero-progress-fill ${
-                freePhase === 'fetching' ? 'hero-progress-p1' :
-                freePhase === 'testing'  ? 'hero-progress-p2' :
-                freePhase === 'connecting' ? 'hero-progress-p3' :
-                'hero-progress-indeterminate'
-              }`} />
+            {/* ── GitHub Codespace — Red ── */}
+            <button
+              className={`method-btn method-btn-red${activeMethod === 'codespace' ? ' method-btn-active' : ''}`}
+              type="button"
+              disabled={codespaceConnecting && !codespaceConnected}
+              onClick={handleCodespaceToggle}
+            >
+              <span className="method-btn-icon">
+                {codespaceConnecting && !codespaceConnected ? <span className="connection-stage-spinner">◌</span> : codespaceConnected ? '■' : '⬡'}
+              </span>
+              <span className="method-btn-label">
+                <strong>{codespaceConnected ? t('hero.disconnectGithub') : t('home.codespace.connect')}</strong>
+                <small>{codespaceConnected && codespaceHost ? codespaceHost : 'GitHub Codespace'}</small>
+              </span>
+            </button>
+
+            {/* ── BPB Subscription — Gold ── */}
+            <button
+              className={`method-btn method-btn-gold${activeMethod === 'bpb' ? ' method-btn-active' : ''}`}
+              type="button"
+              disabled={processBusy && activeMethod !== 'bpb'}
+              onClick={handleBpbConnect}
+            >
+              <span className="method-btn-icon">
+                {activeMethod === 'bpb' && processBusy ? <span className="connection-stage-spinner">◌</span> : activeMethod === 'bpb' ? '■' : '◈'}
+              </span>
+              <span className="method-btn-label">
+                <strong>{activeMethod === 'bpb' ? t('btn.disconnect') : (bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup'))}</strong>
+                <small>BPB Panel</small>
+              </span>
+            </button>
+
+            {/* ── Free Subscription — Teal ── */}
+            <button
+              className={`method-btn method-btn-teal${activeMethod === 'free' ? ' method-btn-active' : ''}`}
+              type="button"
+              disabled={freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting'}
+              onClick={handleFreeToggle}
+            >
+              <span className="method-btn-icon">
+                {freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting'
+                  ? <span className="connection-stage-spinner">◌</span>
+                  : freeConnected ? '■' : '⬡'}
+              </span>
+              <span className="method-btn-label">
+                <strong>
+                  {freeConnected ? t('hero.disconnectFree')
+                    : freePhase === 'fetching' ? 'دریافت سرورها...'
+                    : freePhase === 'testing' ? 'آزمون پینگ...'
+                    : freePhase === 'connecting' ? 'در حال اتصال...'
+                    : freePhase === 'reconnecting' ? `اتصال مجدد (${reconnectSecs}s)`
+                    : 'سرور رایگان'}
+                </strong>
+                <small>{freeConnected && freeNodeName ? freeNodeName : 'V2ray Collector'}</small>
+              </span>
+            </button>
+          </div>
+
+          {showStages && (
+            <div className="connection-stages">
+              {subStages.map((stage, i) => (
+                <div
+                  key={i}
+                  className={`connection-stage${
+                    stage.status === 'active' ? ' connection-stage-active' :
+                    stage.status === 'done' ? ' connection-stage-done' :
+                    stage.status === 'error' ? ' connection-stage-error' : ''
+                  }`}
+                >
+                  <span className="connection-stage-icon">
+                    {stage.status === 'active' ? <span className="connection-stage-spinner">◌</span> : stage.icon}
+                  </span>
+                  <span className="connection-stage-label">{stage.label}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -2503,158 +2640,17 @@ function HomePage({
         />
       </section>
 
-      <div className="home-dual-card-row">
-        <section className="codespace-connect-section">
-          <div className="codespace-connect-header">
-            <div>
-              <span className="panel-kicker">GitHub Codespace</span>
-              <h3>{t('home.codespace.title')}</h3>
-            </div>
-            <div className="codespace-header-end">
-              {codespaceConnected && codespaceHost && (
-                <span className="codespace-host-badge" dir="ltr">{codespaceHost}</span>
-              )}
-              <span className="free-badge">Free</span>
-              <InfoButton
-                fa="یک سرور پروکسی موقت روی زیرساخت GitHub می‌سازد و از طریق پروتکل VLESS + WebSocket متصل می‌شود. نیازی به سرور اختصاصی نیست. توکن GitHub باید در تنظیمات وارد شده باشد."
-                en="Spins up a temporary proxy server on GitHub's infrastructure and connects via VLESS + WebSocket. No dedicated server needed. A GitHub PAT must be configured in Settings."
-              />
-            </div>
-          </div>
-
-          {codespaceProgress && (
-            <div className="codespace-progress">{codespaceProgress}</div>
-          )}
-
-          {codespaceError && (
-            <div className="form-message form-message-error">{codespaceError}</div>
-          )}
-
-          <div className="codespace-actions">
-            {codespaceConnected ? (
-              <button
-                className="codespace-disconnect-button"
-                type="button"
-                disabled={codespaceConnecting || processBusy}
-                onClick={onCodespaceDisconnect}
-              >
-                {t('home.codespace.disconnect')}
-              </button>
-            ) : (
-              <button
-                className={`codespace-connect-button${!codespaceConnecting && processStatus.running ? ' method-faded' : ''}`}
-                type="button"
-                disabled={codespaceConnecting}
-                onClick={handleCodespaceConnect}
-              >
-                <span className="codespace-connect-icon">⬡</span>
-                <span>
-                  <strong>
-                    {codespaceConnecting ? t('home.codespace.connecting') : t('home.codespace.connect')}
-                  </strong>
-                  <small>VLESS · WebSocket · TLS · GitHub Infrastructure</small>
-                </span>
-              </button>
-            )}
-          </div>
-        </section>
-
-        <section className="bpb-home-card">
-          <div className="codespace-connect-header">
-            <div>
-              <span className="panel-kicker bpb-home-kicker">BPB Panel</span>
-              <h3>{t('home.bpb.title')}</h3>
-            </div>
-            <div className="codespace-header-end">
-              <span className="free-badge">Free</span>
-              <InfoButton
-                fa="از طریق پنل BPB که قبلاً در تب «اتصال BPB» پیکربندی کرده‌ای به سریع‌ترین سرور وصل می‌شود."
-                en="Connects via a BPB Panel you've already configured in the BPB Connect tab."
-              />
-            </div>
-          </div>
-          <div className="bpb-home-actions">
-            <button
-              className={`bpb-home-connect-button${otherMethodActive ? ' method-faded' : ''}`}
-              type="button"
-              onClick={handleBpbOpen}
-            >
-              <span>◈</span>
-              <span>
-                <strong>{bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup')}</strong>
-                {!bpbConfigured && <small>{t('home.bpb.setupHint')}</small>}
-              </span>
-            </button>
-          </div>
-        </section>
-      </div>
-
-      {/* ── Free Config Card ─────────────────────────────────────────────── */}
-      <section className={`free-config-card${otherMethodActive && !freeConnected ? ' method-faded-card' : ''}`}>
-        <div className="free-config-header">
-          <div className="free-config-header-info">
-            <span className="panel-kicker free-config-kicker">V2ray Collector</span>
-            <h3>اتصال با سرور رایگان</h3>
-          </div>
-          <div className="codespace-header-end">
-            <span className="free-badge">Free</span>
-            <InfoButton
-              fa="به‌طور خودکار از مخزن GitHub سرورهای رایگان را دریافت، آزمایش و سریع‌ترین را انتخاب می‌کند. در صورت قطع اتصال، به‌طور خودکار سرور جایگزین پیدا می‌کند."
-              en="Automatically fetches free proxy servers from a GitHub repository, tests them, and connects to the fastest. Auto-reconnects if the connection drops."
-            />
-          </div>
-        </div>
-
-        {freeProgress && (
-          <div className="free-config-progress">
-            <span className={`free-spinner ${freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' ? 'spinning' : ''}`}>◌</span>
-            <span>{freeProgress}</span>
-          </div>
-        )}
-
-        {freeError && freePhase === 'error' && (
-          <div className="form-message form-message-error">{friendlyError(freeError)}</div>
-        )}
-
-        {freeConnected && (
-          <div className="free-config-connected-info">
-            <span className="free-connected-dot" />
-            <span>{freeNodeName}</span>
-            {freeLatencyMs != null && <LatencyBadge latencyMs={freeLatencyMs} />}
-          </div>
-        )}
-
-        <div className="free-config-actions">
-          {freeConnected ? (
-            <button
-              className="free-disconnect-button"
-              type="button"
-              onClick={onFreeDisconnect}
-            >
-              قطع اتصال سرور رایگان
-            </button>
-          ) : (
-            <button
-              className={`free-connect-button${freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' ? ' loading' : ''}`}
-              type="button"
-              disabled={freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting'}
-              onClick={handleFreeConnect}
-            >
-              <span className="free-btn-icon">⬡</span>
-              <span>
-                <strong>
-                  {freePhase === 'fetching' ? 'دریافت سرورها...' :
-                   freePhase === 'testing' ? 'آزمون پینگ...' :
-                   freePhase === 'connecting' ? 'در حال اتصال...' :
-                   freePhase === 'reconnecting' ? <span>اتصال مجدد<span className="reconnect-countdown"> ({reconnectSecs}s)</span></span> :
-                   'دریافت سرور رایگان'}
-                </strong>
-                <small>جستجو · آزمون · اتصال خودکار</small>
-              </span>
-            </button>
-          )}
-        </div>
-      </section>
+      {/* Codespace progress/error shown inline when active method is codespace */}
+      {activeMethod === 'codespace' && codespaceProgress && (
+        <div className="codespace-progress">{codespaceProgress}</div>
+      )}
+      {activeMethod === 'codespace' && codespaceError && (
+        <div className="form-message form-message-error">{codespaceError}</div>
+      )}
+      {/* Free progress/error shown inline */}
+      {(freePhase === 'error') && freeError && (
+        <div className="form-message form-message-error">{friendlyError(freeError)}</div>
+      )}
 
       {switchConfirm && (
         <ConfirmDialog
