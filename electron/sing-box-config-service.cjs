@@ -1140,22 +1140,28 @@ function buildTransportConfig(params) {
   )
 }
 
+function buildDirectRules(directDomains) {
+  if (!directDomains || directDomains.length === 0) return []
+  // Two rules: exact domain match AND subdomain suffix match
+  return [
+    {
+      domain: directDomains,
+      outbound: 'direct',
+    },
+    {
+      domain_suffix: directDomains,
+      outbound: 'direct',
+    },
+  ]
+}
+
 function buildConfig(
   proxyOutbound,
   directDomains,
   localPort = 2080,
   setSystemProxy = false,
 ) {
-  const rules = []
-
-  if (directDomains.length > 0) {
-    rules.push({
-      domain_suffix:
-        directDomains,
-      action: 'route',
-      outbound: 'direct',
-    })
-  }
+  const rules = buildDirectRules(directDomains)
 
   return {
     log: {
@@ -1199,19 +1205,10 @@ function buildTunConfig(
   const rules = [
     {
       ip_is_private: true,
-      action: 'route',
       outbound: 'direct',
     },
+    ...buildDirectRules(directDomains),
   ]
-
-  if (directDomains.length > 0) {
-    rules.push({
-      domain_suffix:
-        directDomains,
-      action: 'route',
-      outbound: 'direct',
-    })
-  }
 
   return {
     log: {

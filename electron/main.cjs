@@ -167,6 +167,10 @@ const isDevelopment =
 
 let mainWindow = null
 let bpbPanelWindow = null
+
+// Tracks the last successful subscription/free connect call so we can rebuild
+// the config when the bypass list changes while connected.
+let activeConnectionParams = null
 let isQuitting = false
 let fatalCleanupStarted = false
 
@@ -1628,6 +1632,34 @@ function registerIpcHandlers() {
     'system:set-direct-domains',
     async (_event, domains) => {
       setDirectDomains(Array.isArray(domains) ? domains : [])
+
+      // If a subscription/free proxy is currently running, hot-rebuild the config
+      // so bypass list changes take effect without a full reconnect.
+      const procStatus = getProcessStatus()
+      if (procStatus.running && activeConnectionParams) {
+        try {
+          const newDomains = Array.isArray(domains) ? domains : []
+          const newConfigResult = await createAndCheckConfig({
+            ...activeConnectionParams,
+            directDomains: newDomains,
+          })
+          if (newConfigResult.success) {
+            // Restart sing-box with the new config
+            const enginePath = getEnginePath()
+            const userDataPath = app.getPath('userData')
+            await stopLocalProxy({ userDataPath }).catch(() => {})
+            await backupWindowsProxyState(userDataPath).catch(() => {})
+            await startLocalProxy({ enginePath, userDataPath, configPath: newConfigResult.configPath })
+            activeConnectionParams = { ...activeConnectionParams, directDomains: newDomains }
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('bypass:reloaded', { domainCount: newDomains.length })
+            }
+          }
+        } catch {
+          // Best-effort — don't interrupt the user if hot-reload fails
+        }
+      }
+
       return { success: true }
     },
   )
@@ -1892,6 +1924,7 @@ function registerIpcHandlers() {
   ipcMain.handle(
     'engine:stop-local-proxy',
     async () => {
+      activeConnectionParams = null
       try {
         const result =
           await stopLocalProxy({
@@ -3163,20 +3196,25 @@ function registerIpcHandlers() {
           )
         }
 
+        const configParams = {
+          subscriptionUrl,
+          nodeId,
+          nodeUri,
+          enginePath:
+            getEnginePath(),
+          userDataPath:
+            app.getPath(
+              'userData',
+            ),
+          directDomains,
+          rescueOptions,
+        }
         const result =
-          await createAndCheckConfig({
-            subscriptionUrl,
-            nodeId,
-            nodeUri,
-            enginePath:
-              getEnginePath(),
-            userDataPath:
-              app.getPath(
-                'userData',
-              ),
-            directDomains,
-            rescueOptions,
-          })
+          await createAndCheckConfig(configParams)
+
+        if (result.success) {
+          activeConnectionParams = configParams
+        }
 
         console.log(
           '[Servers] Config check completed:',
