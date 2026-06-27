@@ -22,6 +22,7 @@ const SUPPORTED_PROTOCOLS = [
   'hysteria2://',
   'hy2://',
   'tuic://',
+  'anytls://',
 ]
 
 async function createAndCheckConfig({
@@ -567,6 +568,9 @@ function buildOutboundFromUri(uri) {
     case 'tuic':
       return buildTuicOutbound(uri)
 
+    case 'anytls':
+      return buildAnyTlsOutbound(uri)
+
     default:
       throw new Error(
         `پروتکل ${protocol} هنوز برای ساخت کانفیگ پشتیبانی نمی‌شود.`,
@@ -936,6 +940,37 @@ function buildTuicOutbound(uri) {
         true,
       ),
   }
+}
+
+function buildAnyTlsOutbound(uri) {
+  const parsed = new URL(uri)
+  const params = parsed.searchParams
+
+  const password = decodeURIComponent(parsed.username) || params.get('password')
+  if (!password) {
+    throw new Error('رمز کانفیگ AnyTLS خالی است.')
+  }
+
+  const outbound = {
+    type: 'anytls',
+    tag: 'proxy',
+    server: requireHost(parsed),
+    server_port: requirePort(parsed),
+    password,
+    tls: buildTlsConfig(params, parsed.hostname, true),
+  }
+
+  const idleSessionCheckInterval = params.get('idle_session_check_interval') || params.get('idle-session-check-interval')
+  if (idleSessionCheckInterval) {
+    outbound.idle_session_check_interval = idleSessionCheckInterval
+  }
+
+  const idleSessionTimeout = params.get('idle_session_timeout') || params.get('idle-session-timeout')
+  if (idleSessionTimeout) {
+    outbound.idle_session_timeout = idleSessionTimeout
+  }
+
+  return outbound
 }
 
 function buildTlsConfig(
@@ -1886,6 +1921,7 @@ function formatProtocolName(protocol) {
     hysteria2: 'Hysteria 2',
     hy2: 'Hysteria 2',
     tuic: 'TUIC',
+    anytls: 'AnyTLS',
   }
 
   return names[protocol] ??

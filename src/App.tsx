@@ -245,6 +245,9 @@ function App() {
   const [freePool, setFreePool] = useState<FreePoolServer[]>([])
   const [freePoolMeta, setFreePoolMeta] = useState<{ total: number; displaying: number; lastRefreshedAt: string | null; poolRefreshing: boolean } | null>(null)
 
+  // Engine update notification
+  const [engineUpdateAvailable, setEngineUpdateAvailable] = useState(false)
+
   // For smart hero-button priority: know if BPB/codespace are configured
   const [codespaceHasToken, setCodespaceHasToken] = useState(false)
 
@@ -337,6 +340,16 @@ function App() {
     return window.hamidsDeutsch.codespace.onProgress(({ message }) => {
       setCodespaceProgress(message)
     })
+  }, [])
+
+  // Check for engine update once on startup (30s delay to not block init)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void window.hamidsDeutsch.engine.checkForUpdate().then((r) => {
+        if (r.updateAvailable) setEngineUpdateAvailable(true)
+      }).catch(() => {})
+    }, 30000)
+    return () => clearTimeout(timer)
   }, [])
 
   // Load codespace token state once on mount for smart hero button
@@ -467,13 +480,37 @@ function App() {
 
   const automaticLatencyTestKey = useRef<string | null>(null)
 
-  const fastestServer = useMemo(
-    () =>
-      serverNodes.nodes.find(
-        (node) => node.id === latency.fastestServerId,
-      ) ?? null,
-    [latency.fastestServerId, serverNodes.nodes],
-  )
+  const fastestServer = useMemo(() => {
+    // REALITY nodes get priority: if any REALITY node is reachable and within
+    // 2× of the absolute fastest latency, prefer the fastest REALITY node.
+    const reachableNodes = serverNodes.nodes
+      .map((node) => ({ node, lat: latency.results[node.id] }))
+      .filter((x) => x.lat?.reachable && x.lat.latencyMs != null)
+    if (reachableNodes.length === 0) return null
+
+    const absoluteFastest = reachableNodes.reduce((a, b) =>
+      (a.lat.latencyMs ?? Infinity) <= (b.lat.latencyMs ?? Infinity) ? a : b,
+    )
+    const absoluteMs = absoluteFastest.lat.latencyMs ?? Infinity
+
+    const REALITY_PROTOCOLS = new Set(['vless', 'vmess', 'trojan'])
+    const realityNodes = reachableNodes.filter((x) => {
+      const sec = (x.node.security ?? '').toLowerCase()
+      return REALITY_PROTOCOLS.has(x.node.protocol) && sec === 'reality'
+    })
+
+    if (realityNodes.length > 0) {
+      const fastestReality = realityNodes.reduce((a, b) =>
+        (a.lat.latencyMs ?? Infinity) <= (b.lat.latencyMs ?? Infinity) ? a : b,
+      )
+      const realityMs = fastestReality.lat.latencyMs ?? Infinity
+      if (realityMs <= absoluteMs * 2) {
+        return fastestReality.node
+      }
+    }
+
+    return absoluteFastest.node
+  }, [latency.results, serverNodes.nodes])
 
   const selectedNode = useMemo(
     () =>
@@ -518,6 +555,17 @@ function App() {
     serverNodes.nodes.length,
     subscriptions.subscriptions.length,
   ])
+
+  // Background latency refresh: re-test every 10 minutes when not connected
+  useEffect(() => {
+    const REFRESH_INTERVAL_MS = 10 * 60 * 1000
+    const id = setInterval(() => {
+      if (!appHeroConnected && serverNodes.nodes.length > 0 && !latency.testing) {
+        void latency.testAll()
+      }
+    }, REFRESH_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [appHeroConnected, latency, serverNodes.nodes.length])
 
   async function attemptServerConnection(
     node: SafeServerNode,
@@ -1308,6 +1356,9 @@ function App() {
             >
               <span className="navigation-icon">{item.icon}</span>
               <span className="navigation-label">{item.label}</span>
+              {item.id === 'settings' && engineUpdateAvailable && (
+                <span className="nav-update-dot" title="به‌روزرسانی موجود است" />
+              )}
             </button>
           ))}
         </nav>
@@ -1713,11 +1764,11 @@ function App() {
                   .engine
                   .checkForUpdate()
               }
-              onInstallEngineUpdate={() =>
-                window.hamidsDeutsch
-                  .engine
-                  .updateToLatest()
-              }
+              onInstallEngineUpdate={async () => {
+                const r = await window.hamidsDeutsch.engine.updateToLatest()
+                if (r.updated) setEngineUpdateAvailable(false)
+                return r
+              }}
             />
           )}
         </main>
@@ -2614,6 +2665,7 @@ const PROTOCOL_COLORS: Record<string, string> = {
   hy2: '#10b981',
   tuic: '#fb923c',
   wireguard: '#818cf8',
+  anytls: '#f472b6',
 }
 
 function ProtocolBadge({ protocol }: { protocol: string }) {

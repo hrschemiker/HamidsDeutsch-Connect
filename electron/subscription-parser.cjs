@@ -11,6 +11,7 @@ const SUPPORTED_PROTOCOLS = [
   'hysteria2://',
   'hy2://',
   'tuic://',
+  'anytls://',
 ]
 
 function parseSubscriptionNodeRecords(
@@ -109,6 +110,7 @@ function parseNode(uri) {
       case 'hysteria2':
       case 'hy2':
       case 'tuic':
+      case 'anytls':
         return parseStandardUri(
           uri,
           protocol,
@@ -591,6 +593,7 @@ function formatProtocolName(
     hysteria2: 'Hysteria 2',
     hy2: 'Hysteria 2',
     tuic: 'TUIC',
+    anytls: 'AnyTLS',
   }
 
   return names[protocol] ?? protocol

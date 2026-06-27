@@ -452,7 +452,15 @@ async function runFreeConnect({ directDomains, rescueOptions, fetchFresh }) {
   const storedPool = await getAllFreePool().catch(() => [])
   if (storedPool.length > 0) {
     sendFreeProgress('در حال اتصال از مخزن سرورهای ذخیره‌شده...', 'connecting')
-    for (const stored of storedPool.slice(0, FREE_CONNECT_ATTEMPTS)) {
+    // REALITY priority: sort REALITY servers first, then by latency
+    const REALITY_POOL_PROTOCOLS = new Set(['vless', 'vmess', 'trojan'])
+    const sortedPool = [...storedPool].sort((a, b) => {
+      const aIsReality = REALITY_POOL_PROTOCOLS.has((a.protocol || '').toLowerCase()) && (a.security || '').toLowerCase() === 'reality'
+      const bIsReality = REALITY_POOL_PROTOCOLS.has((b.protocol || '').toLowerCase()) && (b.security || '').toLowerCase() === 'reality'
+      if (aIsReality !== bIsReality) return aIsReality ? -1 : 1
+      return (a.latencyMs ?? 9999) - (b.latencyMs ?? 9999)
+    })
+    for (const stored of sortedPool.slice(0, FREE_CONNECT_ATTEMPTS)) {
       const record = {
         id: stored.id,
         uri: stored.uri,

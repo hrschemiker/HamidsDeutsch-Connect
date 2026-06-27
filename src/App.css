@@ -4961,3 +4961,16 @@ button {
   gap: 10px;
   flex-wrap: wrap;
 }
+
+/* ── Nav update notification dot ─────────────────────────────────────────── */
+
+.nav-update-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f87171;
+  margin-inline-start: 4px;
+  flex-shrink: 0;
+  animation: poolRefreshPulse 1.5s ease-in-out infinite;
+}
