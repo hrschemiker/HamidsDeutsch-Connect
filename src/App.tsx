@@ -697,7 +697,7 @@ function App() {
       }
     }
 
-    const localVerification =
+    let localVerification =
       await ipVerification.verify()
 
     if (
@@ -705,15 +705,50 @@ function App() {
       !localVerification.changed ||
       !localVerification.directIp
     ) {
-      await engineProcess.stop()
-      ipVerification.reset()
+      // Auto DPI bypass retry: stop current proxy, rebuild config with DPI bypass, restart
+      if (
+        rescueSettings.settings.dpiBypassAuto &&
+        node.subscriptionId
+      ) {
+        await engineProcess.stop()
+        ipVerification.reset()
 
-      return {
-        success: false as const,
-        fatal: false as const,
-        error:
-          localVerification.error ??
-          'این سرور ترافیک واقعی عبور نداد.',
+        const dpiCheckResult = await configCheck.checkConfig({
+          subscriptionId: node.subscriptionId,
+          nodeId: node.nodeId,
+          resultKey: node.id,
+          directDomains: directDomains.domains,
+          rescueOptions: {
+            ...rescueSettings.settings,
+            enabled: true,
+            recordFragment: true,
+            dpiBypass: true,
+          },
+        })
+
+        if (dpiCheckResult.success) {
+          const dpiStartResult = await engineProcess.start()
+          if (dpiStartResult.success) {
+            localVerification = await ipVerification.verify()
+          }
+        }
+      }
+
+      if (
+        !localVerification.success ||
+        !localVerification.changed ||
+        !localVerification.directIp
+      ) {
+        await engineProcess.stop()
+        ipVerification.reset()
+
+        return {
+          success: false as const,
+          fatal: false as const,
+          error:
+            localVerification.error ??
+            'این سرور ترافیک واقعی عبور نداد.',
+        }
       }
     }
 
@@ -4722,6 +4757,7 @@ function RescuePage({
     handshakeFragment: boolean
     fragmentFallbackDelay: string
     customSni: string
+    dpiBypassAuto: boolean
   }
   onUpdate: (
     patch: Partial<{
@@ -4730,6 +4766,7 @@ function RescuePage({
       handshakeFragment: boolean
       fragmentFallbackDelay: string
       customSni: string
+      dpiBypassAuto: boolean
     }>,
   ) => void
   onReset: () => void
@@ -4940,6 +4977,45 @@ function RescuePage({
             />
           </label>
         </article>
+
+        <article className="rescue-setting-card rescue-dpi-card">
+          <div className="rescue-setting-heading">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div>
+                <span className="rescue-setting-badge caution">
+                  {t('rescue.dpiBypass.badge')}
+                </span>
+                <h3>
+                  {t('rescue.dpiBypass.title')}
+                </h3>
+              </div>
+              <InfoButton
+                fa={t('rescue.dpiBypass.tooltip')}
+                en={t('rescue.dpiBypass.tooltip')}
+              />
+            </div>
+
+            <label className="compact-switch">
+              <input
+                type="checkbox"
+                checked={
+                  settings.dpiBypassAuto
+                }
+                onChange={(event) =>
+                  onUpdate({
+                    dpiBypassAuto:
+                      event.target.checked,
+                  })
+                }
+              />
+              <span />
+            </label>
+          </div>
+
+          <p>
+            {t('rescue.dpiBypass.desc')}
+          </p>
+        </article>
       </section>
 
       <section className="rescue-summary-card">
@@ -4980,6 +5056,15 @@ function RescuePage({
               settings.customSni
                 ? ` ${settings.customSni}`
                 : ` ${t('rescue.auto')}`}
+            </strong>
+          </span>
+
+          <span>
+            {t('rescue.dpiBypass.summary')}:
+            <strong>
+              {settings.dpiBypassAuto
+                ? ` ${t('rescue.on')}`
+                : ` ${t('rescue.off')}`}
             </strong>
           </span>
         </div>

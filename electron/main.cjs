@@ -442,39 +442,60 @@ function startFreeBackgroundRefresh() {
 async function tryConnectFreeNode(record, directDomains, rescueOptions) {
   const enginePath = getEnginePath()
   const userDataPath = app.getPath('userData')
-  try {
-    const configResult = await createAndCheckConfig({
-      subscriptionUrl: FREE_CONFIG_SOURCES[0],
-      nodeId: record.id,
-      nodeUri: record.uri,
-      enginePath,
-      userDataPath,
-      directDomains: directDomains ?? [],
-      rescueOptions: rescueOptions ?? null,
-      runtimeDirectoryName: 'free-runtime',
-      configFileName: 'free-config.json',
-      localPort: 2080,
-      setSystemProxy: true,
-    })
-    if (!configResult.success) return null
 
-    // Backup Windows proxy state BEFORE sing-box sets the system proxy
-    await backupWindowsProxyState(userDataPath).catch(() => {})
+  async function attempt(options) {
+    try {
+      const configResult = await createAndCheckConfig({
+        subscriptionUrl: FREE_CONFIG_SOURCES[0],
+        nodeId: record.id,
+        nodeUri: record.uri,
+        enginePath,
+        userDataPath,
+        directDomains: directDomains ?? [],
+        rescueOptions: options,
+        runtimeDirectoryName: 'free-runtime',
+        configFileName: 'free-config.json',
+        localPort: 2080,
+        setSystemProxy: true,
+      })
+      if (!configResult.success) return null
 
-    const started = await startLocalProxy({ enginePath, userDataPath, configPath: configResult.configPath })
-    if (!started.success) return null
+      await backupWindowsProxyState(userDataPath).catch(() => {})
 
-    // Verify that the proxy can actually tunnel traffic (not just reachable via TCP)
-    const proxyWorks = await testProxyConnectivity(2080)
-    if (!proxyWorks) {
-      await stopLocalProxy({ userDataPath }).catch(() => {})
+      const started = await startLocalProxy({ enginePath, userDataPath, configPath: configResult.configPath })
+      if (!started.success) return null
+
+      const proxyWorks = await testProxyConnectivity(2080)
+      if (!proxyWorks) {
+        await stopLocalProxy({ userDataPath }).catch(() => {})
+        return null
+      }
+
+      return configResult.configPath
+    } catch {
       return null
     }
-
-    return configResult.configPath
-  } catch {
-    return null
   }
+
+  // First attempt: with current rescue options (or none)
+  const firstResult = await attempt(rescueOptions ?? null)
+  if (firstResult) return firstResult
+
+  // Auto DPI bypass retry: if dpiBypassAuto is enabled and rescue is not already forcing dpiBypass
+  const dpiBypassAuto = rescueOptions?.dpiBypassAuto !== false
+  const alreadyUsingDpi = rescueOptions?.dpiBypass === true
+  if (dpiBypassAuto && !alreadyUsingDpi) {
+    sendFreeProgress('تلاش مجدد با DPI Bypass...', 'connecting')
+    const dpiOptions = {
+      ...(rescueOptions ?? {}),
+      enabled: true,
+      recordFragment: true,
+      dpiBypass: true,
+    }
+    return attempt(dpiOptions)
+  }
+
+  return null
 }
 
 async function testFreeNodes(records) {

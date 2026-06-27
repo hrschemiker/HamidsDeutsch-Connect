@@ -436,6 +436,8 @@ type RescueOptions = {
   handshakeFragment: boolean
   fragmentFallbackDelay: string
   customSni: string
+  dpiBypassAuto?: boolean
+  dpiBypass?: boolean
 }
 
 type CheckServerConfigInput = {

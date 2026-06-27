@@ -49,6 +49,8 @@ export function useServerConfigCheck() {
         handshakeFragment: boolean
         fragmentFallbackDelay: string
         customSni: string
+        dpiBypassAuto?: boolean
+        dpiBypass?: boolean
       }
     }) => {
       if (!subscriptionId) {

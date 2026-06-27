@@ -12,6 +12,7 @@ export type RescueSettings = {
   handshakeFragment: boolean
   fragmentFallbackDelay: string
   customSni: string
+  dpiBypassAuto: boolean
 }
 
 const DEFAULT_SETTINGS:
@@ -22,6 +23,7 @@ const DEFAULT_SETTINGS:
     fragmentFallbackDelay:
       '500ms',
     customSni: '',
+    dpiBypassAuto: true,
   }
 
 function readSettings():
@@ -63,6 +65,8 @@ function readSettings():
           'string'
           ? parsed.customSni.trim()
           : '',
+      dpiBypassAuto:
+        parsed.dpiBypassAuto !== false,
     }
   } catch {
     return DEFAULT_SETTINGS

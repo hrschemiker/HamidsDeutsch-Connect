@@ -1334,6 +1334,18 @@ function applyRescueOptions(
       options.fragmentFallbackDelay
   }
 
+  if (options.dpiBypass) {
+    tls.tls_fragment = {
+      enabled: true,
+      size: '1-500',
+      sleep: '0-5',
+    }
+    tls.tls_padding = {
+      enabled: true,
+      size: '100-300',
+    }
+  }
+
   return {
     ...outbound,
     tls,
@@ -1373,6 +1385,9 @@ function normalizeRescueOptions(
     fragmentFallbackDelay:
       delay,
     customSni,
+    dpiBypass:
+      enabled &&
+      Boolean(value?.dpiBypass),
   }
 }
 

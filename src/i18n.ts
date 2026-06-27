@@ -267,6 +267,11 @@ export const TR: Record<Lang, Record<string, string>> = {
     'rescue.sniLabel': 'نام دامنه SNI',
     'rescue.reset': 'بازنشانی تنظیمات نجات',
     'rescue.sec1': '۱ ثانیه',
+    'rescue.dpiBypass.title': 'دور زدن DPI خودکار',
+    'rescue.dpiBypass.badge': 'اضطراری',
+    'rescue.dpiBypass.desc': 'اگر اتصال عادی با شکست مواجه شد، نرم‌افزار یک‌بار دیگر با روش تقسیم بسته TLS تلاش می‌کند تا از سیستم DPI عبور کند. این روش نوع اتصال را تغییر نمی‌دهد ولی بسته‌های دست‌دهی TLS را خرد می‌کند تا فیلترینگ هوشمند نتواند آن‌ها را شناسایی کند.',
+    'rescue.dpiBypass.tooltip': 'DPI مخفف Deep Packet Inspection است؛ سیستمی که اپراتورها برای شناسایی و مسدودسازی پروتکل‌های VPN استفاده می‌کنند. وقتی این گزینه روشن است، در صورت شکست اتصال عادی، نرم‌افزار به‌طور خودکار بسته‌های TLS اولیه را خرد می‌کند تا DPI نتواند پروتکل را تشخیص دهد و اتصال مسدود نشود.',
+    'rescue.dpiBypass.summary': 'DPI Bypass خودکار',
 
     // ── Statistics Page ───────────────────────────────────────────────────────
     'stats2.success': 'اتصال موفق',
@@ -817,6 +822,11 @@ export const TR: Record<Lang, Record<string, string>> = {
     'rescue.sniLabel': 'SNI domain name',
     'rescue.reset': 'Reset rescue settings',
     'rescue.sec1': '1 second',
+    'rescue.dpiBypass.title': 'Auto DPI Bypass',
+    'rescue.dpiBypass.badge': 'Emergency',
+    'rescue.dpiBypass.desc': 'If the normal connection fails, the app automatically retries once by fragmenting TLS packets to bypass Deep Packet Inspection filters. This does not change your connection type — it only splits the TLS handshake packets so the firewall cannot identify the protocol.',
+    'rescue.dpiBypass.tooltip': 'DPI (Deep Packet Inspection) is a system ISPs use to detect and block VPN protocols. When this is on, if a normal connection fails the app silently retries with TLS packet fragmentation — the initial handshake packets are split into tiny pieces so the DPI system cannot read the protocol name and block it.',
+    'rescue.dpiBypass.summary': 'Auto DPI Bypass',
 
     // ── Statistics Page ───────────────────────────────────────────────────────
     'stats2.success': 'Successful connections',
@@ -1367,6 +1377,11 @@ export const TR: Record<Lang, Record<string, string>> = {
     'rescue.sniLabel': 'SNI-Domainname',
     'rescue.reset': 'Rettungseinstellungen zurücksetzen',
     'rescue.sec1': '1 Sekunde',
+    'rescue.dpiBypass.title': 'Automatische DPI-Umgehung',
+    'rescue.dpiBypass.badge': 'Notfall',
+    'rescue.dpiBypass.desc': 'Wenn die normale Verbindung fehlschlägt, versucht die App es automatisch erneut, indem TLS-Pakete fragmentiert werden, um Deep-Packet-Inspection-Filter zu umgehen. Der Verbindungstyp ändert sich nicht — nur die TLS-Handshake-Pakete werden aufgeteilt.',
+    'rescue.dpiBypass.tooltip': 'DPI (Deep Packet Inspection) ist ein System, mit dem Internetanbieter VPN-Protokolle erkennen und blockieren. Wenn diese Option aktiviert ist, versucht die App bei einem Verbindungsfehler automatisch eine neue Verbindung mit TLS-Paketfragmentierung.',
+    'rescue.dpiBypass.summary': 'Auto DPI-Bypass',
 
     // ── Statistics Page ───────────────────────────────────────────────────────
     'stats2.success': 'Erfolgreiche Verbindungen',
