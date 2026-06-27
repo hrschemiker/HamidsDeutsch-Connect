@@ -123,7 +123,8 @@ button {
 .application-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background:
     radial-gradient(
       circle at 90% 5%,
@@ -137,7 +138,10 @@ button {
 .sidebar {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
   padding: 24px 18px;
   border-inline-end: 1px solid var(--border);
   background: var(--sidebar-bg);
@@ -288,6 +292,8 @@ button {
 
 .main-area {
   min-width: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .topbar {
@@ -1121,12 +1127,22 @@ button {
 @media (max-width: 760px) {
   .application-shell {
     display: block;
+    height: auto;
+    overflow: visible;
   }
 
   .sidebar {
+    height: auto;
     min-height: auto;
+    position: static;
+    overflow-y: visible;
     border-bottom: 1px solid var(--border);
     border-left: 0;
+  }
+
+  .main-area {
+    height: auto;
+    overflow-y: visible;
   }
 
   .navigation {

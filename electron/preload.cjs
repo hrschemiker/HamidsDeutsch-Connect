@@ -282,6 +282,8 @@ contextBridge.exposeInMainWorld(
     startup: {
       getLoginItem: () => ipcRenderer.invoke('system:get-login-item'),
       setLoginItem: (enabled) => ipcRenderer.invoke('system:set-login-item', enabled),
+      getCloseToTray: () => ipcRenderer.invoke('system:get-close-to-tray'),
+      setCloseToTray: (enabled) => ipcRenderer.invoke('system:set-close-to-tray', enabled),
     },
 
     codespace: {

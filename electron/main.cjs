@@ -3,6 +3,9 @@ const {
   BrowserWindow,
   ipcMain,
   shell,
+  Tray,
+  Menu,
+  nativeImage,
 } = require('electron')
 
 const path = require('node:path')
@@ -168,12 +171,81 @@ const isDevelopment =
 
 let mainWindow = null
 let bpbPanelWindow = null
+let appTray = null
 
 // Tracks the last successful subscription/free connect call so we can rebuild
 // the config when the bypass list changes while connected.
 let activeConnectionParams = null
 let isQuitting = false
 let fatalCleanupStarted = false
+
+// ── Close-to-tray setting ─────────────────────────────────────────────────────
+let closeToTrayEnabled = true
+
+function getCloseToTraySettingPath() {
+  return path.join(app.getPath('userData'), 'HamidsDeutsch-Connect', 'app-settings.json')
+}
+
+async function loadCloseToTraySetting() {
+  try {
+    const raw = await fs.promises.readFile(getCloseToTraySettingPath(), 'utf8')
+    const parsed = JSON.parse(raw)
+    closeToTrayEnabled = parsed.closeToTray !== false
+  } catch {
+    closeToTrayEnabled = true
+  }
+}
+
+async function saveCloseToTraySetting(value) {
+  const settingsPath = getCloseToTraySettingPath()
+  const dir = path.dirname(settingsPath)
+  await fs.promises.mkdir(dir, { recursive: true })
+  await fs.promises.writeFile(settingsPath, JSON.stringify({ closeToTray: value }, null, 2), 'utf8')
+}
+
+function setupTray() {
+  if (appTray) return
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.ico')
+    : path.join(__dirname, '../build/icon.ico')
+  try {
+    const icon = nativeImage.createFromPath(iconPath)
+    appTray = new Tray(icon)
+  } catch {
+    appTray = new Tray(nativeImage.createEmpty())
+  }
+  appTray.setToolTip('HamidsDeutsch Connect')
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'نمایش برنامه',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show()
+          mainWindow.focus()
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'خروج',
+      click: () => {
+        isQuitting = true
+        app.quit()
+      },
+    },
+  ])
+  appTray.setContextMenu(contextMenu)
+  appTray.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.focus()
+      } else {
+        mainWindow.show()
+        mainWindow.focus()
+      }
+    }
+  })
+}
 
 // ── Free Config State ──────────────────────────────────────────────────────
 
@@ -3846,6 +3918,16 @@ function registerIpcHandlers() {
 
   // ── Startup on boot ───────────────────────────────────────────────────────
 
+  ipcMain.handle('system:get-close-to-tray', () => {
+    return { enabled: closeToTrayEnabled, error: null }
+  })
+
+  ipcMain.handle('system:set-close-to-tray', async (_event, enabled) => {
+    closeToTrayEnabled = enabled === true
+    await saveCloseToTraySetting(closeToTrayEnabled)
+    return { success: true, enabled: closeToTrayEnabled, error: null }
+  })
+
   ipcMain.handle('system:get-login-item', () => {
     try {
       const settings = app.getLoginItemSettings()
@@ -3892,7 +3974,7 @@ function createMainWindow() {
       height: 760,
       minWidth: 960,
       minHeight: 640,
-      show: true,
+      show: false,
       backgroundColor:
         '#090b10',
       title:
@@ -3910,6 +3992,16 @@ function createMainWindow() {
         webSecurity: true,
       },
     })
+
+  mainWindow.maximize()
+  mainWindow.show()
+
+  mainWindow.on('close', (event) => {
+    if (!isQuitting && closeToTrayEnabled) {
+      event.preventDefault()
+      mainWindow.hide()
+    }
+  })
 
   mainWindow.webContents.on(
     'did-finish-load',
@@ -4355,7 +4447,10 @@ app.whenReady().then(async () => {
   )
 
   registerIpcHandlers()
-  createMainWindow()
+  loadCloseToTraySetting().then(() => {
+    createMainWindow()
+    setupTray()
+  })
 
   // Initialize pool metadata from disk, then start background refresh
   getFreePoolMeta().then((meta) => {
@@ -4418,10 +4513,9 @@ app.on(
 app.on(
   'window-all-closed',
   () => {
-    if (
-      process.platform !==
-      'darwin'
-    ) {
+    // When close-to-tray is enabled, windows are hidden (not closed),
+    // so this event fires only when isQuitting=true or closeToTray=false.
+    if (process.platform !== 'darwin') {
       app.quit()
     }
   },

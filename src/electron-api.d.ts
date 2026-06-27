@@ -794,6 +794,8 @@ declare global {
       startup: {
         getLoginItem: () => Promise<{ enabled: boolean; error: string | null }>
         setLoginItem: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean; error: string | null }>
+        getCloseToTray: () => Promise<{ enabled: boolean; error: string | null }>
+        setCloseToTray: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean; error: string | null }>
       }
 
       codespace: {

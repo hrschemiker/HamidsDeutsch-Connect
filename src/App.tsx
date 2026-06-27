@@ -262,6 +262,10 @@ function App() {
   const [ctrlEnterEnabled, setCtrlEnterEnabled] = useState<boolean>(() => {
     try { return localStorage.getItem('hamidsdeutsch:ctrl-enter') !== 'false' } catch { return true }
   })
+  const [closeToTray, setCloseToTray] = useState(true)
+  useEffect(() => {
+    void window.hamidsDeutsch.startup.getCloseToTray().then((r) => { setCloseToTray(r.enabled) }).catch(() => {})
+  }, [])
 
   // For smart hero-button priority: know if BPB/codespace are configured
   const [codespaceHasToken, setCodespaceHasToken] = useState(false)
@@ -1999,6 +2003,11 @@ function App() {
                 setCtrlEnterEnabled(v)
                 try { localStorage.setItem('hamidsdeutsch:ctrl-enter', v ? 'true' : 'false') } catch {}
               }}
+              closeToTray={closeToTray}
+              onCloseToTrayToggle={async (v) => {
+                setCloseToTray(v)
+                await window.hamidsDeutsch.startup.setCloseToTray(v)
+              }}
             />
           )}
         </main>
@@ -2198,7 +2207,7 @@ function HomePage({
   const showReconnect = showReconnectBar && !reconnectDismissed
 
   // ── Reconnect countdown (UX #10) ──────────────────────────────────────────
-  const [reconnectSecs, setReconnectSecs] = useState(1)
+  const [_reconnectSecs, setReconnectSecs] = useState(1)
   useEffect(() => {
     if (freePhase !== 'reconnecting') { setReconnectSecs(1); return }
     setReconnectSecs(1)
@@ -2295,13 +2304,14 @@ function HomePage({
   const [adminBannerDismissed, setAdminBannerDismissed] = useState(false)
   // bpbConnecting removed — BPB connects via BPB tab only
 
+  const isSubConnecting = processBusy && !isConnected
+  const isFreeActive = freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' || freeConnected
+  const isCodespaceActive = codespaceConnecting || codespaceConnected
+
   function handleSubscriptionConnect() {
-    if (activeMethod === 'subscription') {
-      requireSwitch(
-        t('btn.disconnect'),
-        'اتصال اشتراک شخصی قطع می‌شود. ادامه می‌دهید؟',
-        () => { setSwitchConfirm(null); void onStop() },
-      )
+    // During connecting or when connected: always stop/cancel
+    if (isSubConnecting || activeMethod === 'subscription') {
+      void onStop()
     } else if (activeMethod) {
       requireSwitch(
         'تغییر روش اتصال',
@@ -2314,24 +2324,16 @@ function HomePage({
   }
 
   function handleCodespaceToggle() {
-    if (codespaceConnected) {
-      requireSwitch(
-        t('btn.disconnect'),
-        'اتصال GitHub Codespace قطع می‌شود. ادامه می‌دهید؟',
-        () => { setSwitchConfirm(null); onCodespaceDisconnect() },
-      )
+    if (isCodespaceActive) {
+      onCodespaceDisconnect()
     } else {
       handleCodespaceConnect()
     }
   }
 
   function handleFreeToggle() {
-    if (freeConnected) {
-      requireSwitch(
-        t('btn.disconnect'),
-        'اتصال سرور رایگان قطع می‌شود. ادامه می‌دهید؟',
-        () => { setSwitchConfirm(null); onFreeDisconnect() },
-      )
+    if (isFreeActive) {
+      onFreeDisconnect()
     } else {
       handleFreeConnect()
     }
@@ -2439,16 +2441,15 @@ function HomePage({
           <div className="connect-method-buttons">
             {/* ── Personal Subscription — Black ── */}
             <button
-              className={`method-btn method-btn-black${activeMethod === 'subscription' ? ' method-btn-active' : ''}`}
+              className={`method-btn method-btn-black${(activeMethod === 'subscription' || isSubConnecting) ? ' method-btn-active' : ''}`}
               type="button"
-              disabled={processBusy && activeMethod !== 'subscription'}
               onClick={handleSubscriptionConnect}
             >
               <span className="method-btn-icon">
-                {activeMethod === 'subscription' && processBusy ? <span className="connection-stage-spinner">◌</span> : activeMethod === 'subscription' ? '■' : '▶'}
+                {isSubConnecting || (activeMethod === 'subscription' && processBusy) ? <span className="connection-stage-spinner">◌</span> : (activeMethod === 'subscription' || isSubConnecting) ? '■' : '▶'}
               </span>
               <span className="method-btn-label">
-                <strong>{activeMethod === 'subscription' ? t('btn.disconnect') : t('hero.connectFastest')}</strong>
+                <strong>{isSubConnecting ? '■ توقف' : activeMethod === 'subscription' ? t('btn.disconnect') : t('hero.connectFastest')}</strong>
                 <small>
                   {activeMethod === 'subscription' && isConnected
                     ? (processStatus.connectionMode === 'tun' ? `TUN · ${tunCurrentIp ?? '—'}` : `IP ${ipVerificationResult.proxyIp ?? '—'}`)
@@ -2459,16 +2460,15 @@ function HomePage({
 
             {/* ── GitHub Codespace — Red ── */}
             <button
-              className={`method-btn method-btn-red${activeMethod === 'codespace' ? ' method-btn-active' : ''}`}
+              className={`method-btn method-btn-red${activeMethod === 'codespace' || (codespaceConnecting && !codespaceConnected) ? ' method-btn-active' : ''}`}
               type="button"
-              disabled={codespaceConnecting && !codespaceConnected}
               onClick={handleCodespaceToggle}
             >
               <span className="method-btn-icon">
                 {codespaceConnecting && !codespaceConnected ? <span className="connection-stage-spinner">◌</span> : codespaceConnected ? '■' : '⬡'}
               </span>
               <span className="method-btn-label">
-                <strong>{codespaceConnected ? t('hero.disconnectGithub') : t('home.codespace.connect')}</strong>
+                <strong>{codespaceConnected ? t('hero.disconnectGithub') : codespaceConnecting ? '■ توقف' : t('home.codespace.connect')}</strong>
                 <small>{codespaceConnected && codespaceHost ? codespaceHost : 'GitHub Codespace'}</small>
               </span>
             </button>
@@ -2490,9 +2490,8 @@ function HomePage({
 
             {/* ── Free Subscription — Teal ── */}
             <button
-              className={`method-btn method-btn-teal${activeMethod === 'free' ? ' method-btn-active' : ''}`}
+              className={`method-btn method-btn-teal${isFreeActive ? ' method-btn-active' : ''}`}
               type="button"
-              disabled={freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting'}
               onClick={handleFreeToggle}
             >
               <span className="method-btn-icon">
@@ -2503,10 +2502,10 @@ function HomePage({
               <span className="method-btn-label">
                 <strong>
                   {freeConnected ? t('hero.disconnectFree')
-                    : freePhase === 'fetching' ? 'دریافت سرورها...'
-                    : freePhase === 'testing' ? 'آزمون پینگ...'
-                    : freePhase === 'connecting' ? 'در حال اتصال...'
-                    : freePhase === 'reconnecting' ? `اتصال مجدد (${reconnectSecs}s)`
+                    : freePhase === 'fetching' ? '■ توقف'
+                    : freePhase === 'testing' ? '■ توقف'
+                    : freePhase === 'connecting' ? '■ توقف'
+                    : freePhase === 'reconnecting' ? '■ توقف'
                     : 'سرور رایگان'}
                 </strong>
                 <small>{freeConnected && freeNodeName ? freeNodeName : 'V2ray Collector'}</small>
@@ -2786,9 +2785,8 @@ function HomePage({
                   <button
                     className="top-server-connect-btn"
                     type="button"
-                    disabled={freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting'}
                     onClick={() => {
-                      if (activeMethod) {
+                      if (activeMethod || isFreeActive) {
                         requireSwitch('تغییر روش', 'اتصال فعلی قطع و به سرور رایگان انتخابی متصل می‌شوید.', () => {
                           setSwitchConfirm(null)
                           onConnectFreeServer(s)
@@ -5480,6 +5478,8 @@ function SettingsPage({
   onInstallEngineUpdate,
   ctrlEnterEnabled,
   onCtrlEnterToggle,
+  closeToTray,
+  onCloseToTrayToggle,
 }: {
   settings: {
     mode:
@@ -5542,6 +5542,8 @@ function SettingsPage({
     }>
   ctrlEnterEnabled: boolean
   onCtrlEnterToggle: (v: boolean) => void
+  closeToTray: boolean
+  onCloseToTrayToggle: (v: boolean) => Promise<void>
 }) {
   const t = useT()
   const [
@@ -5881,6 +5883,13 @@ function SettingsPage({
           description={t('settings.shortcut.desc')}
           checked={ctrlEnterEnabled}
           onChange={onCtrlEnterToggle}
+        />
+
+        <SettingRow
+          title={lang === 'fa' ? 'کوچک‌سازی به سینی سیستم' : 'Minimize to System Tray'}
+          description={lang === 'fa' ? 'با بستن پنجره، برنامه به‌جای خروج، در سینی سیستم باقی می‌ماند.' : 'Closing the window hides the app to the system tray instead of quitting.'}
+          checked={closeToTray}
+          onChange={(v) => void onCloseToTrayToggle(v)}
         />
 
         <div className="connection-mode-summary">
