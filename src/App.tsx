@@ -265,6 +265,7 @@ function App() {
 
   // For smart hero-button priority: know if BPB/codespace are configured
   const [codespaceHasToken, setCodespaceHasToken] = useState(false)
+  const [bpbConfigured, setBpbConfigured] = useState(false)
 
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
@@ -305,12 +306,13 @@ function App() {
   const prevHeroConnectedRef = useRef(false)
   const hasConnectedRef = useRef(false)
   const connectionStartRef = useRef<{ at: string; mode: string; serverName: string | null; protocol: string | null; latencyMs: number | null } | null>(null)
+  const intentionalDisconnectRef = useRef(false)
 
   useEffect(() => {
     if (appHeroConnected) {
       hasConnectedRef.current = true
       if (!prevHeroConnectedRef.current) {
-        const mode = freePhase === 'connected' ? 'free' : codespaceConnected ? 'codespace' : 'subscription'
+        const mode = freePhase === 'connected' ? 'free' : codespaceConnected ? 'codespace' : lastConnectionType === 'bpb' ? 'bpb' : 'subscription'
         setLastConnectionType(mode)
         setShowReconnectBar(false)
         connectionStartRef.current = {
@@ -319,6 +321,16 @@ function App() {
           serverName: freePhase === 'connected' ? (freeNodeName ?? null) : (selectedServer.selectedServer?.name ?? null),
           protocol: freePhase === 'connected' ? null : (selectedServer.selectedServer?.protocol ?? null),
           latencyMs: null,
+        }
+        // Record free/codespace/bpb sessions in diagnostics (subscription sessions are recorded in prepareAndStart)
+        if (mode === 'free' || mode === 'codespace' || mode === 'bpb') {
+          diagnostics.beginSession({
+            serverName: mode === 'free' ? (freeNodeName ?? mode) : mode === 'codespace' ? 'GitHub Codespace' : 'BPB Panel',
+            subscriptionName: mode === 'free' ? 'سرور رایگان' : mode === 'codespace' ? 'GitHub Codespace' : 'BPB Panel',
+            mode: 'system-proxy',
+            latencyMs: mode === 'free' ? (freeLatencyMs ?? null) : null,
+            exitIp: null,
+          })
         }
         // Auto speed test and geo-block test: run after connect
         setSpeedTestResult({ mbps: null, running: true, error: null })
@@ -337,7 +349,8 @@ function App() {
       const startEntry = connectionStartRef.current
       connectionStartRef.current = null
       setSpeedTestResult(null)
-      setShowReconnectBar(true)
+      if (!intentionalDisconnectRef.current) setShowReconnectBar(true)
+      intentionalDisconnectRef.current = false
       setToastMessage('اتصال قطع شد · پراکسی ویندوز بازگردانی شد')
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
       toastTimerRef.current = setTimeout(() => setToastMessage(null), 3200)
@@ -353,9 +366,13 @@ function App() {
           protocol: startEntry.protocol,
           latencyMs: startEntry.latencyMs,
         })
+        // End diagnostics session for free/codespace/bpb (subscription sessions end in stopLocalProxy)
+        if (startEntry.mode === 'free' || startEntry.mode === 'codespace' || startEntry.mode === 'bpb') {
+          diagnostics.endSession('manual')
+        }
       }
     }
-  }, [appHeroConnected])
+  }, [appHeroConnected]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     void window.hamidsDeutsch.system.setVirtualLocationConnected(connectionVerified)
@@ -381,10 +398,13 @@ function App() {
     return () => clearTimeout(timer)
   }, [])
 
-  // Load codespace token state once on mount for smart hero button
+  // Load codespace token state + BPB profile state once on mount
   useEffect(() => {
     void window.hamidsDeutsch.codespace.getStatus().then((s) => {
       setCodespaceHasToken(Boolean(s?.hasToken))
+    }).catch(() => {})
+    void window.hamidsDeutsch.bpb.getProfile().then((r) => {
+      setBpbConfigured(Boolean(r?.profile?.panelUrl?.trim()))
     }).catch(() => {})
   }, [])
 
@@ -450,6 +470,7 @@ function App() {
   }
 
   async function disconnectFreeConfig() {
+    intentionalDisconnectRef.current = true
     try {
       await window.hamidsDeutsch.free.disconnect()
       setFreePhase('idle')
@@ -497,6 +518,7 @@ function App() {
   }
 
   async function disconnectCodespace() {
+    intentionalDisconnectRef.current = true
     setCodespaceConnecting(true)
     setCodespaceError(null)
     try {
@@ -602,6 +624,8 @@ function App() {
     if (!ctrlEnterEnabled) return
     function handleKeyDown(e: globalThis.KeyboardEvent) {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        const tag = (e.target as HTMLElement)?.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
         e.preventDefault()
         void smartHeroConnect()
       }
@@ -1181,6 +1205,16 @@ function App() {
       if (panelUrl) {
         void window.hamidsDeutsch.bpb.quickConnect({ panelUrl, directDomains: directDomains.domains })
       }
+    } else if (lastConnectionType === 'subscription') {
+      // Reconnect to the last used subscription server directly, falling back to fastest
+      const node = selectedServer.selectedServer
+        ? serverNodes.nodes.find((n) => n.id === selectedServer.selectedServer?.id) ?? fastestServer
+        : fastestServer
+      if (node) {
+        void prepareAndStart(node)
+      } else {
+        void smartHeroConnect()
+      }
     } else {
       void smartHeroConnect()
     }
@@ -1250,6 +1284,7 @@ function App() {
   }
 
   async function stopLocalProxy() {
+    intentionalDisconnectRef.current = true
     setConnectionActionError(null)
     setConnectionWatchdogMessage(null)
 
@@ -1617,6 +1652,17 @@ function App() {
               onCodespaceDisconnect={() => void disconnectCodespace()}
               onOpenSettings={() => setActivePage('settings')}
               onOpenBpb={() => setActivePage('bpb')}
+              bpbConfigured={bpbConfigured}
+              onBpbQuickConnect={async () => {
+                const r = await window.hamidsDeutsch.bpb.getProfile().catch(() => null)
+                const panelUrl = r?.profile?.panelUrl?.trim()
+                if (panelUrl) {
+                  setLastConnectionType('bpb')
+                  void window.hamidsDeutsch.bpb.quickConnect({ panelUrl, directDomains: directDomains.domains })
+                } else {
+                  setActivePage('bpb')
+                }
+              }}
               freePhase={freePhase}
               freeNodeName={freeNodeName}
               freeLatencyMs={freeLatencyMs}
@@ -1629,6 +1675,7 @@ function App() {
               lastConnectionType={lastConnectionType}
               onQuickReconnect={() => void quickReconnect()}
               geoBlockTrigger={geoBlockTrigger}
+              dataLoading={serverNodes.loading || subscriptions.loading}
             />
           )}
 
@@ -1744,6 +1791,8 @@ function App() {
               rescueSettings={
                 rescueSettings.settings
               }
+              onBpbConnect={() => setLastConnectionType('bpb')}
+              onBpbDisconnect={() => { intentionalDisconnectRef.current = true }}
             />
           )}
 
@@ -1962,6 +2011,8 @@ type HomePageProps = {
   onCodespaceDisconnect: () => void
   onOpenSettings: () => void
   onOpenBpb: () => void
+  onBpbQuickConnect: () => void
+  bpbConfigured: boolean
   freePhase: FreeConfigPhase
   freeNodeName: string | null
   freeLatencyMs: number | null
@@ -1974,6 +2025,7 @@ type HomePageProps = {
   lastConnectionType: string | null
   onQuickReconnect: () => void
   geoBlockTrigger: number
+  dataLoading: boolean
 }
 
 function HomePage({
@@ -2014,6 +2066,8 @@ function HomePage({
   onCodespaceConnect,
   onCodespaceDisconnect,
   onOpenBpb,
+  onBpbQuickConnect,
+  bpbConfigured,
   freePhase,
   freeNodeName,
   freeLatencyMs,
@@ -2026,6 +2080,7 @@ function HomePage({
   lastConnectionType,
   onQuickReconnect,
   geoBlockTrigger,
+  dataLoading,
 }: HomePageProps) {
   const t = useT()
   const mainActionAvailable = Boolean(
@@ -2039,10 +2094,10 @@ function HomePage({
   const showReconnect = showReconnectBar && !reconnectDismissed
 
   // ── Reconnect countdown (UX #10) ──────────────────────────────────────────
-  const [reconnectSecs, setReconnectSecs] = useState(0)
+  const [reconnectSecs, setReconnectSecs] = useState(1)
   useEffect(() => {
-    if (freePhase !== 'reconnecting') { setReconnectSecs(0); return }
-    setReconnectSecs(0)
+    if (freePhase !== 'reconnecting') { setReconnectSecs(1); return }
+    setReconnectSecs(1)
     const id = setInterval(() => setReconnectSecs((s) => s + 1), 1000)
     return () => clearInterval(id)
   }, [freePhase])
@@ -2119,25 +2174,26 @@ function HomePage({
   }
 
   function handleBpbOpen() {
+    const action = bpbConfigured ? onBpbQuickConnect : onOpenBpb
     if (processStatus.running || codespaceConnected) {
       requireSwitch(
         'تغییر روش اتصال',
         'اتصال فعلی قطع می‌شود و از طریق پنل BPB مجدداً متصل می‌شوید. ادامه می‌دهید؟',
         () => {
           setSwitchConfirm(null)
-          onOpenBpb()
+          void action()
         },
       )
     } else {
-      onOpenBpb()
+      void action()
     }
   }
 
   const freeConnected = freeConnectedLocal
   const otherMethodActive = processStatus.running || codespaceConnected || freeConnected
   const heroConnected = heroConnectedLocal
-  const activeMethod: 'codespace' | 'free' | 'subscription' | null =
-    codespaceConnected ? 'codespace' : freeConnected ? 'free' : processStatus.running ? 'subscription' : null
+  const activeMethod: 'codespace' | 'free' | 'subscription' | 'bpb' | null =
+    codespaceConnected ? 'codespace' : freeConnected ? 'free' : processStatus.running ? (lastConnectionType === 'bpb' ? 'bpb' : 'subscription') : null
 
   const isConnecting = processBusy && !heroConnected
   const isReconnecting = freePhase === 'reconnecting'
@@ -2228,7 +2284,7 @@ function HomePage({
                       ? t('hero.disconnectGithub')
                       : activeMethod === 'free'
                         ? t('hero.disconnectFree')
-                        : activeMethod === 'subscription'
+                        : activeMethod === 'subscription' || activeMethod === 'bpb'
                           ? t('btn.disconnect')
                           : t('hero.connectFastest')}
               </strong>
@@ -2237,7 +2293,9 @@ function HomePage({
                   ? `GitHub Codespace${codespaceHost ? ` · ${codespaceHost}` : ''}`
                   : activeMethod === 'free'
                     ? `${freeNodeName ?? t('home.free.title')}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}`
-                    : isConnected
+                    : activeMethod === 'bpb'
+                      ? 'BPB Panel'
+                      : isConnected
                       ? processStatus.connectionMode === 'tun'
                         ? `${tunBaselineIp ?? '—'} ← ${tunCurrentIp ?? '—'}`
                         : `${ipVerificationResult.directIp ?? '—'} ← ${ipVerificationResult.proxyIp ?? '—'}`
@@ -2279,7 +2337,9 @@ function HomePage({
                 ? t('hero.modeFree')
                 : codespaceConnected
                   ? t('hero.modeCodespace')
-                  : t('hero.modeSubscription')}
+                  : lastConnectionType === 'bpb'
+                    ? 'BPB Panel'
+                    : t('hero.modeSubscription')}
             </div>
           )}
         </div>
@@ -2354,7 +2414,7 @@ function HomePage({
 
       {heroConnected && <GeoBlockPanel autoRunTrigger={geoBlockTrigger} />}
 
-      {!heroConnected && !fastestServer && !selectedServer && !latencyTesting && (
+      {!heroConnected && !fastestServer && !selectedServer && !latencyTesting && !dataLoading && (
         <div className="home-empty-state">
           <div className="home-empty-icon">◎</div>
           <p className="home-empty-title">{t('home.empty.title')}</p>
@@ -2486,7 +2546,8 @@ function HomePage({
             >
               <span>◈</span>
               <span>
-                <strong>{t('home.bpb.connect')}</strong>
+                <strong>{bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup')}</strong>
+                {!bpbConfigured && <small>{t('home.bpb.setupHint')}</small>}
               </span>
             </button>
           </div>
@@ -3247,10 +3308,19 @@ function SubscriptionsPage({
 
   async function handleUndoRemoveSub() {
     if (!undoSubData) return
+    const snapshot = { ...undoSubData }
     if (undoSubTimer.current) clearTimeout(undoSubTimer.current)
     setUndoSubVisible(false)
-    await onAddSubscription(undoSubData.name, undoSubData.host)
+    const result = await onAddSubscription(snapshot.name, snapshot.host)
     setUndoSubData(null)
+    if (result.success) {
+      setTimeout(() => {
+        void window.hamidsDeutsch.subscriptions.list().then(async (subs) => {
+          const restored = subs.find((s) => s.name === snapshot.name || s.host === snapshot.host)
+          if (restored?.id) await onLoadServers(restored.id)
+        }).catch(() => {})
+      }, 300)
+    }
   }
 
   async function handleInspectSubscription(
@@ -3639,7 +3709,10 @@ function ServersPage({
     useState<{ server: PublicServer } | null>(null)
 
   type SortMode = 'ping' | 'name' | 'protocol' | 'reality'
-  const [sortMode, setSortMode] = useState<SortMode>('ping')
+  const [sortMode, setSortMode] = useState<SortMode>(() => {
+    const saved = localStorage.getItem('hamidsdeutsch:server-sort')
+    return (saved === 'ping' || saved === 'name' || saved === 'protocol' || saved === 'reality') ? saved : 'ping'
+  })
 
   if (loading) {
     return (
@@ -3827,7 +3900,7 @@ function ServersPage({
             key={mode}
             type="button"
             className={`sort-chip${sortMode === mode ? ' sort-chip-active' : ''}`}
-            onClick={() => setSortMode(mode)}
+            onClick={() => { setSortMode(mode); localStorage.setItem('hamidsdeutsch:server-sort', mode) }}
           >
             {mode === 'ping' ? t('servers.sort.ping') : mode === 'name' ? t('servers.sort.name') : mode === 'protocol' ? t('servers.sort.protocol') : t('servers.sort.reality')}
           </button>
@@ -4014,23 +4087,24 @@ function ServersPage({
                         : t('servers.selectThis')}
                     </button>
 
-                    <button
-                      className="inspect-subscription-button"
-                      type="button"
-                      disabled={
-                        !node.valid ||
-                        !node.subscriptionId ||
-                        configCheckingNodeId ===
-                          node.id
-                      }
-                      onClick={() => {
-                        onCheckConfig(node)
-                      }}
-                    >
-                      {configCheckingNodeId === node.id
-                        ? t('servers.checking')
-                        : t('servers.checkBtn')}
-                    </button>
+                    {node.subscriptionId && (
+                      <button
+                        className="inspect-subscription-button"
+                        type="button"
+                        disabled={
+                          !node.valid ||
+                          configCheckingNodeId ===
+                            node.id
+                        }
+                        onClick={() => {
+                          onCheckConfig(node)
+                        }}
+                      >
+                        {configCheckingNodeId === node.id
+                          ? t('servers.checking')
+                          : t('servers.checkBtn')}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -6136,7 +6210,16 @@ function ExportImportSection() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   function collectSettings(): Record<string, string> {
-    const keys = ['hd-theme', 'hd-lang', 'hd-connection-settings', 'hd-rescue-settings', 'hd-direct-domains']
+    const keys = [
+      'hd-theme',
+      'hd-lang',
+      'hamidsdeutsch:connection-settings:v1',
+      'hamidsdeutsch:rescue-settings:v1',
+      'hamidsdeutsch:direct-domains:v2',
+      'hamidsdeutsch:selected-server:v2',
+      'hamidsdeutsch-bpb-config-cache-v1',
+      'hamidsdeutsch:ctrl-enter',
+    ]
     const out: Record<string, string> = {}
     for (const k of keys) {
       const v = localStorage.getItem(k)
@@ -6341,9 +6424,9 @@ function ConnectionHistorySection() {
     weekAgo.setDate(today.getDate() - 7)
     const isSameDay = (a: Date, b: Date) =>
       a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-    if (isSameDay(d, today)) return 'امروز'
-    if (isSameDay(d, yesterday)) return 'دیروز'
-    if (d >= weekAgo) return 'این هفته'
+    if (isSameDay(d, today)) return t('history.today')
+    if (isSameDay(d, yesterday)) return t('history.yesterday')
+    if (d >= weekAgo) return t('history.thisWeek')
     return d.toLocaleDateString()
   }
 

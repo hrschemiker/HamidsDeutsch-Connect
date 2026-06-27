@@ -77,6 +77,8 @@ type Props = {
   mainConnected: boolean
   directDomains: string[]
   rescueSettings: RescueSettings
+  onBpbConnect?: () => void
+  onBpbDisconnect?: () => void
 }
 
 const CACHE_KEY =
@@ -122,6 +124,8 @@ export function BpbPage({
   mainConnected,
   directDomains,
   rescueSettings,
+  onBpbConnect,
+  onBpbDisconnect,
 }: Props) {
   const t = useT()
   const [profile, setProfile] =
@@ -521,6 +525,7 @@ export function BpbPage({
         setProfile(saved.profile)
       }
 
+      onBpbConnect?.()
       setMessage({
         type: 'success',
         text: t('bpb.msg.connected', `Connected: ${node.name}`),
@@ -538,6 +543,7 @@ export function BpbPage({
   }
 
   async function disconnect() {
+    onBpbDisconnect?.()
     const result =
       await window.hamidsDeutsch.bpb.disconnect()
 

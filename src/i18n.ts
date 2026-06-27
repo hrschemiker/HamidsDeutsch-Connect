@@ -118,6 +118,8 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.codespace.connect': 'اتصال با GitHub Codespace',
     'home.bpb.title': 'اتصال از طریق BPB',
     'home.bpb.connect': 'اتصال از طریق BPB',
+    'home.bpb.setup': 'راه‌اندازی BPB Panel',
+    'home.bpb.setupHint': 'پیکربندی نشده — برای راه‌اندازی کلیک کن',
     'home.bpb.hint': 'Cloudflare Workers · سریع‌ترین سرور',
     'home.free.title': 'اتصال با سرور رایگان',
     'home.free.disconnect': 'قطع اتصال سرور رایگان',
@@ -509,6 +511,11 @@ export const TR: Record<Lang, Record<string, string>> = {
     'guide.method4.how3': 'با قطع VPN، خودکار غیرفعال می‌شود.',
     'guide.method4.howTitle': 'نحوه کار',
 
+    // ── History date groups ──────────────────────────────────────────────────
+    'history.today': 'امروز',
+    'history.yesterday': 'دیروز',
+    'history.thisWeek': 'این هفته',
+
     // ── Quality labels ───────────────────────────────────────────────────────
     'quality.excellent': 'عالی',
     'quality.good': 'خوب',
@@ -661,6 +668,8 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.codespace.connect': 'Connect via GitHub Codespace',
     'home.bpb.title': 'Connect via BPB',
     'home.bpb.connect': 'Connect via BPB',
+    'home.bpb.setup': 'Set up BPB Panel',
+    'home.bpb.setupHint': 'Not configured — click to set up',
     'home.bpb.hint': 'Cloudflare Workers · Fastest server',
     'home.free.title': 'Connect with free server',
     'home.free.disconnect': 'Disconnect free server',
@@ -1052,6 +1061,11 @@ export const TR: Record<Lang, Record<string, string>> = {
     'guide.method4.how3': 'Deactivates automatically when VPN disconnects.',
     'guide.method4.howTitle': 'How it works',
 
+    // ── History date groups ──────────────────────────────────────────────────
+    'history.today': 'Today',
+    'history.yesterday': 'Yesterday',
+    'history.thisWeek': 'This Week',
+
     // ── Quality labels ───────────────────────────────────────────────────────
     'quality.excellent': 'Excellent',
     'quality.good': 'Good',
@@ -1204,6 +1218,8 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.codespace.connect': 'Über GitHub Codespace verbinden',
     'home.bpb.title': 'Über BPB verbinden',
     'home.bpb.connect': 'Über BPB verbinden',
+    'home.bpb.setup': 'BPB Panel einrichten',
+    'home.bpb.setupHint': 'Nicht konfiguriert — zum Einrichten klicken',
     'home.bpb.hint': 'Cloudflare Workers · Schnellster Server',
     'home.free.title': 'Mit freiem Server verbinden',
     'home.free.disconnect': 'Freien Server trennen',
@@ -1594,6 +1610,11 @@ export const TR: Record<Lang, Record<string, string>> = {
     'guide.method4.how2': 'Seiten mit Direktzugriff verwenden immer den echten Standort.',
     'guide.method4.how3': 'Deaktiviert sich automatisch beim Trennen des VPNs.',
     'guide.method4.howTitle': 'Funktionsweise',
+
+    // ── History date groups ──────────────────────────────────────────────────
+    'history.today': 'Heute',
+    'history.yesterday': 'Gestern',
+    'history.thisWeek': 'Diese Woche',
 
     // ── Quality labels ───────────────────────────────────────────────────────
     'quality.excellent': 'Ausgezeichnet',
