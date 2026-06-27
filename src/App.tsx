@@ -131,6 +131,7 @@ type PageId =
   | 'logs'
   | 'guide'
   | 'settings'
+  | 'activity'
 
 type NavigationItem = {
   id: PageId
@@ -183,17 +184,13 @@ function App() {
   const t = (key: string, fallback?: string): string =>
     TR[lang]?.[key] ?? fallback ?? TR['fa'][key] ?? key
 
-  const navigationItems: NavigationItem[] = [
-    { id: 'home', label: t('nav.home'), icon: '⌂' },
-    { id: 'servers', label: t('nav.servers'), icon: '◉' },
-    { id: 'subscriptions', label: t('nav.subscriptions'), icon: '↧' },
-    { id: 'bpb', label: t('nav.bpb'), icon: '◈' },
-    { id: 'direct-sites', label: t('nav.directSites'), icon: '↗' },
-    { id: 'rescue', label: t('nav.rescue'), icon: '✦' },
-    { id: 'statistics', label: t('nav.statistics'), icon: '▥' },
-    { id: 'logs', label: t('nav.logs'), icon: '≡' },
-    { id: 'guide', label: t('nav.guide'), icon: '?' },
+  // #4 Bottom navigation: 5 primary tabs
+  const bottomNavItems: NavigationItem[] = [
+    { id: 'home', label: t('nav.home'), icon: '🏠' },
+    { id: 'servers', label: t('nav.servers'), icon: '🖥' },
     { id: 'settings', label: t('nav.settings'), icon: '⚙' },
+    { id: 'rescue', label: t('nav.rescue'), icon: '⚡' },
+    { id: 'activity', label: t('nav.activity', 'فعالیت'), icon: '📋' },
   ]
 
   const pageTitles: Record<PageId, string> = {
@@ -207,9 +204,33 @@ function App() {
     logs: t('page.logs'),
     guide: t('page.guide'),
     settings: t('page.settings'),
+    activity: t('page.activity', 'فعالیت'),
   }
 
-  const [activePage, setActivePage] = useState<PageId>('home')
+  const [activePageRaw, setActivePageRaw] = useState<PageId>('home')
+  // #8 Activity tab segment: 'stats' | 'logs'
+  const [activitySegment, setActivitySegment] = useState<'stats' | 'logs'>('stats')
+  // #6 DPI bypass warning badge on Emergency tab
+  const [dpiBypassTriggered, setDpiBypassTriggered] = useState(false)
+
+  const activePage = activePageRaw
+  // #8 Map legacy 'statistics'/'logs' navigation to the merged Activity tab
+  const setActivePage = (page: PageId) => {
+    if (page === 'statistics') {
+      setActivitySegment('stats')
+      setActivePageRaw('activity')
+      return
+    }
+    if (page === 'logs') {
+      setActivitySegment('logs')
+      setActivePageRaw('activity')
+      return
+    }
+    // #6 Clear DPI bypass badge when the user opens the Emergency tab
+    if (page === 'rescue') setDpiBypassTriggered(false)
+    setActivePageRaw(page)
+  }
+
   const [connectionActionError, setConnectionActionError] =
     useState<string | null>(null)
 
@@ -377,6 +398,15 @@ function App() {
   useEffect(() => {
     void window.hamidsDeutsch.system.setVirtualLocationConnected(connectionVerified)
   }, [connectionVerified])
+
+  // #6 Detect DPI-bypass auto-retry from free progress messages → flag Emergency tab
+  useEffect(() => {
+    if (!freeProgress) return
+    const lower = freeProgress.toLowerCase()
+    if (lower.includes('dpi') || lower.includes('bypass') || freeProgress.includes('عبور از فیلتر')) {
+      setDpiBypassTriggered(true)
+    }
+  }, [freeProgress])
 
   useEffect(() => {
     void window.hamidsDeutsch.system.setDirectDomains(directDomains.domains)
@@ -1471,74 +1501,29 @@ function App() {
   return (
     <ThemeCtx.Provider value={{ theme, setTheme }}>
       <LangCtx.Provider value={{ lang, setLang }}>
-    <div className="application-shell" data-theme={theme} dir={lang === 'fa' ? 'rtl' : 'ltr'}>
-      <aside
-        className="sidebar"
-      >
-        <div className="brand">
-          <div className="brand-mark"><img src="logo.png" alt="HamidsDeutsch Connect" className="brand-logo-img" /></div>
-          <div className="brand-text">
-            <strong>HamidsDeutsch</strong>
-            <span>Connect</span>
-          </div>
-        </div>
-
-        <nav className="navigation" aria-label={t('nav.settings')}>
-          {navigationItems.map((item) => (
-            <button
-              className={
-                activePage === item.id
-                  ? 'navigation-item navigation-item-active'
-                  : 'navigation-item'
-              }
-              key={item.id}
-              type="button"
-              title={item.label}
-              onClick={() => setActivePage(item.id)}
-            >
-              <span className="navigation-icon">{item.icon}</span>
-              <span className="navigation-label">{item.label}</span>
-              {item.id === 'settings' && engineUpdateAvailable && (
-                <span className="nav-update-dot" title="به‌روزرسانی موجود است" />
-              )}
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="engine-status">
-            <span
-              className={
-                connectionVerified
-                  ? 'engine-status-dot engine-status-dot-ready'
-                  : 'engine-status-dot'
-              }
-            />
-            <div>
-              <strong>{t('engineCore', 'هسته برنامه')}</strong>
-              <span>
-                {connectionVerified
-                  ? `${t('status.connected')} · ${ipVerification.result.proxyIp ?? 'IP'}`
-                  : engineProcess.status.ready
-                    ? `Proxy ${engineProcess.status.localPort}`
-                    : engine.info?.healthy
-                      ? `sing-box ${engine.info.version}`
-                      : t('home.core.unavailable')}
-              </span>
-            </div>
-          </div>
-          <div className="version">{t('version', 'نسخه ۰.۱.۰')}</div>
-        </div>
-      </aside>
-
+    <div className="application-shell app-shell-bottomnav" data-theme={theme} dir={lang === 'fa' ? 'rtl' : 'ltr'}>
       <section className="main-area">
         <header className="topbar">
-          <div>
-            <p className="topbar-eyebrow">HamidsDeutsch Connect</p>
-            <h1>{pageTitles[activePage]}</h1>
+          <div className="topbar-brand">
+            <div className="brand-mark topbar-brand-mark"><img src="logo.png" alt="HamidsDeutsch Connect" className="brand-logo-img" /></div>
+            <div>
+              <p className="topbar-eyebrow">HamidsDeutsch Connect</p>
+              <h1>{pageTitles[activePage]}</h1>
+            </div>
           </div>
 
           <div className="topbar-controls">
+            {/* #4 Guide link available on every page */}
+            <button
+              className="topbar-icon-btn"
+              type="button"
+              title={t('nav.guide')}
+              aria-label={t('nav.guide')}
+              onClick={() => setActivePage('guide')}
+            >
+              ?
+            </button>
+
             {/* Day/Night slider toggle */}
             <button
               className={`theme-slider-toggle${theme === 'light' ? ' theme-slider-day' : ' theme-slider-night'}`}
@@ -1608,6 +1593,37 @@ function App() {
             </span>
           </div>
         </header>
+
+        {/* #13 Reconnect bar as a full-width system banner at the top */}
+        {showReconnectBar && !appHeroConnected && (
+          <div className="reconnect-banner" role="status">
+            <span className="reconnect-banner-label">
+              {t('reconnect.label')}{' '}
+              {lastConnectionType === 'free'
+                ? t('reconnect.free')
+                : lastConnectionType === 'codespace'
+                  ? 'Codespace'
+                  : lastConnectionType === 'bpb'
+                    ? 'BPB'
+                    : t('reconnect.subscription')}
+            </span>
+            <button
+              className="primary-button reconnect-bar-btn"
+              type="button"
+              onClick={() => { setActivePage('home'); void quickReconnect() }}
+            >
+              {t('reconnect.button')}
+            </button>
+            <button
+              className="reconnect-banner-dismiss"
+              type="button"
+              aria-label="dismiss"
+              onClick={() => setShowReconnectBar(false)}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         <main className="content">
           {activePage === 'home' && (
@@ -1706,7 +1722,7 @@ function App() {
               onFreeConnect={() => void connectFreeConfig()}
               onFreeDisconnect={() => void disconnectFreeConfig()}
               speedTest={speedTestResult}
-              showReconnectBar={showReconnectBar}
+              showReconnectBar={false}
               lastConnectionType={lastConnectionType}
               onQuickReconnect={() => void quickReconnect()}
               geoBlockTrigger={geoBlockTrigger}
@@ -1857,30 +1873,42 @@ function App() {
               }
             />
           )}
-          {activePage === 'statistics' && (
-            <StatisticsPage
-              summary={
-                diagnostics.summary
-              }
-              sessions={
-                diagnostics.sessions
-              }
-            />
-          )}
-          {activePage === 'logs' && (
-            <LogsPage
-              events={
-                diagnostics.events
-              }
-              onClear={
-                diagnostics.clear
-              }
-              onCopyReport={async () => {
-                await navigator.clipboard.writeText(
-                  diagnostics.exportReport(),
-                )
-              }}
-            />
+          {/* #8 Activity tab merges Statistics + Logs */}
+          {activePage === 'activity' && (
+            <div className="page-stack">
+              <div className="activity-segmented">
+                <button
+                  type="button"
+                  className={`activity-segment${activitySegment === 'stats' ? ' activity-segment-active' : ''}`}
+                  onClick={() => setActivitySegment('stats')}
+                >
+                  {t('activity.stats', 'آمار جلسه')}
+                </button>
+                <button
+                  type="button"
+                  className={`activity-segment${activitySegment === 'logs' ? ' activity-segment-active' : ''}`}
+                  onClick={() => setActivitySegment('logs')}
+                >
+                  {t('activity.logs', 'گزارش‌ها')}
+                </button>
+              </div>
+              {activitySegment === 'stats' ? (
+                <StatisticsPage
+                  summary={diagnostics.summary}
+                  sessions={diagnostics.sessions}
+                />
+              ) : (
+                <LogsPage
+                  events={diagnostics.events}
+                  onClear={diagnostics.clear}
+                  onCopyReport={async () => {
+                    await navigator.clipboard.writeText(
+                      diagnostics.exportReport(),
+                    )
+                  }}
+                />
+              )}
+            </div>
           )}
           {activePage === 'guide' && (
             <GuidePage />
@@ -1939,6 +1967,65 @@ function App() {
           )}
         </main>
       </section>
+
+      {/* #15 Floating action button: quick reconnect when off-home and disconnected */}
+      {activePage !== 'home' && !appHeroConnected && (
+        <button
+          className="quick-fab"
+          type="button"
+          aria-label={t('reconnect.button')}
+          title={t('reconnect.button')}
+          onClick={() => { setActivePage('home'); void quickReconnect() }}
+        >
+          ▶
+        </button>
+      )}
+
+      {/* #10 Global status bar pinned above the bottom nav */}
+      <div className="global-status-bar" dir={lang === 'fa' ? 'rtl' : 'ltr'}>
+        <span className={`global-status-dot${appHeroConnected ? ' global-status-dot-online' : ''}`} />
+        <span className="global-status-method">
+          {appHeroConnected
+            ? (freePhase === 'connected'
+                ? t('hero.modeFree')
+                : codespaceConnected
+                  ? t('hero.modeCodespace')
+                  : lastConnectionType === 'bpb'
+                    ? 'BPB Panel'
+                    : t('hero.modeSubscription'))
+            : t('status.disconnected')}
+        </span>
+        {appHeroConnected && (
+          <span className="global-status-ip" dir="ltr">
+            {ipVerification.result.proxyIp ?? ''}
+          </span>
+        )}
+      </div>
+
+      {/* #4 Bottom navigation bar */}
+      <nav className="bottom-nav" aria-label={t('nav.home')}>
+        {bottomNavItems.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`bottom-nav-item${activePage === item.id ? ' bottom-nav-item-active' : ''}`}
+            onClick={() => setActivePage(item.id)}
+            title={item.label}
+          >
+            <span className="bottom-nav-icon">
+              {item.icon}
+              {item.id === 'rescue' && dpiBypassTriggered && (
+                <span className="bottom-nav-badge" title="!">!</span>
+              )}
+              {item.id === 'settings' && engineUpdateAvailable && (
+                <span className="nav-update-dot" />
+              )}
+            </span>
+            <span className="bottom-nav-label">{item.label}</span>
+          </button>
+        ))}
+      </nav>
+
       {toastMessage && (
         <div className="toast" role="status" aria-live="polite">
           <span className="toast-icon">✓</span>
@@ -1981,7 +2068,7 @@ type HomePageProps = {
     architecture: string | null
     error: string | null
   } | null
-  tunBaselineIp: string | null
+  tunBaselineIp?: string | null
   tunCurrentIp: string | null
   administratorAvailable: boolean
   elevationRequesting: boolean
@@ -2056,9 +2143,9 @@ type HomePageProps = {
   onFreeConnect: () => void
   onFreeDisconnect: () => void
   speedTest: { mbps: number | null; running: boolean; error: string | null } | null
-  showReconnectBar: boolean
+  showReconnectBar?: boolean
   lastConnectionType: string | null
-  onQuickReconnect: () => void
+  onQuickReconnect?: () => void
   geoBlockTrigger: number
   dataLoading: boolean
 }
@@ -2066,7 +2153,6 @@ type HomePageProps = {
 function HomePage({
   directDomains,
   engineInfo,
-  tunBaselineIp,
   tunCurrentIp,
   administratorAvailable,
   elevationRequesting,
@@ -2111,9 +2197,7 @@ function HomePage({
   onFreeConnect,
   onFreeDisconnect,
   speedTest,
-  showReconnectBar,
   lastConnectionType,
-  onQuickReconnect,
   geoBlockTrigger,
   dataLoading,
 }: HomePageProps) {
@@ -2122,11 +2206,27 @@ function HomePage({
     processStatus.running || codespaceConnected || freePhase === 'connected' || fastestServer || selectedServer,
   )
 
-  // ── Local reconnect dismiss ───────────────────────────────────────────────
-  const [reconnectDismissed, setReconnectDismissed] = useState(false)
-  useEffect(() => { if (showReconnectBar) setReconnectDismissed(false) }, [showReconnectBar])
-  function setShowReconnectBarLocal(v: boolean) { if (!v) setReconnectDismissed(true) }
-  const showReconnect = showReconnectBar && !reconnectDismissed
+  // ── #2 Connection Method Switcher tab state ───────────────────────────────
+  type MethodTab = 'subscription' | 'free' | 'codespace' | 'bpb'
+  const [methodTab, setMethodTab] = useState<MethodTab>(() => {
+    const saved = localStorage.getItem('hamidsdeutsch:connection-method-tab:v1')
+    return (saved === 'subscription' || saved === 'free' || saved === 'codespace' || saved === 'bpb') ? saved : 'subscription'
+  })
+  function selectMethodTab(tab: MethodTab) {
+    setMethodTab(tab)
+    try { localStorage.setItem('hamidsdeutsch:connection-method-tab:v1', tab) } catch {}
+  }
+  // REC7_COLLAPSE_ADVANCED — show/hide the advanced (Codespace/BPB) tabs behind "More"
+  const [showAdvancedMethods, setShowAdvancedMethods] = useState<boolean>(() => { // REC7_COLLAPSE_ADVANCED
+    try { return localStorage.getItem('hamidsdeutsch:show-advanced-methods:v1') === 'true' } catch { return false } // REC7_COLLAPSE_ADVANCED
+  }) // REC7_COLLAPSE_ADVANCED
+  function toggleAdvancedMethods() { // REC7_COLLAPSE_ADVANCED
+    setShowAdvancedMethods((prev) => { // REC7_COLLAPSE_ADVANCED
+      const next = !prev // REC7_COLLAPSE_ADVANCED
+      try { localStorage.setItem('hamidsdeutsch:show-advanced-methods:v1', next ? 'true' : 'false') } catch {} // REC7_COLLAPSE_ADVANCED
+      return next // REC7_COLLAPSE_ADVANCED
+    }) // REC7_COLLAPSE_ADVANCED
+  } // REC7_COLLAPSE_ADVANCED
 
   // ── Reconnect countdown (UX #10) ──────────────────────────────────────────
   const [reconnectSecs, setReconnectSecs] = useState(1)
@@ -2239,37 +2339,251 @@ function HomePage({
       isConnecting ? 'connection-orbit-connecting' : '',
   ].filter(Boolean).join(' ')
 
+  // #12 Shield verification state
+  const shieldState: 'verified' | 'failed' | 'unknown' =
+    isConnected ? 'verified' : (ipVerificationResult.error ? 'failed' : 'unknown')
+
+  // #2 Render helpers for each connection method (markup reused from old layout)
+  function renderSubscriptionChoices() {
+    return (
+      <>
+        <ConnectionChoiceCard
+          title={t('home.fastest.title')}
+          kicker={t('home.fastest.kicker')}
+          serverName={
+            fastestServer?.name ??
+            (latencyTesting ? t('home.fastest.testing') : t('home.fastest.unknown'))
+          }
+          protocol={fastestServer ? formatProtocolNameForUi(fastestServer.protocol) : '—'}
+          latencyMs={fastestLatencyMs}
+          available={Boolean(fastestServer) && !processBusy}
+          testing={latencyTesting}
+          actionLabel={t('home.fastest.connect')}
+          onAction={onStartFastest}
+          secondaryActionLabel={t('home.fastest.viewServers')}
+          onSecondaryAction={onOpenServers}
+          realityBadge={(fastestServer?.security ?? '').toLowerCase() === 'reality'}
+        />
+        <ConnectionChoiceCard
+          title={t('home.prev.title')}
+          kicker={t('home.prev.kicker')}
+          serverName={selectedServer?.name ?? t('home.prev.none')}
+          protocol={selectedServer ? formatProtocolNameForUi(selectedServer.protocol) : '—'}
+          latencyMs={selectedServerLatency?.latencyMs ?? null}
+          available={Boolean(selectedServer) && !processBusy}
+          testing={latencyTesting}
+          actionLabel={t('home.prev.connect')}
+          onAction={onStartPrevious}
+          secondaryActionLabel={t('home.prev.retest')}
+          onSecondaryAction={onRetestLatency}
+        />
+      </>
+    )
+  }
+
+  function renderFreeCard() {
+    return (
+      <section className={`free-config-card${otherMethodActive && !freeConnected ? ' method-faded-card' : ''}`}>
+        <div className="free-config-header">
+          <div className="free-config-header-info">
+            <span className="panel-kicker free-config-kicker">V2ray Collector</span>
+            <h3>{t('home.free.title')}</h3>
+          </div>
+          <div className="codespace-header-end">
+            <span className="free-badge">Free</span>
+            <InfoButton
+              fa="به‌طور خودکار از مخزن GitHub سرورهای رایگان را دریافت، آزمایش و سریع‌ترین را انتخاب می‌کند. در صورت قطع اتصال، به‌طور خودکار سرور جایگزین پیدا می‌کند."
+              en="Automatically fetches free proxy servers from a GitHub repository, tests them, and connects to the fastest. Auto-reconnects if the connection drops."
+            />
+          </div>
+        </div>
+        {freeProgress && (
+          <div className="free-config-progress">
+            <span className={`free-spinner ${freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' ? 'spinning' : ''}`}>◌</span>
+            <span>{freeProgress}</span>
+          </div>
+        )}
+        {freeError && freePhase === 'error' && (
+          <div className="form-message form-message-error">{friendlyError(freeError)}</div>
+        )}
+        {freeConnected && (
+          <div className="free-config-connected-info">
+            <span className="free-connected-dot" />
+            <span>{freeNodeName}</span>
+            {freeLatencyMs != null && <LatencyBadge latencyMs={freeLatencyMs} />}
+          </div>
+        )}
+        <div className="free-config-actions">
+          {freeConnected ? (
+            <button className="free-disconnect-button" type="button" onClick={onFreeDisconnect}>
+              {t('hero.disconnectFree')}
+            </button>
+          ) : (
+            <button
+              className={`free-connect-button${freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' ? ' loading' : ''}`}
+              type="button"
+              disabled={freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting'}
+              onClick={handleFreeConnect}
+            >
+              <span className="free-btn-icon">⬡</span>
+              <span>
+                <strong>
+                  {freePhase === 'fetching' ? 'دریافت سرورها...' :
+                   freePhase === 'testing' ? 'آزمون پینگ...' :
+                   freePhase === 'connecting' ? 'در حال اتصال...' :
+                   freePhase === 'reconnecting' ? <span>اتصال مجدد<span className="reconnect-countdown"> ({reconnectSecs}s)</span></span> :
+                   'دریافت سرور رایگان'}
+                </strong>
+                <small>جستجو · آزمون · اتصال خودکار</small>
+              </span>
+            </button>
+          )}
+        </div>
+      </section>
+    )
+  }
+
+  function renderCodespaceCard() {
+    return (
+      <section className="codespace-connect-section">
+        <div className="codespace-connect-header">
+          <div>
+            <span className="panel-kicker">GitHub Codespace</span>
+            <h3>{t('home.codespace.title')}</h3>
+          </div>
+          <div className="codespace-header-end">
+            {codespaceConnected && codespaceHost && (
+              <span className="codespace-host-badge" dir="ltr">{codespaceHost}</span>
+            )}
+            <span className="free-badge">Free</span>
+            <InfoButton
+              fa="یک سرور پروکسی موقت روی زیرساخت GitHub می‌سازد و از طریق پروتکل VLESS + WebSocket متصل می‌شود. نیازی به سرور اختصاصی نیست. توکن GitHub باید در تنظیمات وارد شده باشد."
+              en="Spins up a temporary proxy server on GitHub's infrastructure and connects via VLESS + WebSocket. No dedicated server needed. A GitHub PAT must be configured in Settings."
+            />
+          </div>
+        </div>
+        {codespaceProgress && <div className="codespace-progress">{codespaceProgress}</div>}
+        {codespaceError && <div className="form-message form-message-error">{codespaceError}</div>}
+        <div className="codespace-actions">
+          {codespaceConnected ? (
+            <button
+              className="codespace-disconnect-button"
+              type="button"
+              disabled={codespaceConnecting || processBusy}
+              onClick={onCodespaceDisconnect}
+            >
+              {t('home.codespace.disconnect')}
+            </button>
+          ) : (
+            <button
+              className={`codespace-connect-button${!codespaceConnecting && processStatus.running ? ' method-faded' : ''}`}
+              type="button"
+              disabled={codespaceConnecting}
+              onClick={handleCodespaceConnect}
+            >
+              <span className="codespace-connect-icon">⬡</span>
+              <span>
+                <strong>
+                  {codespaceConnecting ? t('home.codespace.connecting') : t('home.codespace.connect')}
+                </strong>
+                <small>VLESS · WebSocket · TLS · GitHub Infrastructure</small>
+              </span>
+            </button>
+          )}
+        </div>
+      </section>
+    )
+  }
+
+  function renderBpbCard() {
+    return (
+      <section className="bpb-home-card">
+        <div className="codespace-connect-header">
+          <div>
+            <span className="panel-kicker bpb-home-kicker">BPB Panel</span>
+            <h3>{t('home.bpb.title')}</h3>
+          </div>
+          <div className="codespace-header-end">
+            <span className="free-badge">Free</span>
+            <InfoButton
+              fa="از طریق پنل BPB که قبلاً در تب «اتصال BPB» پیکربندی کرده‌ای به سریع‌ترین سرور وصل می‌شود."
+              en="Connects via a BPB Panel you've already configured in the BPB Connect tab."
+            />
+          </div>
+        </div>
+        <div className="bpb-home-actions">
+          <button
+            className={`bpb-home-connect-button${otherMethodActive ? ' method-faded' : ''}`}
+            type="button"
+            onClick={handleBpbOpen}
+          >
+            <span>◈</span>
+            <span>
+              <strong>{bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup')}</strong>
+              {!bpbConfigured && <small>{t('home.bpb.setupHint')}</small>}
+            </span>
+          </button>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <div className="home-layout">
-      <section className="hero-card">
-        <div className="hero-content">
-          <div className="status-label">
+      {/* #1 Centered Command Center hero */}
+      <section className={`hero-card hero-card-centered${heroConnected ? ' hero-card-online' : ''}`}>
+        <div className="hero-center">
+          <div className="status-label status-label-centered">
             <span
               className={
                 heroConnected
                   ? 'status-label-dot status-label-dot-online'
-                  : 'status-label-dot'
+                  : isConnecting || isReconnecting
+                    ? 'status-label-dot status-label-dot-connecting'
+                    : 'status-label-dot'
               }
             />
             {activeMethod === 'codespace'
-              ? `GitHub Codespace ${t('status.connected')}${codespaceHost ? ` · ${codespaceHost}` : ''}${isConnected ? ` · IP ${ipVerificationResult.proxyIp ?? t('stats.confirmed')}` : ''}`
+              ? `GitHub Codespace ${t('status.connected')}`
               : activeMethod === 'free'
-                ? `${t('home.free.title')} ${t('status.connected')}${freeNodeName ? ` · ${freeNodeName}` : ''}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}${isConnected ? ` · IP ${ipVerificationResult.proxyIp ?? t('stats.confirmed')}` : ''}`
+                ? `${t('home.free.title')} ${t('status.connected')}`
                 : isConnected
-                  ? processStatus.connectionMode === 'tun'
-                    ? `TUN · IP ${tunCurrentIp ?? t('stats.confirmed')}`
-                    : `System Proxy · IP ${ipVerificationResult.proxyIp ?? t('stats.confirmed')}`
+                  ? processStatus.connectionMode === 'tun' ? 'TUN · ' + t('status.connected') : t('status.connected')
                   : ipVerificationChecking
                     ? t('status.checkingIp')
-                    : processStatus.ready
-                      ? t('home.proxy.title.ready')
-                      : processStatus.running
-                        ? t('home.proxy.title.running')
+                    : isConnecting || isReconnecting
+                      ? t('status.connecting')
+                      : processStatus.ready
+                        ? t('home.proxy.title.ready')
                         : t('status.disconnected')}
             {heroConnected && elapsedSecs >= 0 && (
               <span className="session-timer" dir="ltr">{formatElapsed(elapsedSecs)}</span>
             )}
           </div>
+
+          {/* Status ring */}
+          <div className="hero-ring-wrap" aria-hidden="true">
+            <div className={orbitClass}>
+              <div className="connection-orbit-middle">
+                <div className="connection-orbit-core">
+                  <img
+                    src="logo.png"
+                    className={`orbit-logo${heroConnected ? ' orbit-logo-online' : ''}${isConnecting ? ' orbit-logo-connecting' : ''}`}
+                    alt=""
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Active IP below ring when connected */}
+          {heroConnected && (
+            <div className="hero-active-ip" dir="ltr">
+              {processStatus.connectionMode === 'tun'
+                ? (tunCurrentIp ?? t('stats.confirmed'))
+                : (ipVerificationResult.proxyIp ?? t('stats.confirmed'))}
+            </div>
+          )}
 
           {!administratorAvailable && !processStatus.running && (
             <div className="elevation-panel">
@@ -2291,16 +2605,15 @@ function HomePage({
           )}
 
           {elevationError && (
-            <div className="inline-error">
-              {elevationError}
-            </div>
+            <div className="inline-error">{elevationError}</div>
           )}
 
+          {/* Connect button */}
           <button
             className={
               heroConnected
-                ? 'connect-button connect-button-active'
-                : 'connect-button'
+                ? 'connect-button connect-button-centered connect-button-active'
+                : 'connect-button connect-button-centered'
             }
             type="button"
             disabled={processBusy || ipVerificationChecking || (!activeMethod && !mainActionAvailable)}
@@ -2330,10 +2643,6 @@ function HomePage({
                     ? `${freeNodeName ?? t('home.free.title')}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}`
                     : activeMethod === 'bpb'
                       ? 'BPB Panel'
-                      : isConnected
-                      ? processStatus.connectionMode === 'tun'
-                        ? `${tunBaselineIp ?? '—'} ← ${tunCurrentIp ?? '—'}`
-                        : `${ipVerificationResult.directIp ?? '—'} ← ${ipVerificationResult.proxyIp ?? '—'}`
                       : processStatus.ready
                         ? t('hero.proxyReady')
                         : t('hero.configHint')}
@@ -2352,309 +2661,137 @@ function HomePage({
               }`} />
             </div>
           )}
-        </div>
 
-        <div className="hero-visual" aria-hidden="true">
-          <div className={orbitClass}>
-            <div className="connection-orbit-middle">
-              <div className="connection-orbit-core">
-                <img
-                  src="logo.png"
-                  className={`orbit-logo${heroConnected ? ' orbit-logo-online' : ''}${isConnecting ? ' orbit-logo-connecting' : ''}`}
-                  alt=""
-                />
-              </div>
-            </div>
-          </div>
+          {/* #3 Inline stat chips + #12 shield — only when connected */}
           {heroConnected && (
-            <div className="hero-mode-pill">
-              {freePhase === 'connected'
-                ? t('hero.modeFree')
-                : codespaceConnected
-                  ? t('hero.modeCodespace')
-                  : lastConnectionType === 'bpb'
-                    ? 'BPB Panel'
-                    : t('hero.modeSubscription')}
+            <div className="hero-chips">
+              {/* #12 Shield */}
+              <button
+                type="button"
+                className={`hero-shield hero-shield-${shieldState}`}
+                onClick={onVerifyIp}
+                title={t('home.proxy.recheck')}
+                aria-label={t('home.proxy.recheck')}
+              >
+                <span className="hero-shield-icon">🛡</span>
+                <span className="hero-shield-mark">
+                  {shieldState === 'verified' ? '✓' : shieldState === 'failed' ? '✗' : '?'}
+                </span>
+              </button>
+              {isConnected && ipVerificationResult.proxyIp && (
+                <span className="hero-chip" dir="ltr">
+                  {ipVerificationResult.proxyIp}
+                  <CopyButton text={ipVerificationResult.proxyIp} />
+                </span>
+              )}
+              {(selectedServer?.name || freeNodeName) && (
+                <span className="hero-chip">
+                  {activeMethod === 'free' ? (freeNodeName ?? '') : (selectedServer?.name ?? '')}
+                </span>
+              )}
+              {speedTest && (
+                <span className="hero-chip" dir="ltr">
+                  {speedTest.running
+                    ? `${t('stats.speed')}…`
+                    : speedTest.mbps !== null
+                      ? `${speedTest.mbps} Mbps`
+                      : t('stats.speedError')}
+                </span>
+              )}
             </div>
           )}
         </div>
       </section>
 
-      {showReconnect && !heroConnected && (
-        <div className="reconnect-bar">
-          <span className="reconnect-bar-label">
-            {t('reconnect.label')} {lastConnectionType === 'free' ? t('reconnect.free') : lastConnectionType === 'codespace' ? 'Codespace' : lastConnectionType === 'bpb' ? 'BPB' : t('reconnect.subscription')}
-          </span>
-          <button className="primary-button reconnect-bar-btn" type="button" onClick={onQuickReconnect}>
-            {t('reconnect.button')}
-          </button>
-          <button className="text-button" type="button" onClick={() => setShowReconnectBarLocal(false)}>✕</button>
-        </div>
-      )}
-
-      <section className={`quick-statistics${heroConnected ? ' stats-connected' : ''}`}>
-        <article className="statistic-card" style={heroConnected ? { animationDelay: '0ms' } : undefined}>
-          <span className="statistic-icon">◎</span>
-          <div>
-            <span className="statistic-label">{t('stats.outputIp')}</span>
-            <div className="statistic-value-row">
-              <strong dir="ltr">
-                {isConnected
-                  ? ipVerificationResult.proxyIp ?? t('stats.confirmed')
-                  : processStatus.ready
-                    ? t('stats.pendingVerify')
-                    : '—'}
-              </strong>
-              {isConnected && ipVerificationResult.proxyIp && (
-                <CopyButton text={ipVerificationResult.proxyIp} />
-              )}
-            </div>
-          </div>
-        </article>
-        <article className="statistic-card" style={heroConnected ? { animationDelay: '80ms' } : undefined}>
-          <span className="statistic-icon">◌</span>
-          <div>
-            <span className="statistic-label">{t('stats.prevServer')}</span>
-            <strong>{selectedServer?.name ?? t('stats.notSelected')}</strong>
-          </div>
-        </article>
-        <article className="statistic-card" style={heroConnected ? { animationDelay: '160ms' } : undefined}>
-          <span className="statistic-icon">↗</span>
-          <div>
-            <span className="statistic-label">{t('stats.directSites')}</span>
-            <strong>{directDomains.length} {t('stats.domainCount')}</strong>
-          </div>
-        </article>
-        {speedTest && (
-          <article className="statistic-card" style={heroConnected ? { animationDelay: '240ms' } : undefined}>
-            <span className="statistic-icon">⚡</span>
-            <div>
-              <span className="statistic-label">{t('stats.speed')}</span>
-              {speedTest.running ? (
-                <span className="speed-bar-wrap"><span className="speed-bar-fill speed-bar-testing" /></span>
-              ) : speedTest.mbps !== null ? (
-                <div className="speed-bar-group">
-                  <span className="speed-bar-wrap">
-                    <span className="speed-bar-fill" style={{ width: `${Math.min(speedTest.mbps / 100 * 100, 100)}%` }} />
-                  </span>
-                  <strong dir="ltr">{speedTest.mbps} Mbps</strong>
-                </div>
-              ) : (
-                <strong>{t('stats.speedError')}</strong>
-              )}
-            </div>
-          </article>
-        )}
-      </section>
 
       {heroConnected && <GeoBlockPanel autoRunTrigger={geoBlockTrigger} />}
 
+      {/* #11 3-step onboarding card (replaces plain empty-state list) */}
       {!heroConnected && !fastestServer && !selectedServer && !latencyTesting && !dataLoading && (
-        <div className="home-empty-state">
-          <div className="home-empty-icon">◎</div>
-          <p className="home-empty-title">{t('home.empty.title')}</p>
-          <ol className="home-empty-steps">
-            <li>{t('home.empty.step1')}</li>
-            <li>{t('home.empty.step2')}</li>
-            <li>{t('home.empty.step3')}</li>
-          </ol>
+        <div className="home-onboarding-card">
+          <div className={`onboarding-step${false ? ' onboarding-step-done' : ''}`}>
+            <span className="onboarding-step-num">①</span>
+            <strong>{t('onboard.step1.title', 'افزودن اشتراک')}</strong>
+            <span className="onboarding-step-desc">{t('onboard.step1.desc', 'لینک اشتراک خود را وارد کنید')}</span>
+            <button className="primary-button compact-primary" type="button" onClick={onOpenServers}>
+              {t('onboard.step1.action', 'افزودن')}
+            </button>
+          </div>
+          <div className={`onboarding-step${selectedServer ? ' onboarding-step-done' : ''}`}>
+            <span className="onboarding-step-num">{selectedServer ? '✓' : '②'}</span>
+            <strong>{t('onboard.step2.title', 'انتخاب سرور')}</strong>
+            <span className="onboarding-step-desc">{t('onboard.step2.desc', 'یک سرور را انتخاب کنید')}</span>
+            <button className="primary-button compact-primary" type="button" onClick={onOpenServers}>
+              {t('onboard.step2.action', 'سرورها')}
+            </button>
+          </div>
+          <div className={`onboarding-step${heroConnected ? ' onboarding-step-done' : ''}`}>
+            <span className="onboarding-step-num">③</span>
+            <strong>{t('onboard.step3.title', 'اتصال')}</strong>
+            <span className="onboarding-step-desc">{t('onboard.step3.desc', 'دکمه اتصال را بزنید')}</span>
+            <button className="primary-button compact-primary" type="button" disabled>
+              {t('onboard.step3.action', 'اتصال')}
+            </button>
+          </div>
         </div>
       )}
 
-      <section className="connection-choice-grid">
-        <ConnectionChoiceCard
-          title={t('home.fastest.title')}
-          kicker={t('home.fastest.kicker')}
-          serverName={
-            fastestServer?.name ??
-            (latencyTesting ? t('home.fastest.testing') : t('home.fastest.unknown'))
-          }
-          protocol={
-            fastestServer
-              ? formatProtocolNameForUi(fastestServer.protocol)
-              : '—'
-          }
-          latencyMs={fastestLatencyMs}
-          available={Boolean(fastestServer) && !processBusy}
-          testing={latencyTesting}
-          actionLabel={t('home.fastest.connect')}
-          onAction={onStartFastest}
-          secondaryActionLabel={t('home.fastest.viewServers')}
-          onSecondaryAction={onOpenServers}
-          realityBadge={(fastestServer?.security ?? '').toLowerCase() === 'reality'}
-        />
-
-        <ConnectionChoiceCard
-          title={t('home.prev.title')}
-          kicker={t('home.prev.kicker')}
-          serverName={selectedServer?.name ?? t('home.prev.none')}
-          protocol={
-            selectedServer
-              ? formatProtocolNameForUi(selectedServer.protocol)
-              : '—'
-          }
-          latencyMs={selectedServerLatency?.latencyMs ?? null}
-          available={Boolean(selectedServer) && !processBusy}
-          testing={latencyTesting}
-          actionLabel={t('home.prev.connect')}
-          onAction={onStartPrevious}
-          secondaryActionLabel={t('home.prev.retest')}
-          onSecondaryAction={onRetestLatency}
-        />
-      </section>
-
-      <div className="home-dual-card-row">
-        <section className="codespace-connect-section">
-          <div className="codespace-connect-header">
-            <div>
-              <span className="panel-kicker">GitHub Codespace</span>
-              <h3>{t('home.codespace.title')}</h3>
-            </div>
-            <div className="codespace-header-end">
-              {codespaceConnected && codespaceHost && (
-                <span className="codespace-host-badge" dir="ltr">{codespaceHost}</span>
-              )}
-              <span className="free-badge">Free</span>
-              <InfoButton
-                fa="یک سرور پروکسی موقت روی زیرساخت GitHub می‌سازد و از طریق پروتکل VLESS + WebSocket متصل می‌شود. نیازی به سرور اختصاصی نیست. توکن GitHub باید در تنظیمات وارد شده باشد."
-                en="Spins up a temporary proxy server on GitHub's infrastructure and connects via VLESS + WebSocket. No dedicated server needed. A GitHub PAT must be configured in Settings."
-              />
-            </div>
-          </div>
-
-          {codespaceProgress && (
-            <div className="codespace-progress">{codespaceProgress}</div>
-          )}
-
-          {codespaceError && (
-            <div className="form-message form-message-error">{codespaceError}</div>
-          )}
-
-          <div className="codespace-actions">
-            {codespaceConnected ? (
+      {/* #2 / #7 Connection Method Switcher */}
+      <section className="method-switcher">
+        <div className="method-tabs">
+          <button
+            type="button"
+            className={`method-tab${methodTab === 'subscription' ? ' method-tab-active' : ''}`}
+            onClick={() => selectMethodTab('subscription')}
+          >
+            {t('method.subscription', 'اشتراک')}
+            {activeMethod === 'subscription' && <span className="method-tab-dot" />}
+          </button>
+          <button
+            type="button"
+            className={`method-tab${methodTab === 'free' ? ' method-tab-active' : ''}`}
+            onClick={() => selectMethodTab('free')}
+          >
+            {t('method.free', 'رایگان')}
+            {activeMethod === 'free' && <span className="method-tab-dot" />}
+          </button>
+          {/* REC7_COLLAPSE_ADVANCED — advanced tabs (Codespace/BPB) behind "More" toggle */}
+          {showAdvancedMethods && ( // REC7_COLLAPSE_ADVANCED
+            <>
               <button
-                className="codespace-disconnect-button"
                 type="button"
-                disabled={codespaceConnecting || processBusy}
-                onClick={onCodespaceDisconnect}
+                className={`method-tab${methodTab === 'codespace' ? ' method-tab-active' : ''}`}
+                onClick={() => selectMethodTab('codespace')}
               >
-                {t('home.codespace.disconnect')}
+                {t('method.codespace', 'Codespace')}
+                {activeMethod === 'codespace' && <span className="method-tab-dot" />}
               </button>
-            ) : (
               <button
-                className={`codespace-connect-button${!codespaceConnecting && processStatus.running ? ' method-faded' : ''}`}
                 type="button"
-                disabled={codespaceConnecting}
-                onClick={handleCodespaceConnect}
+                className={`method-tab${methodTab === 'bpb' ? ' method-tab-active' : ''}`}
+                onClick={() => selectMethodTab('bpb')}
               >
-                <span className="codespace-connect-icon">⬡</span>
-                <span>
-                  <strong>
-                    {codespaceConnecting ? t('home.codespace.connecting') : t('home.codespace.connect')}
-                  </strong>
-                  <small>VLESS · WebSocket · TLS · GitHub Infrastructure</small>
-                </span>
+                {t('method.bpb', 'BPB')}
+                {activeMethod === 'bpb' && <span className="method-tab-dot" />}
               </button>
-            )}
-          </div>
-        </section>
-
-        <section className="bpb-home-card">
-          <div className="codespace-connect-header">
-            <div>
-              <span className="panel-kicker bpb-home-kicker">BPB Panel</span>
-              <h3>{t('home.bpb.title')}</h3>
-            </div>
-            <div className="codespace-header-end">
-              <span className="free-badge">Free</span>
-              <InfoButton
-                fa="از طریق پنل BPB که قبلاً در تب «اتصال BPB» پیکربندی کرده‌ای به سریع‌ترین سرور وصل می‌شود."
-                en="Connects via a BPB Panel you've already configured in the BPB Connect tab."
-              />
-            </div>
-          </div>
-          <div className="bpb-home-actions">
-            <button
-              className={`bpb-home-connect-button${otherMethodActive ? ' method-faded' : ''}`}
-              type="button"
-              onClick={handleBpbOpen}
-            >
-              <span>◈</span>
-              <span>
-                <strong>{bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup')}</strong>
-                {!bpbConfigured && <small>{t('home.bpb.setupHint')}</small>}
-              </span>
-            </button>
-          </div>
-        </section>
-      </div>
-
-      {/* ── Free Config Card ─────────────────────────────────────────────── */}
-      <section className={`free-config-card${otherMethodActive && !freeConnected ? ' method-faded-card' : ''}`}>
-        <div className="free-config-header">
-          <div className="free-config-header-info">
-            <span className="panel-kicker free-config-kicker">V2ray Collector</span>
-            <h3>اتصال با سرور رایگان</h3>
-          </div>
-          <div className="codespace-header-end">
-            <span className="free-badge">Free</span>
-            <InfoButton
-              fa="به‌طور خودکار از مخزن GitHub سرورهای رایگان را دریافت، آزمایش و سریع‌ترین را انتخاب می‌کند. در صورت قطع اتصال، به‌طور خودکار سرور جایگزین پیدا می‌کند."
-              en="Automatically fetches free proxy servers from a GitHub repository, tests them, and connects to the fastest. Auto-reconnects if the connection drops."
-            />
-          </div>
+            </>
+          )}
+          {/* REC7_COLLAPSE_ADVANCED — toggle */}
+          <button type="button" className="method-tab method-tab-more" onClick={toggleAdvancedMethods}>
+            {showAdvancedMethods ? `${t('method.less', 'کمتر')} ▴` : `${t('method.more', 'بیشتر')} ▾`}
+          </button>
         </div>
 
-        {freeProgress && (
-          <div className="free-config-progress">
-            <span className={`free-spinner ${freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' ? 'spinning' : ''}`}>◌</span>
-            <span>{freeProgress}</span>
-          </div>
-        )}
-
-        {freeError && freePhase === 'error' && (
-          <div className="form-message form-message-error">{friendlyError(freeError)}</div>
-        )}
-
-        {freeConnected && (
-          <div className="free-config-connected-info">
-            <span className="free-connected-dot" />
-            <span>{freeNodeName}</span>
-            {freeLatencyMs != null && <LatencyBadge latencyMs={freeLatencyMs} />}
-          </div>
-        )}
-
-        <div className="free-config-actions">
-          {freeConnected ? (
-            <button
-              className="free-disconnect-button"
-              type="button"
-              onClick={onFreeDisconnect}
-            >
-              قطع اتصال سرور رایگان
-            </button>
-          ) : (
-            <button
-              className={`free-connect-button${freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' ? ' loading' : ''}`}
-              type="button"
-              disabled={freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting'}
-              onClick={handleFreeConnect}
-            >
-              <span className="free-btn-icon">⬡</span>
-              <span>
-                <strong>
-                  {freePhase === 'fetching' ? 'دریافت سرورها...' :
-                   freePhase === 'testing' ? 'آزمون پینگ...' :
-                   freePhase === 'connecting' ? 'در حال اتصال...' :
-                   freePhase === 'reconnecting' ? <span>اتصال مجدد<span className="reconnect-countdown"> ({reconnectSecs}s)</span></span> :
-                   'دریافت سرور رایگان'}
-                </strong>
-                <small>جستجو · آزمون · اتصال خودکار</small>
-              </span>
-            </button>
+        <div className="method-panel">
+          {methodTab === 'subscription' && (
+            <div className="connection-choice-grid">{renderSubscriptionChoices()}</div>
           )}
+          {methodTab === 'free' && renderFreeCard()}
+          {methodTab === 'codespace' && renderCodespaceCard()}
+          {methodTab === 'bpb' && renderBpbCard()}
         </div>
       </section>
+
 
       {switchConfirm && (
         <ConfirmDialog
@@ -3883,6 +4020,14 @@ function ServersPage({
           </div>
 
           <div className="servers-heading-actions">
+            {/* #4 Manage subscriptions from Servers header */}
+            <button
+              className="inspect-subscription-button"
+              type="button"
+              onClick={onOpenSubscriptions}
+            >
+              {t('servers.manage', 'مدیریت اشتراک‌ها')}
+            </button>
             <span className="count-badge">
               {validNodes.length} سرور معتبر از {
                 new Set(
@@ -4001,21 +4146,55 @@ function ServersPage({
                   </small>
                 </span>
 
-                <LatencyBadge
-                  latencyMs={
-                    latencyResult?.latencyMs ?? null
-                  }
-                  testing={
-                    latencyTesting &&
-                    !latencyResult
-                  }
-                />
+                <span className="server-row-metrics">
+                  <LatencyBadge
+                    latencyMs={
+                      latencyResult?.latencyMs ?? null
+                    }
+                    testing={
+                      latencyTesting &&
+                      !latencyResult
+                    }
+                  />
+                  {/* #9 Latency bar (40px) */}
+                  <span className="server-latency-bar" aria-hidden="true">
+                    <span
+                      className="server-latency-bar-fill"
+                      style={{
+                        width: `${latencyBarPct}%`,
+                        background: getLatencyColor(latencyResult?.latencyMs ?? null),
+                      }}
+                    />
+                  </span>
+                </span>
 
                 <span
                   className={`server-list-status ${status.className}`}
                 >
                   {status.label}
                 </span>
+
+                {/* #9 Quick connect on hover/focus */}
+                {node.valid && (
+                  <span
+                    className="server-row-connect-btn"
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onSelectServer(toPublicServer(node))
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onSelectServer(toPublicServer(node))
+                      }
+                    }}
+                  >
+                    {t('servers.connect', 'اتصال')}
+                  </span>
+                )}
 
                 {isSelected && (
                   <span className="server-selected-label">
@@ -5797,7 +5976,93 @@ function SettingsPage({
   return (
     <div className="page-stack">
 
-      {/* ── Appearance ─────────────────────────────────────────────── */}
+      {/* ── #14 Connection section ─────────────────────────────────── */}
+      <details className="settings-group" open>
+        <summary className="settings-group-summary">
+          <span>{t('settings.group.connection', 'اتصال')}</span>
+          <span className="settings-group-chevron">▾</span>
+        </summary>
+
+      {/* ── Connection routing ──────────────────────────────────────── */}
+      <section className="panel-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">Connection Routing</span>
+            <h3>{t('settings.connection.title')}</h3>
+          </div>
+          <button className="secondary-button" type="button" onClick={onReset}>
+            {t('settings.connection.reset')}
+          </button>
+        </div>
+
+        {connected && (
+          <div className="inline-notice">{t('settings.connection.notice')}</div>
+        )}
+
+        <label className="settings-select-field">
+          <span>{t('settings.mode.label')}</span>
+          <select
+            value={settings.mode}
+            onChange={(event) =>
+              onUpdate({ mode: event.target.value as 'auto' | 'tun' | 'system-proxy' })
+            }
+          >
+            <option value="auto">{t('settings.mode.auto')}</option>
+            <option value="tun">{t('settings.mode.tunOnly')}</option>
+            <option value="system-proxy">{t('settings.mode.proxyOnly')}</option>
+          </select>
+        </label>
+
+        <SettingRow
+          title={t('settings.mode.fallbackTitle')}
+          description={t('settings.mode.fallbackDesc')}
+          checked={settings.allowFallback}
+          disabled={settings.mode === 'system-proxy' || settings.mode === 'tun'}
+          onChange={(checked) => onUpdate({ allowFallback: checked })}
+        />
+
+        <SettingRow
+          title={t('settings.shortcut.title')}
+          description={t('settings.shortcut.desc')}
+          checked={ctrlEnterEnabled}
+          onChange={onCtrlEnterToggle}
+        />
+
+        <div className="connection-mode-summary">
+          <span>Administrator</span>
+          <strong>
+            {administratorAvailable ? t('settings.mode.active') : t('settings.mode.inactive')}
+          </strong>
+          <span>{t('settings.mode.selected')}</span>
+          <strong>
+            {settings.mode === 'auto'
+              ? t('settings.mode.autoShort')
+              : settings.mode === 'tun'
+                ? t('settings.mode.tunShort')
+                : t('settings.mode.proxyShort')}
+          </strong>
+        </div>
+      </section>
+
+      <section className="panel-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">Safety</span>
+            <h3>{t('settings.fixed.title')}</h3>
+          </div>
+        </div>
+        <SettingRow title={t('settings.fixed.ipCheck')} description={t('settings.fixed.ipCheckDesc')} checked disabled />
+        <SettingRow title={t('settings.fixed.proxyRestore')} description={t('settings.fixed.proxyRestoreDesc')} checked disabled />
+        <SettingRow title={t('settings.fixed.healthMonitor')} description={t('settings.fixed.healthMonitorDesc')} checked disabled />
+      </section>
+      </details>
+
+      {/* ── #14 Appearance section ─────────────────────────────────── */}
+      <details className="settings-group" open>
+        <summary className="settings-group-summary">
+          <span>{t('settings.appearance')}</span>
+          <span className="settings-group-chevron">▾</span>
+        </summary>
       <section className="panel-card">
         <div className="panel-heading">
           <div>
@@ -5871,117 +6136,14 @@ function SettingsPage({
           {t('settings.appearanceNote')}
         </p>
       </section>
+      </details>
 
-      {/* ── Connection routing ──────────────────────────────────────── */}
-      <section className="panel-card">
-        <div className="panel-heading">
-          <div>
-            <span className="panel-kicker">
-              Connection Routing
-            </span>
-            <h3>
-              {t('settings.connection.title')}
-            </h3>
-          </div>
-
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={onReset}
-          >
-            {t('settings.connection.reset')}
-          </button>
-        </div>
-
-        {connected && (
-          <div className="inline-notice">
-            {t('settings.connection.notice')}
-          </div>
-        )}
-
-        <label className="settings-select-field">
-          <span>
-            {t('settings.mode.label')}
-          </span>
-
-          <select
-            value={
-              settings.mode
-            }
-            onChange={(event) =>
-              onUpdate({
-                mode:
-                  event.target
-                    .value as
-                    | 'auto'
-                    | 'tun'
-                    | 'system-proxy',
-              })
-            }
-          >
-            <option value="auto">
-              {t('settings.mode.auto')}
-            </option>
-            <option value="tun">
-              {t('settings.mode.tunOnly')}
-            </option>
-            <option value="system-proxy">
-              {t('settings.mode.proxyOnly')}
-            </option>
-          </select>
-        </label>
-
-        <SettingRow
-          title={t('settings.mode.fallbackTitle')}
-          description={t('settings.mode.fallbackDesc')}
-          checked={
-            settings.allowFallback
-          }
-          disabled={
-            settings.mode ===
-              'system-proxy' ||
-            settings.mode ===
-              'tun'
-          }
-          onChange={(checked) =>
-            onUpdate({
-              allowFallback:
-                checked,
-            })
-          }
-        />
-
-        <SettingRow
-          title={t('settings.shortcut.title')}
-          description={t('settings.shortcut.desc')}
-          checked={ctrlEnterEnabled}
-          onChange={onCtrlEnterToggle}
-        />
-
-        <div className="connection-mode-summary">
-          <span>
-            Administrator
-          </span>
-          <strong>
-            {administratorAvailable
-              ? t('settings.mode.active')
-              : t('settings.mode.inactive')}
-          </strong>
-
-          <span>
-            {t('settings.mode.selected')}
-          </span>
-          <strong>
-            {settings.mode ===
-            'auto'
-              ? t('settings.mode.autoShort')
-              : settings.mode ===
-                  'tun'
-                ? t('settings.mode.tunShort')
-                : t('settings.mode.proxyShort')}
-          </strong>
-        </div>
-      </section>
+      {/* ── #14 Advanced section ───────────────────────────────────── */}
+      <details className="settings-group" open>
+        <summary className="settings-group-summary">
+          <span>{t('settings.group.advanced', 'پیشرفته')}</span>
+          <span className="settings-group-chevron">▾</span>
+        </summary>
 
       <section className="panel-card">
         <div className="panel-heading">
@@ -6187,40 +6349,7 @@ function SettingsPage({
       <GitHubSection />
 
       <ConnectionHistorySection />
-
-      <section className="panel-card">
-        <div className="panel-heading">
-          <div>
-            <span className="panel-kicker">
-              Safety
-            </span>
-            <h3>
-              {t('settings.fixed.title')}
-            </h3>
-          </div>
-        </div>
-
-        <SettingRow
-          title={t('settings.fixed.ipCheck')}
-          description={t('settings.fixed.ipCheckDesc')}
-          checked
-          disabled
-        />
-
-        <SettingRow
-          title={t('settings.fixed.proxyRestore')}
-          description={t('settings.fixed.proxyRestoreDesc')}
-          checked
-          disabled
-        />
-
-        <SettingRow
-          title={t('settings.fixed.healthMonitor')}
-          description={t('settings.fixed.healthMonitorDesc')}
-          checked
-          disabled
-        />
-      </section>
+      </details>
     </div>
   )
 }
