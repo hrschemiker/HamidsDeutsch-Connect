@@ -277,6 +277,15 @@ button {
   font-size: 10px;
 }
 
+.made-by {
+  margin-top: 5px;
+  font-size: 9px;
+  font-style: italic;
+  color: var(--text-muted);
+  opacity: 0.65;
+  letter-spacing: 0.01em;
+}
+
 .main-area {
   min-width: 0;
 }

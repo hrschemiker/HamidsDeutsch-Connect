@@ -1528,6 +1528,7 @@ function App() {
             </div>
           </div>
           <div className="version">{t('version', 'نسخه ۰.۱.۰')}</div>
+          <div className="made-by">Presented with ❤️ by Hamidreza</div>
         </div>
       </aside>
 
@@ -1754,7 +1755,13 @@ function App() {
                 setFreeProgress(`اتصال به ${server.name}...`)
                 setFreeError(null)
                 try {
-                  const result = await window.hamidsDeutsch.free.connectFromPool({
+                  const result = await window.hamidsDeutsch.free.connectSpecificNode({
+                    nodeId: server.id,
+                    nodeUri: server.uri,
+                    nodeName: server.name,
+                    nodeHost: server.host,
+                    nodePort: server.port,
+                    nodeProtocol: server.protocol,
                     directDomains: directDomains.domains,
                   })
                   if (result.success) {
@@ -2088,10 +2095,10 @@ function HomePage({
   onStartFastest,
   onStartPrevious,
   onStop,
-  onVerifyIp,
+  onVerifyIp: _onVerifyIp,
   onRetestLatency,
   onOpenServers,
-  onOpenDirectSites,
+  onOpenDirectSites: _onOpenDirectSites,
   onOpenRescue,
   codespaceConnecting,
   codespaceConnected,
@@ -2114,7 +2121,7 @@ function HomePage({
   showReconnectBar,
   lastConnectionType,
   onQuickReconnect,
-  geoBlockTrigger,
+  geoBlockTrigger: _geoBlockTrigger,
   dataLoading,
 }: HomePageProps) {
   const t = useT()
@@ -2584,8 +2591,6 @@ function HomePage({
         )}
       </section>
 
-      {heroConnected && <GeoBlockPanel autoRunTrigger={geoBlockTrigger} />}
-
       {!heroConnected && !fastestServer && !selectedServer && !latencyTesting && !dataLoading && (
         <div className="home-empty-state">
           <div className="home-empty-icon">◎</div>
@@ -2663,107 +2668,10 @@ function HomePage({
         />
       )}
 
-      {processStatus.running && (
-        <section
-          className={
-            isConnected
-              ? 'local-proxy-status-card local-proxy-status-card-verified'
-              : 'local-proxy-status-card'
-          }
-        >
-          <div>
-            <span className="panel-kicker">
-              {isConnected
-                ? 'Windows System Proxy'
-                : processStatus.systemProxyEnabled
-                  ? 'System Proxy Verification'
-                  : 'Local Proxy'}
-            </span>
-            <h3>
-              {isConnected
-                ? t('home.proxy.title.verified')
-                : processStatus.ready
-                  ? t('home.proxy.title.ready')
-                  : t('home.proxy.title.running')}
-            </h3>
-            <p dir="ltr">
-              {processStatus.localHost}:{processStatus.localPort}
-              {processStatus.pid ? ` · PID ${processStatus.pid}` : ''}
-            </p>
-
-            {(ipVerificationResult.directIp || ipVerificationResult.proxyIp) && (
-              <div className="ip-comparison-inline" dir="ltr">
-                <span>Direct: {ipVerificationResult.directIp ?? '—'}</span>
-                <span>Proxy: {ipVerificationResult.proxyIp ?? '—'}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="local-proxy-actions">
-            {processStatus.ready && !isConnected && (
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={processBusy || ipVerificationChecking}
-                onClick={onVerifyIp}
-              >
-                {ipVerificationChecking ? t('home.proxy.verifying') : t('home.proxy.recheck')}
-              </button>
-            )}
-
-            <button
-              className="remove-domain-button"
-              type="button"
-              disabled={processBusy || ipVerificationChecking}
-              onClick={onStop}
-            >
-              {t('home.proxy.stop')}
-            </button>
-          </div>
-        </section>
-      )}
-
       {(processError || latencyError || ipVerificationResult.error) && (
         <div className="form-message form-message-error">
           {friendlyError(processError ?? ipVerificationResult.error ?? latencyError)}
         </div>
-      )}
-
-      {isConnected && (
-        <section className="ip-verification-card">
-          <div className="ip-verification-heading">
-            <div>
-              <span className="panel-kicker">IP Verification</span>
-              <h3>
-                {processStatus.connectionMode === 'tun'
-                  ? t('home.proxy.title.tun')
-                  : t('home.proxy.title.global')}
-              </h3>
-            </div>
-            <span className="verified-connection-badge">{t('home.proxy.connected')}</span>
-          </div>
-
-          <div className="ip-verification-grid">
-            <div>
-              <span>IP</span>
-              <strong dir="ltr">{ipVerificationResult.directIp ?? '—'}</strong>
-              <small>
-                {ipVerificationResult.directDurationMs !== null
-                  ? `${ipVerificationResult.directDurationMs} ms`
-                  : '—'}
-              </small>
-            </div>
-            <div>
-              <span>{t('home.proxy.ipLabel')}</span>
-              <strong dir="ltr">{ipVerificationResult.proxyIp ?? '—'}</strong>
-              <small>
-                {ipVerificationResult.proxyDurationMs !== null
-                  ? `${ipVerificationResult.proxyDurationMs} ms`
-                  : '—'}
-              </small>
-            </div>
-          </div>
-        </section>
       )}
 
       <section className="home-grid">
@@ -2802,24 +2710,6 @@ function HomePage({
               muted={!isConnected}
             />
           </div>
-        </article>
-
-        <article className="panel-card">
-          <div className="panel-heading">
-            <div><span className="panel-kicker">{t('home.direct.kicker')}</span><h3>{t('home.direct.title')}</h3></div>
-            <button className="text-button" type="button" onClick={onOpenDirectSites}>{t('home.direct.manage')}</button>
-          </div>
-          <div className="domain-preview-list">
-            {directDomains.slice(0, 3).map((domain) => (
-              <DomainPreview domain={domain} key={domain} />
-            ))}
-            {directDomains.length === 0 && (
-              <p className="empty-list-message">{t('home.direct.empty')}</p>
-            )}
-          </div>
-          <button className="secondary-button" type="button" onClick={onOpenDirectSites}>
-            {t('home.direct.viewAll')}
-          </button>
         </article>
 
         <article className="panel-card rescue-preview-card">
@@ -3091,23 +2981,6 @@ function DetailRow({
       >
         {value}
       </strong>
-    </div>
-  )
-}
-
-function DomainPreview({
-  domain,
-}: {
-  domain: string
-}) {
-  const t = useT()
-  return (
-    <div className="domain-preview">
-      <span className="domain-preview-check">
-        ✓
-      </span>
-      <span dir="ltr">{domain}</span>
-      <small>{t('servers.direct')}</small>
     </div>
   )
 }
@@ -6218,71 +6091,6 @@ function SettingsPage({
         />
       </section>
     </div>
-  )
-}
-
-function GeoBlockPanel({ autoRunTrigger }: { autoRunTrigger?: number }) {
-  const t = useT()
-  const [results, setResults] = useState<{
-    name: string
-    domain: string
-    accessible: boolean
-    status: number | null
-    error: string | null
-  }[] | null>(null)
-  const [testing, setTesting] = useState(false)
-  const [testedAt, setTestedAt] = useState<string | null>(null)
-
-  async function runTest() {
-    if (testing) return
-    setTesting(true)
-    try {
-      const r = await window.hamidsDeutsch.geoblock.test()
-      setResults(r.results)
-      setTestedAt(r.testedAt)
-    } catch {
-      setResults(null)
-    } finally {
-      setTesting(false)
-    }
-  }
-
-  // Auto-run when trigger changes (set on connect)
-  useEffect(() => {
-    if (autoRunTrigger) {
-      const timer = setTimeout(() => { void runTest() }, 3500)
-      return () => clearTimeout(timer)
-    }
-  }, [autoRunTrigger])
-
-  return (
-    <section className="geoblock-panel">
-      <div className="geoblock-header">
-        <span className="geoblock-title">{t('geoblock.title')}</span>
-        <button
-          className="secondary-button geoblock-test-btn"
-          type="button"
-          disabled={testing}
-          onClick={() => void runTest()}
-        >
-          {testing ? t('geoblock.testing') : t('geoblock.test')}
-        </button>
-      </div>
-      {results ? (
-        <div className="geoblock-results">
-          {results.map((r) => (
-            <div key={r.domain} className={`geoblock-row ${r.accessible ? 'geoblock-ok' : 'geoblock-blocked'}`}>
-              <span className="geoblock-icon">{r.accessible ? '✓' : '✗'}</span>
-              <span className="geoblock-name">{r.name}</span>
-              <span className="geoblock-status">{r.accessible ? t('geoblock.open') : t('geoblock.blocked')}</span>
-            </div>
-          ))}
-          {testedAt && (
-            <span className="geoblock-time">{new Date(testedAt).toLocaleTimeString()}</span>
-          )}
-        </div>
-      ) : null}
-    </section>
   )
 }
 

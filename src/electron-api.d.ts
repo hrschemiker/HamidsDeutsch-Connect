@@ -743,6 +743,17 @@ declare global {
           rescueOptions?: RescueOptions | null
         }) => Promise<FreeConnectResult>
 
+        connectSpecificNode: (input: {
+          nodeId: string
+          nodeUri: string
+          nodeName: string
+          nodeHost: string | null
+          nodePort: number | null
+          nodeProtocol: string
+          directDomains?: string[]
+          rescueOptions?: RescueOptions | null
+        }) => Promise<FreeConnectResult>
+
         disconnect: () => Promise<{ success: boolean; error: string | null }>
 
         getStatus: () => Promise<FreeConfigStatus>

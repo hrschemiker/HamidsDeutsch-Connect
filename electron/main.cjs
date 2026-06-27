@@ -181,6 +181,8 @@ const FREE_CONFIG_SOURCES = [
   'https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/all/configs.txt',
   'https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/mix',
   'https://raw.githubusercontent.com/Pawdroid/Free-servers/main/sub',
+  'https://raw.githubusercontent.com/sinavm/SVM/main/Splitted-By-Protocol/mix',
+  'https://raw.githubusercontent.com/AmirrezaFarnamTaheri/ConfigStream/main/All_Configs_Sub.txt',
 ]
 const FREE_TEST_TIMEOUT = 3500
 const FREE_CONNECT_ATTEMPTS = 5
@@ -3598,6 +3600,43 @@ function registerIpcHandlers() {
       rescueOptions: input?.rescueOptions ?? null,
       fetchFresh: false,
     })
+  })
+
+  ipcMain.handle('free:connect-specific-node', async (_event, input) => {
+    const { nodeId, nodeUri, nodeName, nodeHost, nodePort, nodeProtocol, directDomains, rescueOptions } = input ?? {}
+    if (!nodeUri || !nodeId) return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: 'اطلاعات سرور ناقص است.' }
+
+    freeConfigState.userDisconnected = false
+    try { assertBpbInactive() } catch (err) { return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: err.message } }
+
+    const mainStatus = getProcessStatus()
+    if (mainStatus.running) {
+      try { await stopLocalProxy({ userDataPath: app.getPath('userData') }) } catch {}
+    }
+
+    const record = {
+      id: nodeId,
+      uri: nodeUri,
+      node: { valid: true, host: nodeHost, port: nodePort, name: nodeName, protocol: nodeProtocol, transport: null, tls: false, security: null },
+    }
+    const dd = Array.isArray(directDomains) ? directDomains : []
+    sendFreeProgress(`اتصال به ${nodeName}...`, 'connecting')
+    const configPath = await tryConnectFreeNode(record, dd, rescueOptions ?? null)
+    if (configPath) {
+      freeConfigState.phase = 'connected'
+      freeConfigState.nodeId = nodeId
+      freeConfigState.nodeName = nodeName
+      freeConfigState.latencyMs = null
+      freeConfigState.error = null
+      await markFreeSuccess(nodeId).catch(() => {})
+      setVirtualLocationConnected(true)
+      sendFreeProgress(`متصل شد: ${nodeName}`, 'connected')
+      return { success: true, nodeId, nodeName, latencyMs: null, error: null }
+    }
+    freeConfigState.phase = 'error'
+    freeConfigState.error = `اتصال به ${nodeName} ناموفق بود.`
+    sendFreeProgress(freeConfigState.error, 'error')
+    return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: freeConfigState.error }
   })
 
   // ── Geo-block test ──────────────────────────────────────────────────────────

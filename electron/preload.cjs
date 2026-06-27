@@ -228,6 +228,9 @@ contextBridge.exposeInMainWorld(
       connectFromPool: (input) =>
         ipcRenderer.invoke('free:connect-from-pool', input),
 
+      connectSpecificNode: (input) =>
+        ipcRenderer.invoke('free:connect-specific-node', input),
+
       disconnect: () =>
         ipcRenderer.invoke('free:disconnect'),
 
