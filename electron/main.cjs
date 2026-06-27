@@ -57,6 +57,7 @@ const {
   getPoolMeta: getFreePoolMeta,
   getAllPool: getAllFreePool,
   PING_THRESHOLD_MS,
+  MIN_PING_MS,
 } = require('./free-config-store.cjs')
 
 const {
@@ -376,7 +377,7 @@ async function backgroundRefreshFreePool() {
       const toStore = chunk
         .filter((r) => {
           const lr = latencyMap.get(r.id)
-          return lr && lr.reachable && typeof lr.latencyMs === 'number' && lr.latencyMs < PING_THRESHOLD_MS
+          return lr && lr.reachable && typeof lr.latencyMs === 'number' && lr.latencyMs >= MIN_PING_MS && lr.latencyMs < PING_THRESHOLD_MS
         })
         .map((r) => ({
           id: r.id,
@@ -3637,6 +3638,16 @@ function registerIpcHandlers() {
     freeConfigState.error = `اتصال به ${nodeName} ناموفق بود.`
     sendFreeProgress(freeConfigState.error, 'error')
     return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: freeConfigState.error }
+  })
+
+  ipcMain.handle('free:refresh-pool', async () => {
+    try {
+      await backgroundRefreshFreePool()
+      const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
+      return { success: true, servers, meta, error: null }
+    } catch (err) {
+      return { success: false, servers: [], meta: null, error: err?.message ?? 'خطا در بروزرسانی مخزن' }
+    }
   })
 
   // ── Geo-block test ──────────────────────────────────────────────────────────

@@ -754,6 +754,8 @@ declare global {
           rescueOptions?: RescueOptions | null
         }) => Promise<FreeConnectResult>
 
+        refreshPool: () => Promise<FreePoolResult>
+
         disconnect: () => Promise<{ success: boolean; error: string | null }>
 
         getStatus: () => Promise<FreeConfigStatus>

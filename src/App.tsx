@@ -1720,12 +1720,42 @@ function App() {
                   .map((n) => ({ id: n.id, name: n.name, protocol: n.protocol, latencyMs: latency.results[n.id]?.latencyMs ?? null }))
               })()}
               topFreeServers={freePool
-                .filter((s) => s.latencyMs != null)
+                .filter((s) => s.latencyMs != null && s.latencyMs >= 100)
                 .sort((a, b) => (a.latencyMs ?? 9999) - (b.latencyMs ?? 9999))
                 .slice(0, 5)}
               onConnectSubServer={(id) => {
                 const node = serverNodes.nodes.find((n) => n.id === id)
                 if (node) void prepareAndStart(node)
+              }}
+              onConnectFreeServer={async (server) => {
+                setFreePhase('connecting')
+                setFreeProgress(`اتصال به ${server.name}...`)
+                setFreeError(null)
+                try {
+                  const result = await window.hamidsDeutsch.free.connectSpecificNode({
+                    nodeId: server.id,
+                    nodeUri: server.uri,
+                    nodeName: server.name,
+                    nodeHost: server.host,
+                    nodePort: server.port,
+                    nodeProtocol: server.protocol,
+                    directDomains: directDomains.domains,
+                  })
+                  if (result.success) {
+                    setFreePhase('connected')
+                    setFreeNodeName(result.nodeName)
+                    setFreeLatencyMs(result.latencyMs)
+                    setFreeError(null)
+                  } else {
+                    setFreePhase('error')
+                    setFreeError(result.error ?? 'اتصال ناموفق بود.')
+                  }
+                } catch (err) {
+                  setFreePhase('error')
+                  setFreeError(err instanceof Error ? err.message : 'خطا')
+                } finally {
+                  setFreeProgress(null)
+                }
               }}
             />
           )}
@@ -1794,6 +1824,18 @@ function App() {
                   setFreeError(err instanceof Error ? err.message : 'خطا')
                 } finally {
                   setFreeProgress(null)
+                }
+              }}
+              onRefreshFreePool={async () => {
+                setFreePoolMeta((prev) => prev ? { ...prev, poolRefreshing: true } : prev)
+                try {
+                  const result = await window.hamidsDeutsch.free.refreshPool()
+                  if (result.success) {
+                    setFreePool(result.servers)
+                    if (result.meta) setFreePoolMeta({ total: result.meta.total, displaying: result.meta.displaying, lastRefreshedAt: result.meta.lastRefreshedAt, poolRefreshing: false })
+                  }
+                } catch {
+                  setFreePoolMeta((prev) => prev ? { ...prev, poolRefreshing: false } : prev)
                 }
               }}
             />
@@ -2073,6 +2115,7 @@ type HomePageProps = {
   topSubServers: Array<{ id: string; name: string; protocol: string; latencyMs: number | null }>
   topFreeServers: FreePoolServer[]
   onConnectSubServer: (id: string) => void
+  onConnectFreeServer: (server: FreePoolServer) => void
   freePhase: FreeConfigPhase
   freeNodeName: string | null
   freeLatencyMs: number | null
@@ -2125,8 +2168,8 @@ function HomePage({
   codespaceHost,
   onCodespaceConnect,
   onCodespaceDisconnect,
-  onOpenBpb: _onOpenBpb,
-  onBpbQuickConnect,
+  onOpenBpb,
+  onBpbQuickConnect: _onBpbQuickConnect,
   bpbConfigured,
   freePhase,
   freeNodeName,
@@ -2144,6 +2187,7 @@ function HomePage({
   topSubServers,
   topFreeServers,
   onConnectSubServer,
+  onConnectFreeServer,
 }: HomePageProps) {
   const t = useT()
 
@@ -2249,7 +2293,7 @@ function HomePage({
   ].filter(Boolean).join(' ')
 
   const [adminBannerDismissed, setAdminBannerDismissed] = useState(false)
-  const [bpbConnecting, setBpbConnecting] = useState(false)
+  // bpbConnecting removed — BPB connects via BPB tab only
 
   function handleSubscriptionConnect() {
     if (activeMethod === 'subscription') {
@@ -2266,30 +2310,6 @@ function HomePage({
       )
     } else {
       void onStartFastest()
-    }
-  }
-
-  async function handleBpbConnect() {
-    if (bpbConnecting) return
-    if (activeMethod === 'bpb') {
-      requireSwitch(
-        t('btn.disconnect'),
-        'اتصال BPB قطع می‌شود. ادامه می‌دهید؟',
-        () => { setSwitchConfirm(null); onMainAction() },
-      )
-    } else if (processStatus.running || codespaceConnected || freeConnected) {
-      requireSwitch(
-        'تغییر روش اتصال',
-        'اتصال فعلی قطع می‌شود و از طریق BPB متصل می‌شوید. ادامه می‌دهید؟',
-        async () => {
-          setSwitchConfirm(null)
-          setBpbConnecting(true)
-          try { await onBpbQuickConnect() } finally { setBpbConnecting(false) }
-        },
-      )
-    } else {
-      setBpbConnecting(true)
-      try { await onBpbQuickConnect() } finally { setBpbConnecting(false) }
     }
   }
 
@@ -2457,14 +2477,13 @@ function HomePage({
             <button
               className={`method-btn method-btn-gold${activeMethod === 'bpb' ? ' method-btn-active' : ''}`}
               type="button"
-              disabled={(processBusy && activeMethod !== 'bpb') || (bpbConnecting && activeMethod !== 'bpb')}
-              onClick={() => void handleBpbConnect()}
+              onClick={() => onOpenBpb()}
             >
               <span className="method-btn-icon">
-                {bpbConnecting ? <span className="connection-stage-spinner">◌</span> : activeMethod === 'bpb' && processBusy ? <span className="connection-stage-spinner">◌</span> : activeMethod === 'bpb' ? '■' : '◈'}
+                {activeMethod === 'bpb' ? '■' : '◈'}
               </span>
               <span className="method-btn-label">
-                <strong>{activeMethod === 'bpb' ? t('btn.disconnect') : bpbConnecting ? 'در حال اتصال...' : (bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup'))}</strong>
+                <strong>{activeMethod === 'bpb' ? 'BPB متصل است' : (bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup'))}</strong>
                 <small>BPB Panel</small>
               </span>
             </button>
@@ -2772,16 +2791,10 @@ function HomePage({
                       if (activeMethod) {
                         requireSwitch('تغییر روش', 'اتصال فعلی قطع و به سرور رایگان انتخابی متصل می‌شوید.', () => {
                           setSwitchConfirm(null)
-                          void window.hamidsDeutsch.free.connectSpecificNode({
-                            nodeId: s.id, nodeUri: s.uri, nodeName: s.name,
-                            nodeHost: s.host, nodePort: s.port, nodeProtocol: s.protocol,
-                          })
+                          onConnectFreeServer(s)
                         })
                       } else {
-                        void window.hamidsDeutsch.free.connectSpecificNode({
-                          nodeId: s.id, nodeUri: s.uri, nodeName: s.name,
-                          nodeHost: s.host, nodePort: s.port, nodeProtocol: s.protocol,
-                        })
+                        onConnectFreeServer(s)
                       }
                     }}
                   >▶</button>
@@ -3606,6 +3619,7 @@ function ServersPage({
   onClearSelectedServer,
   onOpenSubscriptions,
   onConnectFreeNode,
+  onRefreshFreePool,
 }: {
   loading: boolean
   nodes: SafeServerNode[]
@@ -3649,6 +3663,7 @@ function ServersPage({
   onClearSelectedServer: () => void
   onOpenSubscriptions: () => void
   onConnectFreeNode: (server: FreePoolServer) => void
+  onRefreshFreePool: () => void
 }) {
   const t = useT()
   const [expandedServerId, setExpandedServerId] =
@@ -4076,7 +4091,7 @@ function ServersPage({
         />
       )}
 
-      {(freePool.length > 0 || freePoolMeta) && (
+      {(true) && (
         <section className="free-pool-section">
           <div className="panel-heading">
             <div>
@@ -4089,10 +4104,17 @@ function ServersPage({
                 {freePoolMeta ? `${freePoolMeta.total} سرور ذخیره · نمایش ${freePoolMeta.displaying}` : `${freePool.length} سرور`}
                 {freePoolMeta?.lastRefreshedAt && ` · ${formatRelativeTime(freePoolMeta.lastRefreshedAt)}`}
               </span>
+              <button
+                className="free-pool-refresh-btn"
+                type="button"
+                disabled={freePoolMeta?.poolRefreshing || freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting'}
+                onClick={() => void onRefreshFreePool()}
+                title="دریافت مجدد سرورها از منابع"
+              >↻ دریافت مجدد</button>
             </div>
           </div>
           <div className="free-pool-list">
-            {freePool.map((server, index) => (
+            {freePool.filter((s) => s.latencyMs == null || s.latencyMs >= 100).map((server, index) => (
               <div
                 key={server.id}
                 className="free-pool-row"

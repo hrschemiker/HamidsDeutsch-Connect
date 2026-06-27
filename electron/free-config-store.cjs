@@ -7,6 +7,7 @@ const DATA_FILE = 'free-config-pool.json'
 const MAX_POOL_SIZE = 400
 const MAX_FAIL_COUNT = 3
 const PING_THRESHOLD_MS = 400
+const MIN_PING_MS = 100
 
 function getFilePath() {
   return path.join(app.getPath('userData'), DATA_DIR, DATA_FILE)
@@ -81,7 +82,7 @@ async function mergeServers(newServers) {
   const map = new Map(pool.servers.map((s) => [s.id, s]))
 
   for (const s of newServers) {
-    if (typeof s.latencyMs === 'number' && s.latencyMs >= PING_THRESHOLD_MS) continue
+    if (typeof s.latencyMs === 'number' && (s.latencyMs < MIN_PING_MS || s.latencyMs >= PING_THRESHOLD_MS)) continue
     const existing = map.get(s.id)
     map.set(s.id, {
       ...(existing ?? {}),
@@ -95,7 +96,7 @@ async function mergeServers(newServers) {
   const merged = [...map.values()].filter(
     (s) =>
       (s.failCount ?? 0) < MAX_FAIL_COUNT &&
-      (s.latencyMs == null || s.latencyMs < PING_THRESHOLD_MS),
+      (s.latencyMs == null || (s.latencyMs >= MIN_PING_MS && s.latencyMs < PING_THRESHOLD_MS)),
   )
   return writePool(merged)
 }
@@ -123,7 +124,7 @@ async function revalidatePool(latencyFn) {
     .map((s) => {
       const lr = latencyMap.get(s.id)
       if (!lr) return { ...s, failCount: (s.failCount ?? 0) + 1 }
-      if (!lr.reachable || typeof lr.latencyMs !== 'number' || lr.latencyMs >= PING_THRESHOLD_MS) {
+      if (!lr.reachable || typeof lr.latencyMs !== 'number' || lr.latencyMs < MIN_PING_MS || lr.latencyMs >= PING_THRESHOLD_MS) {
         return { ...s, failCount: (s.failCount ?? 0) + 1 }
       }
       return { ...s, latencyMs: lr.latencyMs, failCount: 0, lastTestedAt: now }
@@ -182,4 +183,5 @@ module.exports = {
   getPoolMeta,
   getAllPool,
   PING_THRESHOLD_MS,
+  MIN_PING_MS,
 }
