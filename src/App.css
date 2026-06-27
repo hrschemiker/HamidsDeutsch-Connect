@@ -4974,3 +4974,283 @@ button {
   flex-shrink: 0;
   animation: poolRefreshPulse 1.5s ease-in-out infinite;
 }
+
+/* ── Latency badge — color-coded ─────────────────────────────────────────── */
+
+.latency-badge-colored {
+  color: var(--lat-color, var(--text-secondary));
+  border-color: var(--lat-color, transparent);
+  border-style: solid;
+  border-width: 1px;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s, border-color 0.3s;
+}
+
+/* ── Protocol badge icon glyph ───────────────────────────────────────────── */
+
+.pb-icon {
+  margin-inline-end: 4px;
+  font-style: normal;
+}
+
+/* ── Hero connection-mode pill ───────────────────────────────────────────── */
+
+.hero-mode-pill {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+/* ── Stats cards fade-in animation on connect ────────────────────────────── */
+
+@keyframes statCardFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.stats-connected .statistic-card {
+  animation: statCardFadeIn 0.3s ease both;
+}
+
+/* ── Speed mini-bar ──────────────────────────────────────────────────────── */
+
+.speed-bar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.speed-bar-wrap {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-secondary) 20%, transparent);
+  overflow: hidden;
+  width: 100%;
+}
+
+.speed-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+@keyframes speedBarPulse {
+  0%   { width: 10%; }
+  50%  { width: 70%; }
+  100% { width: 10%; }
+}
+
+.speed-bar-testing {
+  animation: speedBarPulse 1.4s ease-in-out infinite;
+}
+
+/* ── REALITY chip on ConnectionChoiceCard ────────────────────────────────── */
+
+.connection-choice-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.reality-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, #a78bfa 15%, transparent);
+  color: #a78bfa;
+  border: 1px solid color-mix(in srgb, #a78bfa 40%, transparent);
+}
+
+/* ── Server sort bar ─────────────────────────────────────────────────────── */
+
+.server-sort-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 0 2px;
+}
+
+.sort-chip {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.sort-chip:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sort-chip-active {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Server latency fill bar (behind name) ───────────────────────────────── */
+
+.server-list-item {
+  position: relative;
+  overflow: hidden;
+}
+
+.server-list-item::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: var(--lat-pct, 0%);
+  background: color-mix(in srgb, var(--lat-color, var(--accent)) 10%, transparent);
+  pointer-events: none;
+  transition: width 0.4s ease, background 0.4s ease;
+  border-radius: inherit;
+}
+
+/* ── Reconnect bar ───────────────────────────────────────────────────────── */
+
+.reconnect-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  margin-bottom: 8px;
+}
+
+.reconnect-bar-label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.reconnect-bar-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
+/* ── Empty home state ────────────────────────────────────────────────────── */
+
+.home-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 16px;
+  text-align: center;
+}
+
+.home-empty-icon {
+  font-size: 2.2rem;
+  opacity: 0.4;
+}
+
+.home-empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.home-empty-steps {
+  list-style: decimal;
+  text-align: start;
+  padding-inline-start: 20px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+/* ── Undo toast bar ──────────────────────────────────────────────────────── */
+
+.undo-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  background: var(--surface-raised, #2a2a2a);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  font-size: 13px;
+  color: var(--text);
+  z-index: 9999;
+  white-space: nowrap;
+  animation: undoBarIn 0.2s ease;
+}
+
+@keyframes undoBarIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.undo-bar-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ── Reconnect countdown (auto-reconnect phase) ──────────────────────────── */
+
+.reconnect-countdown {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  margin-inline-start: 4px;
+  color: var(--accent);
+}
+
+/* ── History timeline grouped by date ────────────────────────────────────── */
+
+.history-date-group {
+  margin-top: 14px;
+}
+
+.history-date-group:first-child {
+  margin-top: 0;
+}
+
+.history-date-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 0 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+

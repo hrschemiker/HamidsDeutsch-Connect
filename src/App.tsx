@@ -251,6 +251,18 @@ function App() {
   // Speed test
   const [speedTestResult, setSpeedTestResult] = useState<{ mbps: number | null; running: boolean; error: string | null } | null>(null)
 
+  // Geo-block auto-run trigger
+  const [geoBlockTrigger, setGeoBlockTrigger] = useState(0)
+
+  // Last connection for one-tap reconnect
+  const [lastConnectionType, setLastConnectionType] = useState<'free' | 'subscription' | 'bpb' | 'codespace' | null>(null)
+  const [showReconnectBar, setShowReconnectBar] = useState(false)
+
+  // Ctrl+Enter keyboard shortcut toggle (UX #9)
+  const [ctrlEnterEnabled, setCtrlEnterEnabled] = useState<boolean>(() => {
+    try { return localStorage.getItem('hamidsdeutsch:ctrl-enter') !== 'false' } catch { return true }
+  })
+
   // For smart hero-button priority: know if BPB/codespace are configured
   const [codespaceHasToken, setCodespaceHasToken] = useState(false)
 
@@ -299,15 +311,18 @@ function App() {
       hasConnectedRef.current = true
       if (!prevHeroConnectedRef.current) {
         const mode = freePhase === 'connected' ? 'free' : codespaceConnected ? 'codespace' : 'subscription'
+        setLastConnectionType(mode)
+        setShowReconnectBar(false)
         connectionStartRef.current = {
           at: new Date().toISOString(),
           mode,
-          serverName: freePhase === 'connected' ? (freeNodeName ?? null) : (selectedServer?.name ?? null),
-          protocol: freePhase === 'connected' ? null : (selectedServer?.protocol ?? null),
+          serverName: freePhase === 'connected' ? (freeNodeName ?? null) : (selectedServer.selectedServer?.name ?? null),
+          protocol: freePhase === 'connected' ? null : (selectedServer.selectedServer?.protocol ?? null),
           latencyMs: null,
         }
-        // Auto speed test: run 2 seconds after connect to let the tunnel stabilize
+        // Auto speed test and geo-block test: run after connect
         setSpeedTestResult({ mbps: null, running: true, error: null })
+        setGeoBlockTrigger((n) => n + 1)
         setTimeout(() => {
           void window.hamidsDeutsch.speedtest.run().then((r) => {
             setSpeedTestResult({ mbps: r.mbps, running: false, error: r.error })
@@ -322,6 +337,7 @@ function App() {
       const startEntry = connectionStartRef.current
       connectionStartRef.current = null
       setSpeedTestResult(null)
+      setShowReconnectBar(true)
       setToastMessage('اتصال قطع شد · پراکسی ویندوز بازگردانی شد')
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
       toastTimerRef.current = setTimeout(() => setToastMessage(null), 3200)
@@ -388,6 +404,9 @@ function App() {
         if (r.success) setFreePool(r.servers)
       })
       setFreePoolMeta((prev) => ({ ...prev, total: payload.count, displaying: payload.displaying, lastRefreshedAt: payload.refreshedAt, poolRefreshing: false } as typeof prev))
+      setToastMessage(`${payload.count} سرور رایگان در مخزن — ${payload.displaying} در حال نمایش`)
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500)
     })
     const unsubPoolStatus = window.hamidsDeutsch.free.onPoolStatus((payload) => {
       setFreePoolMeta((prev) => ({
@@ -568,6 +587,28 @@ function App() {
     serverNodes.nodes.length,
     subscriptions.subscriptions.length,
   ])
+
+  // Auto-select fastest server after latency test completes
+  const prevLatencyTesting = useRef(false)
+  useEffect(() => {
+    if (prevLatencyTesting.current && !latency.testing && fastestServer && !selectedServer.selectedServer) {
+      selectedServer.selectServer(toPublicServer(fastestServer))
+    }
+    prevLatencyTesting.current = latency.testing
+  }, [latency.testing, fastestServer, selectedServer])
+
+  // Ctrl+Enter global keyboard shortcut (UX #9)
+  useEffect(() => {
+    if (!ctrlEnterEnabled) return
+    function handleKeyDown(e: globalThis.KeyboardEvent) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        void smartHeroConnect()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [ctrlEnterEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Background latency refresh: re-test every 10 minutes when not connected
   useEffect(() => {
@@ -1128,6 +1169,24 @@ function App() {
     }
   }
 
+  async function quickReconnect() {
+    if (appHeroConnected) return
+    if (lastConnectionType === 'free') {
+      void connectFreeConfig()
+    } else if (lastConnectionType === 'codespace') {
+      void connectViaCodespace()
+    } else if (lastConnectionType === 'bpb') {
+      const profileResult = await window.hamidsDeutsch.bpb.getProfile().catch(() => null)
+      const panelUrl = profileResult?.profile?.panelUrl?.trim()
+      if (panelUrl) {
+        void window.hamidsDeutsch.bpb.quickConnect({ panelUrl, directDomains: directDomains.domains })
+      }
+    } else {
+      void smartHeroConnect()
+    }
+    setShowReconnectBar(false)
+  }
+
   async function recoverConnection(
     failedNodeId: string | null,
   ) {
@@ -1566,6 +1625,10 @@ function App() {
               onFreeConnect={() => void connectFreeConfig()}
               onFreeDisconnect={() => void disconnectFreeConfig()}
               speedTest={speedTestResult}
+              showReconnectBar={showReconnectBar}
+              lastConnectionType={lastConnectionType}
+              onQuickReconnect={() => void quickReconnect()}
+              geoBlockTrigger={geoBlockTrigger}
             />
           )}
 
@@ -1783,6 +1846,11 @@ function App() {
                 if (r.updated) setEngineUpdateAvailable(false)
                 return r
               }}
+              ctrlEnterEnabled={ctrlEnterEnabled}
+              onCtrlEnterToggle={(v) => {
+                setCtrlEnterEnabled(v)
+                try { localStorage.setItem('hamidsdeutsch:ctrl-enter', v ? 'true' : 'false') } catch {}
+              }}
             />
           )}
         </main>
@@ -1902,6 +1970,10 @@ type HomePageProps = {
   onFreeConnect: () => void
   onFreeDisconnect: () => void
   speedTest: { mbps: number | null; running: boolean; error: string | null } | null
+  showReconnectBar: boolean
+  lastConnectionType: string | null
+  onQuickReconnect: () => void
+  geoBlockTrigger: number
 }
 
 function HomePage({
@@ -1950,11 +2022,30 @@ function HomePage({
   onFreeConnect,
   onFreeDisconnect,
   speedTest,
+  showReconnectBar,
+  lastConnectionType,
+  onQuickReconnect,
+  geoBlockTrigger,
 }: HomePageProps) {
   const t = useT()
   const mainActionAvailable = Boolean(
     processStatus.running || codespaceConnected || freePhase === 'connected' || fastestServer || selectedServer,
   )
+
+  // ── Local reconnect dismiss ───────────────────────────────────────────────
+  const [reconnectDismissed, setReconnectDismissed] = useState(false)
+  useEffect(() => { if (showReconnectBar) setReconnectDismissed(false) }, [showReconnectBar])
+  function setShowReconnectBarLocal(v: boolean) { if (!v) setReconnectDismissed(true) }
+  const showReconnect = showReconnectBar && !reconnectDismissed
+
+  // ── Reconnect countdown (UX #10) ──────────────────────────────────────────
+  const [reconnectSecs, setReconnectSecs] = useState(0)
+  useEffect(() => {
+    if (freePhase !== 'reconnecting') { setReconnectSecs(0); return }
+    setReconnectSecs(0)
+    const id = setInterval(() => setReconnectSecs((s) => s + 1), 1000)
+    return () => clearInterval(id)
+  }, [freePhase])
 
   // ── Session timer ──────────────────────────────────────────────────────────
   const freeConnectedLocal = freePhase === 'connected'
@@ -2182,11 +2273,32 @@ function HomePage({
               </div>
             </div>
           </div>
+          {heroConnected && (
+            <div className="hero-mode-pill">
+              {freePhase === 'connected'
+                ? t('hero.modeFree')
+                : codespaceConnected
+                  ? t('hero.modeCodespace')
+                  : t('hero.modeSubscription')}
+            </div>
+          )}
         </div>
       </section>
 
-      <section className="quick-statistics">
-        <article className="statistic-card">
+      {showReconnect && !heroConnected && (
+        <div className="reconnect-bar">
+          <span className="reconnect-bar-label">
+            {t('reconnect.label')} {lastConnectionType === 'free' ? t('reconnect.free') : lastConnectionType === 'codespace' ? 'Codespace' : lastConnectionType === 'bpb' ? 'BPB' : t('reconnect.subscription')}
+          </span>
+          <button className="primary-button reconnect-bar-btn" type="button" onClick={onQuickReconnect}>
+            {t('reconnect.button')}
+          </button>
+          <button className="text-button" type="button" onClick={() => setShowReconnectBarLocal(false)}>✕</button>
+        </div>
+      )}
+
+      <section className={`quick-statistics${heroConnected ? ' stats-connected' : ''}`}>
+        <article className="statistic-card" style={heroConnected ? { animationDelay: '0ms' } : undefined}>
           <span className="statistic-icon">◎</span>
           <div>
             <span className="statistic-label">{t('stats.outputIp')}</span>
@@ -2204,14 +2316,14 @@ function HomePage({
             </div>
           </div>
         </article>
-        <article className="statistic-card">
+        <article className="statistic-card" style={heroConnected ? { animationDelay: '80ms' } : undefined}>
           <span className="statistic-icon">◌</span>
           <div>
             <span className="statistic-label">{t('stats.prevServer')}</span>
             <strong>{selectedServer?.name ?? t('stats.notSelected')}</strong>
           </div>
         </article>
-        <article className="statistic-card">
+        <article className="statistic-card" style={heroConnected ? { animationDelay: '160ms' } : undefined}>
           <span className="statistic-icon">↗</span>
           <div>
             <span className="statistic-label">{t('stats.directSites')}</span>
@@ -2219,23 +2331,40 @@ function HomePage({
           </div>
         </article>
         {speedTest && (
-          <article className="statistic-card">
+          <article className="statistic-card" style={heroConnected ? { animationDelay: '240ms' } : undefined}>
             <span className="statistic-icon">⚡</span>
             <div>
               <span className="statistic-label">{t('stats.speed')}</span>
-              <strong dir="ltr">
-                {speedTest.running
-                  ? t('stats.speedTesting')
-                  : speedTest.mbps !== null
-                    ? `${speedTest.mbps} Mbps`
-                    : t('stats.speedError')}
-              </strong>
+              {speedTest.running ? (
+                <span className="speed-bar-wrap"><span className="speed-bar-fill speed-bar-testing" /></span>
+              ) : speedTest.mbps !== null ? (
+                <div className="speed-bar-group">
+                  <span className="speed-bar-wrap">
+                    <span className="speed-bar-fill" style={{ width: `${Math.min(speedTest.mbps / 100 * 100, 100)}%` }} />
+                  </span>
+                  <strong dir="ltr">{speedTest.mbps} Mbps</strong>
+                </div>
+              ) : (
+                <strong>{t('stats.speedError')}</strong>
+              )}
             </div>
           </article>
         )}
       </section>
 
-      {heroConnected && <GeoBlockPanel />}
+      {heroConnected && <GeoBlockPanel autoRunTrigger={geoBlockTrigger} />}
+
+      {!heroConnected && !fastestServer && !selectedServer && !latencyTesting && (
+        <div className="home-empty-state">
+          <div className="home-empty-icon">◎</div>
+          <p className="home-empty-title">{t('home.empty.title')}</p>
+          <ol className="home-empty-steps">
+            <li>{t('home.empty.step1')}</li>
+            <li>{t('home.empty.step2')}</li>
+            <li>{t('home.empty.step3')}</li>
+          </ol>
+        </div>
+      )}
 
       <section className="connection-choice-grid">
         <ConnectionChoiceCard
@@ -2257,6 +2386,7 @@ function HomePage({
           onAction={onStartFastest}
           secondaryActionLabel={t('home.fastest.viewServers')}
           onSecondaryAction={onOpenServers}
+          realityBadge={(fastestServer?.security ?? '').toLowerCase() === 'reality'}
         />
 
         <ConnectionChoiceCard
@@ -2387,7 +2517,7 @@ function HomePage({
         )}
 
         {freeError && freePhase === 'error' && (
-          <div className="form-message form-message-error">{freeError}</div>
+          <div className="form-message form-message-error">{friendlyError(freeError)}</div>
         )}
 
         {freeConnected && (
@@ -2420,7 +2550,7 @@ function HomePage({
                   {freePhase === 'fetching' ? 'دریافت سرورها...' :
                    freePhase === 'testing' ? 'آزمون پینگ...' :
                    freePhase === 'connecting' ? 'در حال اتصال...' :
-                   freePhase === 'reconnecting' ? 'اتصال مجدد...' :
+                   freePhase === 'reconnecting' ? <span>اتصال مجدد<span className="reconnect-countdown"> ({reconnectSecs}s)</span></span> :
                    'دریافت سرور رایگان'}
                 </strong>
                 <small>جستجو · آزمون · اتصال خودکار</small>
@@ -2503,7 +2633,7 @@ function HomePage({
 
       {(processError || latencyError || ipVerificationResult.error) && (
         <div className="form-message form-message-error">
-          {processError ?? ipVerificationResult.error ?? latencyError}
+          {friendlyError(processError ?? ipVerificationResult.error ?? latencyError)}
         </div>
       )}
 
@@ -2627,6 +2757,7 @@ function ConnectionChoiceCard({
   onAction,
   secondaryActionLabel,
   onSecondaryAction,
+  realityBadge = false,
 }: {
   title: string
   kicker: string
@@ -2639,6 +2770,7 @@ function ConnectionChoiceCard({
   onAction: () => void
   secondaryActionLabel: string
   onSecondaryAction: () => void
+  realityBadge?: boolean
 }) {
   return (
     <article className="connection-choice-card">
@@ -2650,10 +2782,15 @@ function ConnectionChoiceCard({
           <h3>{title}</h3>
         </div>
 
-        <LatencyBadge
-          latencyMs={latencyMs}
-          testing={testing}
-        />
+        <div className="connection-choice-badges">
+          {realityBadge && (
+            <span className="reality-chip">🔐 REALITY</span>
+          )}
+          <LatencyBadge
+            latencyMs={latencyMs}
+            testing={testing}
+          />
+        </div>
       </div>
 
       <div className="connection-choice-server">
@@ -2699,15 +2836,74 @@ const PROTOCOL_COLORS: Record<string, string> = {
   anytls: '#f472b6',
 }
 
-function ProtocolBadge({ protocol }: { protocol: string }) {
+function ProtocolBadge({ protocol, security }: { protocol: string; security?: string | null }) {
   const key = protocol.toLowerCase().replace('://', '')
   const color = PROTOCOL_COLORS[key] ?? '#94a3b8'
   const label = protocol.toUpperCase().replace('://', '')
+  const icon = getProtocolIcon(key, security)
   return (
     <span className="protocol-badge" style={{ '--pb-color': color } as React.CSSProperties}>
-      {label}
+      <span className="pb-icon" aria-hidden="true">{icon}</span>{label}
     </span>
   )
+}
+
+// ── Latency helpers ───────────────────────────────────────────────────────────
+
+function getLatencyColor(ms: number | null): string {
+  if (ms === null) return 'var(--text-secondary)'
+  if (ms <= 100) return '#10b981'
+  if (ms <= 250) return '#f59e0b'
+  if (ms <= 400) return '#f97316'
+  return '#ef4444'
+}
+
+function getQualityLabel(ms: number | null, t: (k: string) => string): string {
+  if (ms === null) return '—'
+  if (ms <= 100) return t('quality.excellent')
+  if (ms <= 250) return t('quality.good')
+  if (ms <= 400) return t('quality.fair')
+  return t('quality.weak')
+}
+
+// ── Protocol icons ────────────────────────────────────────────────────────────
+
+const PROTOCOL_ICONS: Record<string, string> = {
+  vless: '🔒',
+  vmess: '🔒',
+  trojan: '🔒',
+  hysteria2: '⚡',
+  hy2: '⚡',
+  hysteria: '⚡',
+  tuic: '⚡',
+  wireguard: '◆',
+  anytls: '🛡',
+  ss: '●',
+  shadowsocks: '●',
+}
+
+function getProtocolIcon(protocol: string, security?: string | null): string {
+  const key = protocol.toLowerCase().replace('://', '')
+  if ((key === 'vless' || key === 'vmess' || key === 'trojan') && (security ?? '').toLowerCase() === 'reality') {
+    return '🔐'
+  }
+  return PROTOCOL_ICONS[key] ?? '●'
+}
+
+// ── Error message mapper ───────────────────────────────────────────────────────
+
+function friendlyError(raw: string | null | undefined): string {
+  if (!raw) return 'خطای ناشناخته'
+  const msg = raw.toLowerCase()
+  if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('تایم')) return 'سرور پاسخ نداد (timeout)'
+  if (msg.includes('refused') || msg.includes('econnrefused')) return 'پورت بسته است (connection refused)'
+  if (msg.includes('network') || msg.includes('شبکه')) return 'خطای شبکه — اتصال اینترنت را بررسی کن'
+  if (msg.includes('protocol') || msg.includes('پروتکل')) return 'پروتکل پشتیبانی نمی‌شود'
+  if (msg.includes('config') || msg.includes('کانفیگ')) return 'ساختار کانفیگ نامعتبر است'
+  if (msg.includes('uuid') || msg.includes('password') || msg.includes('auth')) return 'رمز یا UUID نادرست است'
+  if (msg.includes('ip') || msg.includes('تغییر')) return 'IP تغییر نکرد — تانل برقرار نشد'
+  if (msg.includes('sing-box') || msg.includes('engine')) return 'موتور sing-box خطا داد'
+  return raw
 }
 
 // ── formatRelativeTime ─────────────────────────────────────────────────────────
@@ -2769,17 +2965,15 @@ function LatencyBadge({
     )
   }
 
-  const qualityClass =
-    latencyMs <= 120
-      ? 'latency-badge-good'
-      : latencyMs <= 280
-        ? 'latency-badge-medium'
-        : 'latency-badge-slow'
+  const color = getLatencyColor(latencyMs)
+  const qualityLabel = getQualityLabel(latencyMs, t)
 
   return (
     <span
-      className={`latency-badge ${qualityClass}`}
+      className="latency-badge latency-badge-colored"
       dir="ltr"
+      style={{ color, borderColor: color } as React.CSSProperties}
+      title={qualityLabel}
     >
       {latencyMs} ms
     </span>
@@ -2957,6 +3151,10 @@ function SubscriptionsPage({
   const [removingId, setRemovingId] =
     useState<string | null>(null)
 
+  const [undoSubVisible, setUndoSubVisible] = useState(false)
+  const [undoSubData, setUndoSubData] = useState<{ name: string; host: string } | null>(null)
+  const undoSubTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const [inspectingId, setInspectingId] =
     useState<string | null>(null)
 
@@ -3017,6 +3215,7 @@ function SubscriptionsPage({
       return
     }
 
+    const subToRemove = subscriptions.find((s) => s.id === subscriptionId)
     setRemovingId(subscriptionId)
     setMessage(null)
 
@@ -3036,10 +3235,22 @@ function SubscriptionsPage({
       return
     }
 
-    setMessage({
-      type: 'success',
-      text: t('sub.success.delete'),
-    })
+    if (subToRemove) {
+      setUndoSubData({ name: subToRemove.name, host: subToRemove.host })
+      setUndoSubVisible(true)
+      if (undoSubTimer.current) clearTimeout(undoSubTimer.current)
+      undoSubTimer.current = setTimeout(() => setUndoSubVisible(false), 5000)
+    } else {
+      setMessage({ type: 'success', text: t('sub.success.delete') })
+    }
+  }
+
+  async function handleUndoRemoveSub() {
+    if (!undoSubData) return
+    if (undoSubTimer.current) clearTimeout(undoSubTimer.current)
+    setUndoSubVisible(false)
+    await onAddSubscription(undoSubData.name, undoSubData.host)
+    setUndoSubData(null)
   }
 
   async function handleInspectSubscription(
@@ -3341,6 +3552,15 @@ function SubscriptionsPage({
           </div>
         )}
       </section>
+
+      {undoSubVisible && (
+        <div className="undo-bar">
+          <span>{t('undo.removeSub')}</span>
+          <button className="secondary-button undo-bar-btn" type="button" onClick={() => void handleUndoRemoveSub()}>
+            {t('undo.button')}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -3418,6 +3638,9 @@ function ServersPage({
   const [switchConfirm, setSwitchConfirm] =
     useState<{ server: PublicServer } | null>(null)
 
+  type SortMode = 'ping' | 'name' | 'protocol' | 'reality'
+  const [sortMode, setSortMode] = useState<SortMode>('ping')
+
   if (loading) {
     return (
       <section className="empty-state">
@@ -3471,32 +3694,21 @@ function ServersPage({
     (node) => node.valid,
   )
 
-  const sortedNodes = [...nodes].sort(
-    (firstNode, secondNode) => {
-      const firstResult =
-        latencyResults[firstNode.id]
-      const secondResult =
-        latencyResults[secondNode.id]
-
-      const firstRank =
-        firstResult?.reachable &&
-        typeof firstResult.latencyMs === 'number'
-          ? firstResult.latencyMs
-          : firstResult
-            ? Number.MAX_SAFE_INTEGER - 1
-            : Number.MAX_SAFE_INTEGER - 2
-
-      const secondRank =
-        secondResult?.reachable &&
-        typeof secondResult.latencyMs === 'number'
-          ? secondResult.latencyMs
-          : secondResult
-            ? Number.MAX_SAFE_INTEGER - 1
-            : Number.MAX_SAFE_INTEGER - 2
-
-      return firstRank - secondRank
-    },
-  )
+  const sortedNodes = [...nodes].sort((a, b) => {
+    if (sortMode === 'name') return a.name.localeCompare(b.name)
+    if (sortMode === 'protocol') return a.protocol.localeCompare(b.protocol)
+    if (sortMode === 'reality') {
+      const aR = (a.security ?? '').toLowerCase() === 'reality' ? 0 : 1
+      const bR = (b.security ?? '').toLowerCase() === 'reality' ? 0 : 1
+      if (aR !== bR) return aR - bR
+    }
+    // default ping sort (also used as tiebreaker for reality)
+    const aRes = latencyResults[a.id]
+    const bRes = latencyResults[b.id]
+    const aRank = aRes?.reachable && typeof aRes.latencyMs === 'number' ? aRes.latencyMs : aRes ? Number.MAX_SAFE_INTEGER - 1 : Number.MAX_SAFE_INTEGER - 2
+    const bRank = bRes?.reachable && typeof bRes.latencyMs === 'number' ? bRes.latencyMs : bRes ? Number.MAX_SAFE_INTEGER - 1 : Number.MAX_SAFE_INTEGER - 2
+    return aRank - bRank
+  })
 
   function getServerStatus(
     node: SafeServerNode,
@@ -3609,6 +3821,19 @@ function ServersPage({
         )}
       </section>
 
+      <div className="server-sort-bar">
+        {(['ping', 'name', 'protocol', 'reality'] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            className={`sort-chip${sortMode === mode ? ' sort-chip-active' : ''}`}
+            onClick={() => setSortMode(mode)}
+          >
+            {mode === 'ping' ? t('servers.sort.ping') : mode === 'name' ? t('servers.sort.name') : mode === 'protocol' ? t('servers.sort.protocol') : t('servers.sort.reality')}
+          </button>
+        ))}
+      </div>
+
       <section className="server-list">
         {sortedNodes.map((node) => {
           const latencyResult =
@@ -3623,6 +3848,9 @@ function ServersPage({
             expandedServerId === node.id
           const status =
             getServerStatus(node)
+          const latencyBarPct = latencyResult?.reachable && latencyResult.latencyMs != null
+            ? Math.min(latencyResult.latencyMs / 400 * 100, 100)
+            : 0
 
           return (
             <article
@@ -3641,6 +3869,7 @@ function ServersPage({
                 .filter(Boolean)
                 .join(' ')}
               key={node.id}
+              style={latencyBarPct > 0 ? { '--lat-pct': `${latencyBarPct}%`, '--lat-color': getLatencyColor(latencyResult?.latencyMs ?? null) } as React.CSSProperties : undefined}
             >
               <button
                 className="server-list-summary"
@@ -5154,6 +5383,8 @@ function SettingsPage({
   currentEngineVersion,
   onCheckEngineUpdate,
   onInstallEngineUpdate,
+  ctrlEnterEnabled,
+  onCtrlEnterToggle,
 }: {
   settings: {
     mode:
@@ -5214,6 +5445,8 @@ function SettingsPage({
       message: string | null
       error: string | null
     }>
+  ctrlEnterEnabled: boolean
+  onCtrlEnterToggle: (v: boolean) => void
 }) {
   const t = useT()
   const [
@@ -5559,6 +5792,13 @@ function SettingsPage({
           }
         />
 
+        <SettingRow
+          title={t('settings.shortcut.title')}
+          description={t('settings.shortcut.desc')}
+          checked={ctrlEnterEnabled}
+          onChange={onCtrlEnterToggle}
+        />
+
         <div className="connection-mode-summary">
           <span>
             Administrator
@@ -5826,7 +6066,7 @@ function SettingsPage({
   )
 }
 
-function GeoBlockPanel() {
+function GeoBlockPanel({ autoRunTrigger }: { autoRunTrigger?: number }) {
   const t = useT()
   const [results, setResults] = useState<{
     name: string
@@ -5851,6 +6091,14 @@ function GeoBlockPanel() {
       setTesting(false)
     }
   }
+
+  // Auto-run when trigger changes (set on connect)
+  useEffect(() => {
+    if (autoRunTrigger) {
+      const timer = setTimeout(() => { void runTest() }, 3500)
+      return () => clearTimeout(timer)
+    }
+  }, [autoRunTrigger])
 
   return (
     <section className="geoblock-panel">
@@ -6039,6 +6287,9 @@ function ConnectionHistorySection() {
   }[]>([])
   const [loaded, setLoaded] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [undoClearVisible, setUndoClearVisible] = useState(false)
+  const [undoClearSnapshot, setUndoClearSnapshot] = useState<typeof entries>([])
+  const undoClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     void window.hamidsDeutsch.history.get().then((r) => {
@@ -6050,8 +6301,21 @@ function ConnectionHistorySection() {
   async function clearHistory() {
     if (clearing) return
     setClearing(true)
-    await window.hamidsDeutsch.history.clear()
+    setUndoClearSnapshot(entries)
     setEntries([])
+    setUndoClearVisible(true)
+    if (undoClearTimer.current) clearTimeout(undoClearTimer.current)
+    undoClearTimer.current = setTimeout(async () => {
+      setUndoClearVisible(false)
+      await window.hamidsDeutsch.history.clear()
+      setClearing(false)
+    }, 5000)
+  }
+
+  async function undoClear() {
+    if (undoClearTimer.current) clearTimeout(undoClearTimer.current)
+    setUndoClearVisible(false)
+    setEntries(undoClearSnapshot)
     setClearing(false)
   }
 
@@ -6065,8 +6329,37 @@ function ConnectionHistorySection() {
   }
 
   function fmtTime(iso: string) {
-    return new Date(iso).toLocaleString()
+    return new Date(iso).toLocaleTimeString()
   }
+
+  function getDateLabel(iso: string): string {
+    const d = new Date(iso)
+    const today = new Date()
+    const yesterday = new Date(today)
+    yesterday.setDate(today.getDate() - 1)
+    const weekAgo = new Date(today)
+    weekAgo.setDate(today.getDate() - 7)
+    const isSameDay = (a: Date, b: Date) =>
+      a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+    if (isSameDay(d, today)) return 'امروز'
+    if (isSameDay(d, yesterday)) return 'دیروز'
+    if (d >= weekAgo) return 'این هفته'
+    return d.toLocaleDateString()
+  }
+
+  const groupedEntries = useMemo(() => {
+    const groups: { label: string; entries: typeof entries }[] = []
+    const seen = new Map<string, number>()
+    for (const e of entries.slice(0, 30)) {
+      const label = getDateLabel(e.connectedAt)
+      if (!seen.has(label)) {
+        seen.set(label, groups.length)
+        groups.push({ label, entries: [] })
+      }
+      groups[seen.get(label)!].entries.push(e)
+    }
+    return groups
+  }, [entries])
 
   return (
     <section className="panel-card">
@@ -6093,7 +6386,10 @@ function ConnectionHistorySection() {
         <p className="inline-notice">{t('settings.history.empty')}</p>
       ) : (
         <div className="history-list">
-          {entries.slice(0, 30).map((e) => (
+          {groupedEntries.map((group) => (
+            <div key={group.label} className="history-date-group">
+              <div className="history-date-label">{group.label}</div>
+              {group.entries.map((e) => (
             <div key={e.id} className="history-entry">
               <div className="history-entry-top">
                 <span className="history-mode">{e.mode}</span>
@@ -6105,7 +6401,18 @@ function ConnectionHistorySection() {
                 <span className="history-time">{fmtTime(e.connectedAt)}</span>
               </div>
             </div>
+              ))}
+            </div>
           ))}
+        </div>
+      )}
+
+      {undoClearVisible && (
+        <div className="undo-bar">
+          <span>{t('undo.clearHistory')}</span>
+          <button className="secondary-button undo-bar-btn" type="button" onClick={() => void undoClear()}>
+            {t('undo.button')}
+          </button>
         </div>
       )}
     </section>
@@ -6336,6 +6643,18 @@ function GuidePage() {
           <li>{t('guide.method3.step8')}</li>
         </ol>
         <div className="guide-note">{t('guide.method3.note')}</div>
+      </section>
+
+      {/* ── Keyboard Shortcut ──────────────────────────────────────── */}
+      <section className="panel-card guide-section">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">{t('guide.shortcut.kicker')}</span>
+            <h3>{t('guide.shortcut.title')}</h3>
+          </div>
+          <span className="guide-badge" style={{ fontFamily: 'monospace', letterSpacing: '0.04em' }}>Ctrl+Enter</span>
+        </div>
+        <p className="guide-desc">{t('guide.shortcut.desc')}</p>
       </section>
 
       {/* ── Method 4: Browser Extension ────────────────────────────── */}

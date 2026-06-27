@@ -508,6 +508,50 @@ export const TR: Record<Lang, Record<string, string>> = {
     'guide.method4.how2': 'سایت‌های با دسترسی مستقیم همیشه موقعیت واقعی را نشان می‌دهند.',
     'guide.method4.how3': 'با قطع VPN، خودکار غیرفعال می‌شود.',
     'guide.method4.howTitle': 'نحوه کار',
+
+    // ── Quality labels ───────────────────────────────────────────────────────
+    'quality.excellent': 'عالی',
+    'quality.good': 'خوب',
+    'quality.fair': 'متوسط',
+    'quality.weak': 'ضعیف',
+
+    // ── Hero mode pill ───────────────────────────────────────────────────────
+    'hero.modeFree': 'رایگان',
+    'hero.modeCodespace': 'Codespace',
+    'hero.modeSubscription': 'اشتراک',
+
+    // ── Server sort chips ────────────────────────────────────────────────────
+    'servers.sort.ping': 'پینگ',
+    'servers.sort.name': 'نام',
+    'servers.sort.protocol': 'پروتکل',
+    'servers.sort.reality': 'REALITY',
+
+    // ── Reconnect bar ────────────────────────────────────────────────────────
+    'reconnect.label': 'اتصال قبلی:',
+    'reconnect.free': 'رایگان',
+    'reconnect.subscription': 'اشتراک',
+    'reconnect.button': 'اتصال مجدد',
+
+    // ── Ctrl+Enter shortcut ──────────────────────────────────────────────────
+    'shortcut.ctrlEnter': 'Ctrl+Enter برای اتصال/قطع',
+    'settings.shortcut.title': 'میانبر صفحه‌کلید',
+    'settings.shortcut.desc': 'Ctrl+Enter برای اتصال و قطع',
+
+    // ── Undo bar ─────────────────────────────────────────────────────────────
+    'undo.clearHistory': 'تاریخچه پاک شد',
+    'undo.removeSub': 'اشتراک حذف شد',
+    'undo.button': 'بازگردانی',
+
+    // ── Empty home state ─────────────────────────────────────────────────────
+    'home.empty.title': 'هنوز هیچ اتصالی تنظیم نشده',
+    'home.empty.step1': 'لینک اشتراک V2Ray را در تب «اشتراک‌ها» اضافه کن',
+    'home.empty.step2': 'یا توکن GitHub را در «تنظیمات» پیکربندی کن',
+    'home.empty.step3': 'یا از «سرور رایگان» در پایین همین صفحه استفاده کن',
+
+    // ── Guide keyboard shortcut mention ──────────────────────────────────────
+    'guide.shortcut.kicker': 'میانبر',
+    'guide.shortcut.title': 'میانبر Ctrl+Enter',
+    'guide.shortcut.desc': 'در هر جایی از برنامه، Ctrl+Enter را فشار دهید تا اتصال برقرار یا قطع شود. این میانبر را می‌توان در تنظیمات غیرفعال کرد.',
   },
 
   en: {
@@ -1007,6 +1051,50 @@ export const TR: Record<Lang, Record<string, string>> = {
     'guide.method4.how2': 'Direct-access sites always use your real location.',
     'guide.method4.how3': 'Deactivates automatically when VPN disconnects.',
     'guide.method4.howTitle': 'How it works',
+
+    // ── Quality labels ───────────────────────────────────────────────────────
+    'quality.excellent': 'Excellent',
+    'quality.good': 'Good',
+    'quality.fair': 'Fair',
+    'quality.weak': 'Weak',
+
+    // ── Hero mode pill ───────────────────────────────────────────────────────
+    'hero.modeFree': 'Free',
+    'hero.modeCodespace': 'Codespace',
+    'hero.modeSubscription': 'Subscription',
+
+    // ── Server sort chips ────────────────────────────────────────────────────
+    'servers.sort.ping': 'Ping',
+    'servers.sort.name': 'Name',
+    'servers.sort.protocol': 'Protocol',
+    'servers.sort.reality': 'REALITY',
+
+    // ── Reconnect bar ────────────────────────────────────────────────────────
+    'reconnect.label': 'Last connection:',
+    'reconnect.free': 'Free',
+    'reconnect.subscription': 'Subscription',
+    'reconnect.button': 'Reconnect',
+
+    // ── Ctrl+Enter shortcut ──────────────────────────────────────────────────
+    'shortcut.ctrlEnter': 'Ctrl+Enter to connect/disconnect',
+    'settings.shortcut.title': 'Keyboard Shortcut',
+    'settings.shortcut.desc': 'Ctrl+Enter to connect and disconnect',
+
+    // ── Undo bar ─────────────────────────────────────────────────────────────
+    'undo.clearHistory': 'History cleared',
+    'undo.removeSub': 'Subscription removed',
+    'undo.button': 'Undo',
+
+    // ── Empty home state ─────────────────────────────────────────────────────
+    'home.empty.title': 'No connection configured yet',
+    'home.empty.step1': 'Add a V2Ray subscription link in the "Subscriptions" tab',
+    'home.empty.step2': 'Or configure your GitHub token in "Settings"',
+    'home.empty.step3': 'Or use "Free Server" at the bottom of this page',
+
+    // ── Guide keyboard shortcut mention ──────────────────────────────────────
+    'guide.shortcut.kicker': 'Shortcut',
+    'guide.shortcut.title': 'Ctrl+Enter Shortcut',
+    'guide.shortcut.desc': 'Press Ctrl+Enter anywhere in the app to connect or disconnect. This shortcut can be disabled in Settings.',
   },
 
   de: {
@@ -1506,6 +1594,50 @@ export const TR: Record<Lang, Record<string, string>> = {
     'guide.method4.how2': 'Seiten mit Direktzugriff verwenden immer den echten Standort.',
     'guide.method4.how3': 'Deaktiviert sich automatisch beim Trennen des VPNs.',
     'guide.method4.howTitle': 'Funktionsweise',
+
+    // ── Quality labels ───────────────────────────────────────────────────────
+    'quality.excellent': 'Ausgezeichnet',
+    'quality.good': 'Gut',
+    'quality.fair': 'Mittel',
+    'quality.weak': 'Schwach',
+
+    // ── Hero mode pill ───────────────────────────────────────────────────────
+    'hero.modeFree': 'Kostenlos',
+    'hero.modeCodespace': 'Codespace',
+    'hero.modeSubscription': 'Abonnement',
+
+    // ── Server sort chips ────────────────────────────────────────────────────
+    'servers.sort.ping': 'Ping',
+    'servers.sort.name': 'Name',
+    'servers.sort.protocol': 'Protokoll',
+    'servers.sort.reality': 'REALITY',
+
+    // ── Reconnect bar ────────────────────────────────────────────────────────
+    'reconnect.label': 'Letzte Verbindung:',
+    'reconnect.free': 'Kostenlos',
+    'reconnect.subscription': 'Abonnement',
+    'reconnect.button': 'Verbinden',
+
+    // ── Ctrl+Enter shortcut ──────────────────────────────────────────────────
+    'shortcut.ctrlEnter': 'Strg+Enter zum Verbinden/Trennen',
+    'settings.shortcut.title': 'Tastenkürzel',
+    'settings.shortcut.desc': 'Strg+Enter zum Verbinden und Trennen',
+
+    // ── Undo bar ─────────────────────────────────────────────────────────────
+    'undo.clearHistory': 'Verlauf geleert',
+    'undo.removeSub': 'Abonnement entfernt',
+    'undo.button': 'Rückgängig',
+
+    // ── Empty home state ─────────────────────────────────────────────────────
+    'home.empty.title': 'Noch keine Verbindung konfiguriert',
+    'home.empty.step1': 'V2Ray-Abonnement-Link im Reiter „Abonnements" hinzufügen',
+    'home.empty.step2': 'Oder GitHub-Token in den „Einstellungen" konfigurieren',
+    'home.empty.step3': 'Oder „Kostenloser Server" unten auf dieser Seite verwenden',
+
+    // ── Guide keyboard shortcut mention ──────────────────────────────────────
+    'guide.shortcut.kicker': 'Tastenkürzel',
+    'guide.shortcut.title': 'Strg+Enter-Tastenkürzel',
+    'guide.shortcut.desc': 'Drücke Strg+Enter an beliebiger Stelle in der App, um die Verbindung herzustellen oder zu trennen. Dieses Tastenkürzel kann in den Einstellungen deaktiviert werden.',
   },
 }
 
