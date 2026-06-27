@@ -259,6 +259,21 @@ contextBridge.exposeInMainWorld(
       },
     },
 
+    geoblock: {
+      test: () => ipcRenderer.invoke('geoblock:test'),
+    },
+
+    history: {
+      get: () => ipcRenderer.invoke('history:get'),
+      append: (entry) => ipcRenderer.invoke('history:append', entry),
+      clear: () => ipcRenderer.invoke('history:clear'),
+    },
+
+    startup: {
+      getLoginItem: () => ipcRenderer.invoke('system:get-login-item'),
+      setLoginItem: (enabled) => ipcRenderer.invoke('system:set-login-item', enabled),
+    },
+
     codespace: {
       getStatus: () =>
         ipcRenderer.invoke(

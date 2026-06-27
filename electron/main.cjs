@@ -3514,6 +3514,116 @@ function registerIpcHandlers() {
     })
   })
 
+  // ── Geo-block test ──────────────────────────────────────────────────────────
+
+  ipcMain.handle('geoblock:test', async () => {
+    const GEO_TARGETS = [
+      { name: 'X (Twitter)', domain: 'x.com', path: '/' },
+      { name: 'Instagram', domain: 'instagram.com', path: '/' },
+      { name: 'Facebook', domain: 'facebook.com', path: '/' },
+    ]
+    const PROXY_PORT = 2080
+    const TIMEOUT_MS = 8000
+
+    async function testViaProxy(domain, path) {
+      return new Promise((resolve) => {
+        const net = require('node:net')
+        const socket = new net.Socket()
+        let resolved = false
+        let buffer = ''
+        const done = (ok, status) => {
+          if (!resolved) { resolved = true; socket.destroy(); resolve({ ok, status }) }
+        }
+        socket.setTimeout(TIMEOUT_MS)
+        socket.connect(PROXY_PORT, '127.0.0.1', () => {
+          socket.write(`CONNECT ${domain}:443 HTTP/1.1\r\nHost: ${domain}:443\r\n\r\n`)
+        })
+        socket.on('data', (chunk) => {
+          buffer += chunk.toString()
+          const firstLine = buffer.split('\r\n')[0] ?? ''
+          if (firstLine.includes('200')) {
+            done(true, 200)
+          } else {
+            const m = firstLine.match(/HTTP\/\d+\.?\d*\s+(\d+)/)
+            done(false, m ? parseInt(m[1]) : null)
+          }
+        })
+        socket.on('timeout', () => done(false, null))
+        socket.on('error', () => done(false, null))
+      })
+    }
+
+    const results = await Promise.all(
+      GEO_TARGETS.map(async ({ name, domain }) => {
+        try {
+          const { ok, status } = await testViaProxy(domain, '/')
+          return { name, domain, accessible: ok, status, error: null }
+        } catch (err) {
+          return { name, domain, accessible: false, status: null, error: err?.message ?? 'خطا' }
+        }
+      }),
+    )
+
+    return { results, testedAt: new Date().toISOString() }
+  })
+
+  // ── Connection history ────────────────────────────────────────────────────
+
+  ipcMain.handle('history:get', async () => {
+    try {
+      const histPath = path.join(app.getPath('userData'), 'HamidsDeutsch-Connect', 'connection-history.json')
+      const raw = await fsp.readFile(histPath, 'utf8').catch(() => '[]')
+      return { success: true, entries: JSON.parse(raw) }
+    } catch {
+      return { success: true, entries: [] }
+    }
+  })
+
+  ipcMain.handle('history:append', async (_event, entry) => {
+    try {
+      const histPath = path.join(app.getPath('userData'), 'HamidsDeutsch-Connect', 'connection-history.json')
+      await fsp.mkdir(path.dirname(histPath), { recursive: true })
+      const raw = await fsp.readFile(histPath, 'utf8').catch(() => '[]')
+      const entries = JSON.parse(raw)
+      entries.unshift({ ...entry, id: Date.now().toString() })
+      const trimmed = entries.slice(0, 200)
+      await fsp.writeFile(histPath, JSON.stringify(trimmed, null, 2), 'utf8')
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err?.message }
+    }
+  })
+
+  ipcMain.handle('history:clear', async () => {
+    try {
+      const histPath = path.join(app.getPath('userData'), 'HamidsDeutsch-Connect', 'connection-history.json')
+      await fsp.writeFile(histPath, '[]', 'utf8')
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err?.message }
+    }
+  })
+
+  // ── Startup on boot ───────────────────────────────────────────────────────
+
+  ipcMain.handle('system:get-login-item', () => {
+    try {
+      const settings = app.getLoginItemSettings()
+      return { enabled: settings.openAtLogin, error: null }
+    } catch (err) {
+      return { enabled: false, error: err?.message }
+    }
+  })
+
+  ipcMain.handle('system:set-login-item', (_event, enabled) => {
+    try {
+      app.setLoginItemSettings({ openAtLogin: enabled === true, openAsHidden: true })
+      return { success: true, enabled: enabled === true, error: null }
+    } catch (err) {
+      return { success: false, enabled: false, error: err?.message }
+    }
+  })
+
   ipcMain.handle('free:disconnect', async () => {
     freeConfigState.userDisconnected = true
     freeConfigState.phase = 'idle'

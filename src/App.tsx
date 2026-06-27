@@ -286,16 +286,42 @@ function App() {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevHeroConnectedRef = useRef(false)
   const hasConnectedRef = useRef(false)
+  const connectionStartRef = useRef<{ at: string; mode: string; serverName: string | null; protocol: string | null; latencyMs: number | null } | null>(null)
 
   useEffect(() => {
     if (appHeroConnected) {
       hasConnectedRef.current = true
+      if (!prevHeroConnectedRef.current) {
+        const mode = freePhase === 'connected' ? 'free' : codespaceConnected ? 'codespace' : 'subscription'
+        connectionStartRef.current = {
+          at: new Date().toISOString(),
+          mode,
+          serverName: freePhase === 'connected' ? (freeNodeName ?? null) : (selectedServer?.name ?? null),
+          protocol: freePhase === 'connected' ? null : (selectedServer?.protocol ?? null),
+          latencyMs: null,
+        }
+      }
       prevHeroConnectedRef.current = true
     } else if (prevHeroConnectedRef.current && hasConnectedRef.current) {
       prevHeroConnectedRef.current = false
+      const startEntry = connectionStartRef.current
+      connectionStartRef.current = null
       setToastMessage('اتصال قطع شد · پراکسی ویندوز بازگردانی شد')
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
       toastTimerRef.current = setTimeout(() => setToastMessage(null), 3200)
+      if (startEntry) {
+        const now = new Date().toISOString()
+        const durationMs = Date.now() - new Date(startEntry.at).getTime()
+        void window.hamidsDeutsch.history.append({
+          connectedAt: startEntry.at,
+          disconnectedAt: now,
+          durationMs,
+          mode: startEntry.mode,
+          serverName: startEntry.serverName,
+          protocol: startEntry.protocol,
+          latencyMs: startEntry.latencyMs,
+        })
+      }
     }
   }, [appHeroConnected])
 
@@ -2126,6 +2152,8 @@ function HomePage({
           </div>
         </article>
       </section>
+
+      {heroConnected && <GeoBlockPanel />}
 
       <section className="connection-choice-grid">
         <ConnectionChoiceCard
@@ -5670,7 +5698,13 @@ function SettingsPage({
 
       </section>
 
+      <StartupSection />
+
+      <ExportImportSection />
+
       <GitHubSection />
+
+      <ConnectionHistorySection />
 
       <section className="panel-card">
         <div className="panel-heading">
@@ -5706,6 +5740,292 @@ function SettingsPage({
         />
       </section>
     </div>
+  )
+}
+
+function GeoBlockPanel() {
+  const t = useT()
+  const [results, setResults] = useState<{
+    name: string
+    domain: string
+    accessible: boolean
+    status: number | null
+    error: string | null
+  }[] | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [testedAt, setTestedAt] = useState<string | null>(null)
+
+  async function runTest() {
+    if (testing) return
+    setTesting(true)
+    try {
+      const r = await window.hamidsDeutsch.geoblock.test()
+      setResults(r.results)
+      setTestedAt(r.testedAt)
+    } catch {
+      setResults(null)
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <section className="geoblock-panel">
+      <div className="geoblock-header">
+        <span className="geoblock-title">{t('geoblock.title')}</span>
+        <button
+          className="secondary-button geoblock-test-btn"
+          type="button"
+          disabled={testing}
+          onClick={() => void runTest()}
+        >
+          {testing ? t('geoblock.testing') : t('geoblock.test')}
+        </button>
+      </div>
+      {results ? (
+        <div className="geoblock-results">
+          {results.map((r) => (
+            <div key={r.domain} className={`geoblock-row ${r.accessible ? 'geoblock-ok' : 'geoblock-blocked'}`}>
+              <span className="geoblock-icon">{r.accessible ? '✓' : '✗'}</span>
+              <span className="geoblock-name">{r.name}</span>
+              <span className="geoblock-status">{r.accessible ? t('geoblock.open') : t('geoblock.blocked')}</span>
+            </div>
+          ))}
+          {testedAt && (
+            <span className="geoblock-time">{new Date(testedAt).toLocaleTimeString()}</span>
+          )}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function ExportImportSection() {
+  const t = useT()
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  function collectSettings(): Record<string, string> {
+    const keys = ['hd-theme', 'hd-lang', 'hd-connection-settings', 'hd-rescue-settings', 'hd-direct-domains']
+    const out: Record<string, string> = {}
+    for (const k of keys) {
+      const v = localStorage.getItem(k)
+      if (v !== null) out[k] = v
+    }
+    return out
+  }
+
+  function exportSettings() {
+    try {
+      const data = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        settings: collectSettings(),
+      }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `hamids-deutsch-settings-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      setMessage({ type: 'success', text: t('settings.exportImport.exported') })
+    } catch (err) {
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('settings.exportImport.exportFailed') })
+    }
+  }
+
+  function importSettings() {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result as string) as { version: number; settings: Record<string, string> }
+          if (!data.settings || typeof data.settings !== 'object') {
+            setMessage({ type: 'error', text: t('settings.exportImport.invalidFile') })
+            return
+          }
+          for (const [k, v] of Object.entries(data.settings)) {
+            localStorage.setItem(k, v)
+          }
+          setMessage({ type: 'success', text: t('settings.exportImport.imported') })
+          setTimeout(() => window.location.reload(), 800)
+        } catch {
+          setMessage({ type: 'error', text: t('settings.exportImport.invalidFile') })
+        }
+      }
+      reader.readAsText(file)
+    }
+    input.click()
+  }
+
+  return (
+    <section className="panel-card">
+      <div className="panel-heading">
+        <div>
+          <span className="panel-kicker">Settings</span>
+          <h3>{t('settings.exportImport.title')}</h3>
+        </div>
+        <InfoButton
+          fa="تمام تنظیمات برنامه (زبان، تم، حالت اتصال، دامنه‌های مستقیم و تنظیمات Rescue) را در یک فایل JSON ذخیره یا بارگذاری کنید."
+          en="Save or load all app settings (language, theme, connection mode, direct domains, rescue settings) in a single JSON file."
+        />
+      </div>
+      <div className="export-import-actions">
+        <button className="secondary-button" type="button" onClick={exportSettings}>
+          {t('settings.exportImport.export')}
+        </button>
+        <button className="primary-button compact-primary" type="button" onClick={importSettings}>
+          {t('settings.exportImport.import')}
+        </button>
+      </div>
+      {message && (
+        <div className={message.type === 'success' ? 'inline-notice' : 'inline-error'} style={{ marginTop: '8px' }}>
+          {message.text}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function StartupSection() {
+  const t = useT()
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    void window.hamidsDeutsch.startup.getLoginItem().then((r) => setEnabled(r.enabled))
+  }, [])
+
+  async function toggle() {
+    if (busy || enabled === null) return
+    setBusy(true)
+    setMessage(null)
+    const next = !enabled
+    const r = await window.hamidsDeutsch.startup.setLoginItem(next)
+    setBusy(false)
+    if (r.success) {
+      setEnabled(r.enabled)
+      setMessage(r.enabled ? t('settings.startup.enabled') : t('settings.startup.disabled'))
+    } else {
+      setMessage(r.error ?? t('settings.startup.failed'))
+    }
+  }
+
+  return (
+    <section className="panel-card">
+      <div className="panel-heading">
+        <div>
+          <span className="panel-kicker">System</span>
+          <h3>{t('settings.startup.title')}</h3>
+        </div>
+        {enabled !== null && (
+          <span className="count-badge">{enabled ? t('settings.startup.on') : t('settings.startup.off')}</span>
+        )}
+      </div>
+      <p className="inline-notice">{t('settings.startup.desc')}</p>
+      <button
+        className={enabled ? 'secondary-button' : 'primary-button compact-primary'}
+        type="button"
+        disabled={busy || enabled === null}
+        onClick={() => void toggle()}
+      >
+        {busy ? t('settings.startup.saving') : enabled ? t('settings.startup.disable') : t('settings.startup.enable')}
+      </button>
+      {message && <div className="inline-notice" style={{ marginTop: '8px' }}>{message}</div>}
+    </section>
+  )
+}
+
+function ConnectionHistorySection() {
+  const t = useT()
+  const [entries, setEntries] = useState<{
+    id: string
+    connectedAt: string
+    disconnectedAt: string | null
+    durationMs: number | null
+    mode: string
+    serverName: string | null
+    protocol: string | null
+    latencyMs: number | null
+  }[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const [clearing, setClearing] = useState(false)
+
+  useEffect(() => {
+    void window.hamidsDeutsch.history.get().then((r) => {
+      if (r.success) setEntries(r.entries)
+      setLoaded(true)
+    })
+  }, [])
+
+  async function clearHistory() {
+    if (clearing) return
+    setClearing(true)
+    await window.hamidsDeutsch.history.clear()
+    setEntries([])
+    setClearing(false)
+  }
+
+  function formatDuration(ms: number | null) {
+    if (!ms) return '—'
+    const s = Math.floor(ms / 1000)
+    if (s < 60) return `${s}s`
+    const m = Math.floor(s / 60)
+    if (m < 60) return `${m}m ${s % 60}s`
+    return `${Math.floor(m / 60)}h ${m % 60}m`
+  }
+
+  function fmtTime(iso: string) {
+    return new Date(iso).toLocaleString()
+  }
+
+  return (
+    <section className="panel-card">
+      <div className="panel-heading">
+        <div>
+          <span className="panel-kicker">History</span>
+          <h3>{t('settings.history.title')}</h3>
+        </div>
+        {entries.length > 0 && (
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={clearing}
+            onClick={() => void clearHistory()}
+          >
+            {t('settings.history.clear')}
+          </button>
+        )}
+      </div>
+
+      {!loaded ? (
+        <p className="inline-notice">{t('settings.history.loading')}</p>
+      ) : entries.length === 0 ? (
+        <p className="inline-notice">{t('settings.history.empty')}</p>
+      ) : (
+        <div className="history-list">
+          {entries.slice(0, 30).map((e) => (
+            <div key={e.id} className="history-entry">
+              <div className="history-entry-top">
+                <span className="history-mode">{e.mode}</span>
+                {e.protocol && <span className="history-protocol">{e.protocol}</span>}
+                <span className="history-duration">{formatDuration(e.durationMs)}</span>
+              </div>
+              <div className="history-entry-bottom">
+                <span className="history-server">{e.serverName ?? '—'}</span>
+                <span className="history-time">{fmtTime(e.connectedAt)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 

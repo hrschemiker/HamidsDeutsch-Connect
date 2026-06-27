@@ -762,6 +762,21 @@ declare global {
         ) => () => void
       }
 
+      geoblock: {
+        test: () => Promise<GeoBlockResult>
+      }
+
+      history: {
+        get: () => Promise<{ success: boolean; entries: ConnectionHistoryEntry[] }>
+        append: (entry: Omit<ConnectionHistoryEntry, 'id'>) => Promise<{ success: boolean; error?: string }>
+        clear: () => Promise<{ success: boolean; error?: string }>
+      }
+
+      startup: {
+        getLoginItem: () => Promise<{ enabled: boolean; error: string | null }>
+        setLoginItem: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean; error: string | null }>
+      }
+
       codespace: {
         getStatus: () => Promise<CodespaceStatus>
 
@@ -791,6 +806,30 @@ declare global {
       }
     }
   }
+}
+
+type GeoBlockTarget = {
+  name: string
+  domain: string
+  accessible: boolean
+  status: number | null
+  error: string | null
+}
+
+type GeoBlockResult = {
+  results: GeoBlockTarget[]
+  testedAt: string
+}
+
+type ConnectionHistoryEntry = {
+  id: string
+  connectedAt: string
+  disconnectedAt: string | null
+  durationMs: number | null
+  mode: string
+  serverName: string | null
+  protocol: string | null
+  latencyMs: number | null
 }
 
 type CodespaceStatus = {

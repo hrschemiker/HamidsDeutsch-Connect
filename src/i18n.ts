@@ -334,6 +334,40 @@ export const TR: Record<Lang, Record<string, string>> = {
     'settings.fixed.healthMonitor': 'پایش سلامت اتصال',
     'settings.fixed.healthMonitorDesc': 'اتصال به‌صورت دوره‌ای بررسی و در صورت خرابی بازیابی شود.',
 
+    // ── Export / Import ──────────────────────────────────────────────────────
+    'settings.exportImport.title': 'خروجی / ورودی تنظیمات',
+    'settings.exportImport.export': 'خروجی گرفتن از تنظیمات',
+    'settings.exportImport.import': 'بارگذاری تنظیمات',
+    'settings.exportImport.exported': 'تنظیمات با موفقیت ذخیره شد.',
+    'settings.exportImport.imported': 'تنظیمات بارگذاری شد. در حال بازآغاز...',
+    'settings.exportImport.exportFailed': 'خروجی گرفتن از تنظیمات ناموفق بود.',
+    'settings.exportImport.invalidFile': 'فایل نامعتبر است.',
+
+    // ── Startup ───────────────────────────────────────────────────────────────
+    'settings.startup.title': 'اجرا هنگام ورود به ویندوز',
+    'settings.startup.desc': 'برنامه به‌صورت خودکار هنگام روشن شدن ویندوز اجرا می‌شود.',
+    'settings.startup.on': 'فعال',
+    'settings.startup.off': 'غیرفعال',
+    'settings.startup.enable': 'فعال‌کردن',
+    'settings.startup.disable': 'غیرفعال‌کردن',
+    'settings.startup.saving': 'در حال ذخیره...',
+    'settings.startup.enabled': 'اجرای خودکار فعال شد.',
+    'settings.startup.disabled': 'اجرای خودکار غیرفعال شد.',
+    'settings.startup.failed': 'خطا در تغییر تنظیمات.',
+
+    // ── Connection History ─────────────────────────────────────────────────────
+    'settings.history.title': 'تاریخچه اتصال',
+    'settings.history.clear': 'پاک‌کردن',
+    'settings.history.loading': 'در حال بارگذاری...',
+    'settings.history.empty': 'هنوز اتصالی ثبت نشده.',
+
+    // ── Geo-block test ────────────────────────────────────────────────────────
+    'geoblock.title': 'تست دسترسی به سایت‌های فیلتر‌شده',
+    'geoblock.test': 'تست دسترسی',
+    'geoblock.testing': 'در حال تست...',
+    'geoblock.open': 'باز',
+    'geoblock.blocked': 'مسدود',
+
     // ── GitHub Settings ───────────────────────────────────────────────────────
     'github.title': 'اتصال به GitHub',
     'github.connected': 'متصل',
@@ -796,6 +830,40 @@ export const TR: Record<Lang, Record<string, string>> = {
     'settings.fixed.healthMonitor': 'Connection health monitor',
     'settings.fixed.healthMonitorDesc': 'Connection is checked periodically and auto-recovered if it breaks.',
 
+    // ── Export / Import ──────────────────────────────────────────────────────
+    'settings.exportImport.title': 'Export / Import settings',
+    'settings.exportImport.export': 'Export settings',
+    'settings.exportImport.import': 'Import settings',
+    'settings.exportImport.exported': 'Settings exported successfully.',
+    'settings.exportImport.imported': 'Settings imported. Restarting...',
+    'settings.exportImport.exportFailed': 'Export failed.',
+    'settings.exportImport.invalidFile': 'Invalid file.',
+
+    // ── Startup ───────────────────────────────────────────────────────────────
+    'settings.startup.title': 'Launch at Windows startup',
+    'settings.startup.desc': 'The app will start automatically when Windows boots.',
+    'settings.startup.on': 'Enabled',
+    'settings.startup.off': 'Disabled',
+    'settings.startup.enable': 'Enable',
+    'settings.startup.disable': 'Disable',
+    'settings.startup.saving': 'Saving...',
+    'settings.startup.enabled': 'Auto-start enabled.',
+    'settings.startup.disabled': 'Auto-start disabled.',
+    'settings.startup.failed': 'Failed to change startup setting.',
+
+    // ── Connection History ─────────────────────────────────────────────────────
+    'settings.history.title': 'Connection history',
+    'settings.history.clear': 'Clear',
+    'settings.history.loading': 'Loading...',
+    'settings.history.empty': 'No connections recorded yet.',
+
+    // ── Geo-block test ────────────────────────────────────────────────────────
+    'geoblock.title': 'Test access to blocked sites',
+    'geoblock.test': 'Run test',
+    'geoblock.testing': 'Testing...',
+    'geoblock.open': 'Open',
+    'geoblock.blocked': 'Blocked',
+
     // ── GitHub Settings ───────────────────────────────────────────────────────
     'github.title': 'Connect to GitHub',
     'github.connected': 'Connected',
@@ -1257,6 +1325,40 @@ export const TR: Record<Lang, Record<string, string>> = {
     'settings.fixed.proxyRestoreDesc': 'Bei Trennung oder Beenden werden die vorherigen Windows-Proxy-Einstellungen wiederhergestellt.',
     'settings.fixed.healthMonitor': 'Verbindungsgesundheitsüberwachung',
     'settings.fixed.healthMonitorDesc': 'Verbindung wird regelmäßig geprüft und bei Ausfall automatisch wiederhergestellt.',
+
+    // ── Export / Import ──────────────────────────────────────────────────────
+    'settings.exportImport.title': 'Einstellungen exportieren / importieren',
+    'settings.exportImport.export': 'Einstellungen exportieren',
+    'settings.exportImport.import': 'Einstellungen importieren',
+    'settings.exportImport.exported': 'Einstellungen erfolgreich exportiert.',
+    'settings.exportImport.imported': 'Einstellungen importiert. Wird neu gestartet...',
+    'settings.exportImport.exportFailed': 'Export fehlgeschlagen.',
+    'settings.exportImport.invalidFile': 'Ungültige Datei.',
+
+    // ── Startup ───────────────────────────────────────────────────────────────
+    'settings.startup.title': 'Beim Windows-Start ausführen',
+    'settings.startup.desc': 'Die App startet automatisch beim Hochfahren von Windows.',
+    'settings.startup.on': 'Aktiviert',
+    'settings.startup.off': 'Deaktiviert',
+    'settings.startup.enable': 'Aktivieren',
+    'settings.startup.disable': 'Deaktivieren',
+    'settings.startup.saving': 'Wird gespeichert...',
+    'settings.startup.enabled': 'Autostart aktiviert.',
+    'settings.startup.disabled': 'Autostart deaktiviert.',
+    'settings.startup.failed': 'Starteinstellung konnte nicht geändert werden.',
+
+    // ── Connection History ─────────────────────────────────────────────────────
+    'settings.history.title': 'Verbindungsverlauf',
+    'settings.history.clear': 'Löschen',
+    'settings.history.loading': 'Wird geladen...',
+    'settings.history.empty': 'Noch keine Verbindungen aufgezeichnet.',
+
+    // ── Geo-block test ────────────────────────────────────────────────────────
+    'geoblock.title': 'Zugang zu gesperrten Seiten testen',
+    'geoblock.test': 'Test starten',
+    'geoblock.testing': 'Wird getestet...',
+    'geoblock.open': 'Offen',
+    'geoblock.blocked': 'Gesperrt',
 
     // ── GitHub Settings ───────────────────────────────────────────────────────
     'github.title': 'Mit GitHub verbinden',
