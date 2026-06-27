@@ -7,9 +7,10 @@
 **نرم‌افزار اتصال به اینترنت آزاد برای ویندوز**
 
 [![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D4?logo=windows&logoColor=white)](https://microsoft.com/windows)
-[![Electron](https://img.shields.io/badge/Electron-v32-47848F?logo=electron&logoColor=white)](https://electronjs.org)
+[![Electron](https://img.shields.io/badge/Electron-v42-47848F?logo=electron&logoColor=white)](https://electronjs.org)
 [![sing‑box](https://img.shields.io/badge/sing--box-v1.13-FF6B35)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.2.0-f2c055)](../../releases/latest)
 
 [🇬🇧 English](#english) · [⬇ دانلود آخرین نسخه](../../releases/latest)
 
@@ -31,12 +32,13 @@
 | 🆓 **سرور رایگان** | دریافت خودکار بهترین کانفیگ از مخازن عمومی و اتصال یک‌کلیکی |
 | 🐙 **GitHub Codespace** | پروکسی خصوصی داخل GitHub — بدون نیاز به سرور شخصی |
 | ☁️ **پنل BPB** | پشتیبانی کامل از BPB Panel مبتنی بر Cloudflare Workers |
-| 📋 **اشتراک V2Ray** | وارد کردن لینک اشتراک و اتصال به سریع‌ترین سرور |
+| 📋 **اشتراک V2Ray** | وارد کردن لینک اشتراک و اتصال به سریع‌ترین سرور با دکمه مستقیم کنار هر سرور |
 | 🔄 **اتصال مجدد هوشمند** | در صورت قطع، سرور جایگزین پیدا می‌کند و دوباره متصل می‌شود |
 | 🛡️ **هسته sing-box** | موتور پروکسی با پشتیبانی از VLESS · VMess · Trojan · Shadowsocks |
 | 🌐 **مدیریت خودکار Proxy** | تنظیمات پروکسی ویندوز پس از قطع اتصال به حالت اول بازمی‌گردد |
-| 🔘 **دکمه اتصال هوشمند** | اولویت‌بندی خودکار: اشتراک ← رایگان ← BPB ← GitHub |
-| 🇮🇷 / 🇬🇧 / 🇩🇪 **سه‌زبانه** | رابط کاربری به فارسی (RTL)، انگلیسی و آلمانی |
+| 🔘 **دکمه توقف لحظه‌ای** | در حین اتصال، کلیک دوباره دکمه به‌فوریت اتصال را قطع می‌کند |
+| 🗂️ **سینی سیستم** | بستن پنجره برنامه را به سینی سیستم کوچک می‌کند (نه خاموش) |
+| 🎨 **رنگ‌بندی بهبودیافته** | طراحی تاریک با بالاترین کیفیت بصری — طلایی، فیروزه‌ای، سبز زنده |
 
 ---
 
@@ -78,8 +80,7 @@
 2. روی **«افزودن اشتراک»** کلیک کنید
 3. لینک اشتراک خود را وارد کنید (معمولاً با `https://` یا `vmess://` شروع می‌شود)
 4. روی **«بارگذاری»** کلیک کنید تا لیست سرورها دریافت شود
-5. به تب **«سرورها»** بروید و روی **«آزمایش سرعت»** کلیک کنید
-6. حالا روی دکمه اصلی **«اتصال»** در صفحه اصلی کلیک کنید
+5. به تب **«سرورها»** بروید — روی دکمه **▶** کنار هر سرور کلیک کنید تا مستقیماً متصل شوید
 
 </details>
 
@@ -132,7 +133,7 @@ BPB یک پنل پروکسی رایگان است که روی Cloudflare Workers 
 3. روی **«ورود به Cloudflare»** کلیک کنید و مجوز دسترسی دهید
 4. روی **«استقرار پنل BPB»** کلیک کنید
 5. پس از اتمام، آدرس پنل به صورت خودکار ذخیره می‌شود
-6. روی **«اتصال»** کلیک کنید تا به سریع‌ترین سرور BPB متصل شوید
+6. از تب BPB روی **«اتصال»** کلیک کنید
 
 > **نکته:** Cloudflare Workers روزانه ۱۰۰,۰۰۰ درخواست رایگان دارد که برای استفاده معمول کافی است.
 
@@ -168,12 +169,13 @@ The core engine is **sing-box**, a professional-grade proxy runtime. All Windows
 | 🆓 **Free Config** | Automatically fetches and connects to the fastest free proxy server |
 | 🐙 **GitHub Codespace** | Private VLESS+WebSocket proxy inside a GitHub Codespace — no personal server |
 | ☁️ **BPB Panel** | Full support for BPB Panel (Cloudflare Workers-based proxy) |
-| 📋 **V2Ray Subscription** | Import subscription links and auto-connect to the fastest server |
+| 📋 **V2Ray Subscription** | Import subscription links — connect directly from each server row with one click |
 | 🔄 **Auto-Reconnect** | Automatically finds and switches to a new server if the connection drops |
 | 🛡️ **sing-box Core** | Supports VLESS · VMess · Trojan · Shadowsocks · Hysteria2 and more |
 | 🌐 **Windows Proxy Manager** | Proxy settings are automatically restored after disconnect |
-| 🔘 **Smart Connect Button** | Auto-priority: Subscription → Free → BPB → GitHub Codespace |
-| 🇮🇷 / 🇬🇧 / 🇩🇪 **Trilingual UI** | Full interface in Persian (RTL), English, and German |
+| 🔘 **Instant Stop** | Clicking a connect button again during connection immediately aborts it |
+| 🗂️ **System Tray** | Closing the window minimizes to tray instead of quitting |
+| 🎨 **Premium Dark Mode** | Best-in-class visual design — vivid gold, teal, and green on deep indigo-black |
 
 ---
 
@@ -212,8 +214,7 @@ If you have a V2Ray subscription link, this method gives the most stable connect
 1. Go to the **Subscriptions** tab
 2. Click **Add Subscription** and paste your subscription URL
 3. Click **Load** to fetch the server list
-4. Go to the **Servers** tab and click **Test Latency**
-5. Return to the home screen and click **Connect**
+4. Go to the **Servers** tab — click the **▶** button next to any server to connect directly
 
 </details>
 
@@ -262,7 +263,7 @@ BPB is a free proxy panel that runs on Cloudflare Workers infrastructure.
 2. Go to the **BPB Panel** tab in the app
 3. Click **Login with Cloudflare** and authorize
 4. Click **Deploy BPB Panel** — the app sets everything up automatically
-5. Once deployed, click **Connect** to use your BPB servers
+5. Once deployed, connect and disconnect exclusively from the BPB tab
 
 > Cloudflare Workers free tier includes 100,000 requests/day — sufficient for normal usage.
 
@@ -275,7 +276,7 @@ BPB is a free proxy panel that runs on Cloudflare Workers infrastructure.
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 19 + TypeScript |
-| Desktop shell | Electron v32 |
+| Desktop shell | Electron v42 |
 | Build tool | Vite |
 | Proxy engine | sing-box v1.13 |
 | Packaging | electron-builder · NSIS installer |
@@ -306,10 +307,10 @@ npm run pack:win
 
 ### 📄 License
 
-[MIT](LICENSE) — free to use, modify, and distribute.
+[MIT](LICENSE) — Copyright (c) 2026 HamidReza (hrschemiker). Free to use, modify, and distribute.
 
 ---
 
 <div align="center">
-  <sub>Built with care for free internet access · HamidsDeutsch 2026</sub>
+  <sub>Built with care for free internet access · HamidReza 2026</sub>
 </div>
