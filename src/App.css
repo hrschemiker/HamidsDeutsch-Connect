@@ -5550,3 +5550,148 @@ button {
   to { transform: rotate(360deg); }
 }
 
+/* ── Hero visual clickable (disconnect on click) ─────────────────────────── */
+
+.hero-visual-clickable {
+  cursor: pointer;
+}
+
+.connection-orbit-core {
+  position: relative;
+}
+
+.orbit-disconnect-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(212, 70, 70, 0.0);
+  color: transparent;
+  font-size: 18px;
+  font-weight: 700;
+  transition: background 180ms ease, color 180ms ease;
+  pointer-events: none;
+}
+
+.hero-visual-clickable:hover .orbit-disconnect-hint {
+  background: rgba(212, 70, 70, 0.55);
+  color: #fff;
+}
+
+/* ── Method button: stronger active indicator ────────────────────────────── */
+
+.method-btn-active::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 13px;
+  border: 2px solid currentColor;
+  opacity: 0.5;
+  animation: method-active-glow 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes method-active-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.15; }
+}
+
+.method-btn-black.method-btn-active::before { border-color: #fff; }
+.method-btn-red.method-btn-active::before   { border-color: #ff9090; }
+.method-btn-gold.method-btn-active::before  { border-color: #ffe05a; }
+.method-btn-teal.method-btn-active::before  { border-color: var(--green); }
+
+/* ── Top-5 server mini-list cards ────────────────────────────────────────── */
+
+.top-servers-grid {
+  margin-top: 0;
+}
+
+.top-server-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.top-server-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.top-server-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 10px 0;
+}
+
+.top-server-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.top-server-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  transition: background 140ms ease;
+}
+
+.top-server-row:hover {
+  background: var(--surface-hover);
+}
+
+.top-server-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-server-latency {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.top-server-connect-btn {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-hover);
+  color: var(--gold);
+  font-size: 11px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.top-server-connect-btn:hover:not(:disabled) {
+  background: rgba(230, 184, 79, 0.14);
+  border-color: rgba(230, 184, 79, 0.35);
+}
+
+.top-server-connect-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+

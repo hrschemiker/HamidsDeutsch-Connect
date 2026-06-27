@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 
-export type Lang = 'fa' | 'en' | 'de'
+export type Lang = 'fa' | 'en'
 
 export const LangCtx = createContext<{
   lang: Lang
@@ -115,7 +115,7 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.codespace.title': 'اتصال از طریق GitHub',
     'home.codespace.disconnect': 'قطع اتصال GitHub',
     'home.codespace.connecting': 'در حال اتصال...',
-    'home.codespace.connect': 'اتصال با GitHub Codespace',
+    'home.codespace.connect': 'اتصال با گیت‌هاب',
     'home.bpb.title': 'اتصال از طریق BPB',
     'home.bpb.connect': 'اتصال از طریق BPB',
     'home.bpb.setup': 'راه‌اندازی BPB Panel',
@@ -670,7 +670,7 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.codespace.title': 'Connect via GitHub',
     'home.codespace.disconnect': 'Disconnect GitHub',
     'home.codespace.connecting': 'Connecting...',
-    'home.codespace.connect': 'Connect via GitHub Codespace',
+    'home.codespace.connect': 'Connect via GitHub',
     'home.bpb.title': 'Connect via BPB',
     'home.bpb.connect': 'Connect via BPB',
     'home.bpb.setup': 'Set up BPB Panel',
@@ -1120,8 +1120,10 @@ export const TR: Record<Lang, Record<string, string>> = {
     'guide.shortcut.title': 'Ctrl+Enter Shortcut',
     'guide.shortcut.desc': 'Press Ctrl+Enter anywhere in the app to connect or disconnect. This shortcut can be disabled in Settings.',
   },
+}
 
-  de: {
+// DE block removed — Persian and English only.
+export const _UNUSED_DE_PLACEHOLDER = {
     // ── Navigation ────────────────────────────────────────────────────────────
     'nav.home': 'Startseite',
     'nav.servers': 'Server',
@@ -1674,7 +1676,6 @@ export const TR: Record<Lang, Record<string, string>> = {
     'guide.shortcut.kicker': 'Tastenkürzel',
     'guide.shortcut.title': 'Strg+Enter-Tastenkürzel',
     'guide.shortcut.desc': 'Drücke Strg+Enter an beliebiger Stelle in der App, um die Verbindung herzustellen oder zu trennen. Dieses Tastenkürzel kann in den Einstellungen deaktiviert werden.',
-  },
 }
 
 export function useT() {

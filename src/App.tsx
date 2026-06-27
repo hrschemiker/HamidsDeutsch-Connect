@@ -166,7 +166,7 @@ function App() {
   const [lang, setLangState] = useState<Lang>(
     () => {
       const saved = localStorage.getItem('hd-lang') as Lang | null
-      return (saved === 'fa' || saved === 'en' || saved === 'de') ? saved : 'fa'
+      return (saved === 'fa' || saved === 'en') ? saved : 'fa'
     },
   )
 
@@ -1554,24 +1554,24 @@ function App() {
               </span>
             </button>
 
-            {/* Language cycle toggle: FA → EN → DE → FA */}
+            {/* Language toggle: FA ↔ EN */}
             <button
               className="lang-slider-toggle"
               type="button"
               title={t('toggle.lang')}
-              onClick={() => setLang(lang === 'fa' ? 'en' : lang === 'en' ? 'de' : 'fa')}
+              onClick={() => setLang(lang === 'fa' ? 'en' : 'fa')}
               aria-label={t('toggle.lang')}
               data-lang={lang}
             >
               <span className="lang-slider-label lang-slider-label-left">
-                {lang === 'fa' ? 'EN' : lang === 'en' ? 'DE' : 'FA'}
+                {lang === 'fa' ? 'EN' : 'FA'}
               </span>
               <span className="lang-slider-track">
                 <span className="lang-slider-flag" />
                 <span className="lang-slider-knob" />
               </span>
               <span className="lang-slider-label lang-slider-label-right">
-                {lang === 'fa' ? 'FA' : lang === 'en' ? 'EN' : 'DE'}
+                {lang === 'fa' ? 'FA' : 'EN'}
               </span>
             </button>
           </div>
@@ -1694,7 +1694,7 @@ function App() {
                 const panelUrl = r?.profile?.panelUrl?.trim()
                 if (panelUrl) {
                   setLastConnectionType('bpb')
-                  void window.hamidsDeutsch.bpb.quickConnect({ panelUrl, directDomains: directDomains.domains })
+                  await window.hamidsDeutsch.bpb.quickConnect({ panelUrl, directDomains: directDomains.domains })
                 } else {
                   setActivePage('bpb')
                 }
@@ -1712,6 +1712,21 @@ function App() {
               onQuickReconnect={() => void quickReconnect()}
               geoBlockTrigger={geoBlockTrigger}
               dataLoading={serverNodes.loading || subscriptions.loading}
+              topSubServers={(() => {
+                return serverNodes.nodes
+                  .filter((n) => n.valid && latency.results[n.id]?.reachable)
+                  .sort((a, b) => (latency.results[a.id]?.latencyMs ?? 9999) - (latency.results[b.id]?.latencyMs ?? 9999))
+                  .slice(0, 5)
+                  .map((n) => ({ id: n.id, name: n.name, protocol: n.protocol, latencyMs: latency.results[n.id]?.latencyMs ?? null }))
+              })()}
+              topFreeServers={freePool
+                .filter((s) => s.latencyMs != null)
+                .sort((a, b) => (a.latencyMs ?? 9999) - (b.latencyMs ?? 9999))
+                .slice(0, 5)}
+              onConnectSubServer={(id) => {
+                const node = serverNodes.nodes.find((n) => n.id === id)
+                if (node) void prepareAndStart(node)
+              }}
             />
           )}
 
@@ -2053,8 +2068,11 @@ type HomePageProps = {
   onCodespaceDisconnect: () => void
   onOpenSettings: () => void
   onOpenBpb: () => void
-  onBpbQuickConnect: () => void
+  onBpbQuickConnect: () => Promise<void>
   bpbConfigured: boolean
+  topSubServers: Array<{ id: string; name: string; protocol: string; latencyMs: number | null }>
+  topFreeServers: FreePoolServer[]
+  onConnectSubServer: (id: string) => void
   freePhase: FreeConfigPhase
   freeNodeName: string | null
   freeLatencyMs: number | null
@@ -2071,8 +2089,8 @@ type HomePageProps = {
 }
 
 function HomePage({
-  directDomains,
-  engineInfo,
+  directDomains: _directDomains,
+  engineInfo: _engineInfo,
   tunBaselineIp: _tunBaselineIp,
   tunCurrentIp,
   administratorAvailable,
@@ -2099,7 +2117,7 @@ function HomePage({
   onRetestLatency,
   onOpenServers,
   onOpenDirectSites: _onOpenDirectSites,
-  onOpenRescue,
+  onOpenRescue: _onOpenRescue,
   codespaceConnecting,
   codespaceConnected,
   codespaceProgress,
@@ -2107,7 +2125,7 @@ function HomePage({
   codespaceHost,
   onCodespaceConnect,
   onCodespaceDisconnect,
-  onOpenBpb,
+  onOpenBpb: _onOpenBpb,
   onBpbQuickConnect,
   bpbConfigured,
   freePhase,
@@ -2123,6 +2141,9 @@ function HomePage({
   onQuickReconnect,
   geoBlockTrigger: _geoBlockTrigger,
   dataLoading,
+  topSubServers,
+  topFreeServers,
+  onConnectSubServer,
 }: HomePageProps) {
   const t = useT()
 
@@ -2212,22 +2233,6 @@ function HomePage({
     }
   }
 
-  function handleBpbOpen() {
-    const action = bpbConfigured ? onBpbQuickConnect : onOpenBpb
-    if (processStatus.running || codespaceConnected) {
-      requireSwitch(
-        'تغییر روش اتصال',
-        'اتصال فعلی قطع می‌شود و از طریق پنل BPB مجدداً متصل می‌شوید. ادامه می‌دهید؟',
-        () => {
-          setSwitchConfirm(null)
-          void action()
-        },
-      )
-    } else {
-      void action()
-    }
-  }
-
   const freeConnected = freeConnectedLocal
   const otherMethodActive = processStatus.running || codespaceConnected || freeConnected
   const heroConnected = heroConnectedLocal
@@ -2244,6 +2249,7 @@ function HomePage({
   ].filter(Boolean).join(' ')
 
   const [adminBannerDismissed, setAdminBannerDismissed] = useState(false)
+  const [bpbConnecting, setBpbConnecting] = useState(false)
 
   function handleSubscriptionConnect() {
     if (activeMethod === 'subscription') {
@@ -2263,15 +2269,27 @@ function HomePage({
     }
   }
 
-  function handleBpbConnect() {
+  async function handleBpbConnect() {
+    if (bpbConnecting) return
     if (activeMethod === 'bpb') {
       requireSwitch(
         t('btn.disconnect'),
         'اتصال BPB قطع می‌شود. ادامه می‌دهید؟',
         () => { setSwitchConfirm(null); onMainAction() },
       )
+    } else if (processStatus.running || codespaceConnected || freeConnected) {
+      requireSwitch(
+        'تغییر روش اتصال',
+        'اتصال فعلی قطع می‌شود و از طریق BPB متصل می‌شوید. ادامه می‌دهید؟',
+        async () => {
+          setSwitchConfirm(null)
+          setBpbConnecting(true)
+          try { await onBpbQuickConnect() } finally { setBpbConnecting(false) }
+        },
+      )
     } else {
-      handleBpbOpen()
+      setBpbConnecting(true)
+      try { await onBpbQuickConnect() } finally { setBpbConnecting(false) }
     }
   }
 
@@ -2439,14 +2457,14 @@ function HomePage({
             <button
               className={`method-btn method-btn-gold${activeMethod === 'bpb' ? ' method-btn-active' : ''}`}
               type="button"
-              disabled={processBusy && activeMethod !== 'bpb'}
-              onClick={handleBpbConnect}
+              disabled={(processBusy && activeMethod !== 'bpb') || (bpbConnecting && activeMethod !== 'bpb')}
+              onClick={() => void handleBpbConnect()}
             >
               <span className="method-btn-icon">
-                {activeMethod === 'bpb' && processBusy ? <span className="connection-stage-spinner">◌</span> : activeMethod === 'bpb' ? '■' : '◈'}
+                {bpbConnecting ? <span className="connection-stage-spinner">◌</span> : activeMethod === 'bpb' && processBusy ? <span className="connection-stage-spinner">◌</span> : activeMethod === 'bpb' ? '■' : '◈'}
               </span>
               <span className="method-btn-label">
-                <strong>{activeMethod === 'bpb' ? t('btn.disconnect') : (bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup'))}</strong>
+                <strong>{activeMethod === 'bpb' ? t('btn.disconnect') : bpbConnecting ? 'در حال اتصال...' : (bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup'))}</strong>
                 <small>BPB Panel</small>
               </span>
             </button>
@@ -2498,15 +2516,29 @@ function HomePage({
           )}
         </div>
 
-        <div className="hero-visual" aria-hidden="true">
+        <div
+          className={`hero-visual${heroConnected ? ' hero-visual-clickable' : ''}`}
+          aria-hidden={!heroConnected}
+          title={heroConnected ? t('btn.disconnect') : undefined}
+          onClick={heroConnected ? () => {
+            if (activeMethod === 'codespace') handleCodespaceToggle()
+            else if (activeMethod === 'free') handleFreeToggle()
+            else if (activeMethod === 'subscription' || activeMethod === 'bpb') {
+              requireSwitch(t('btn.disconnect'), 'اتصال قطع می‌شود. ادامه می‌دهید؟', () => { setSwitchConfirm(null); onMainAction() })
+            }
+          } : undefined}
+        >
           <div className={orbitClass}>
             <div className="connection-orbit-middle">
               <div className="connection-orbit-core">
                 <img
                   src="logo.png"
                   className={`orbit-logo${heroConnected ? ' orbit-logo-online' : ''}${isConnecting ? ' orbit-logo-connecting' : ''}`}
-                  alt=""
+                  alt={heroConnected ? t('btn.disconnect') : ''}
                 />
+                {heroConnected && (
+                  <div className="orbit-disconnect-hint">✕</div>
+                )}
               </div>
             </div>
           </div>
@@ -2536,37 +2568,55 @@ function HomePage({
         </div>
       )}
 
-      <section className={`quick-statistics${heroConnected ? ' stats-connected' : ''}`}>
-        <article className="statistic-card" style={heroConnected ? { animationDelay: '0ms' } : undefined}>
+      {/* ── Quick stats strip (shown only when connected) ── */}
+      {heroConnected && (
+      <section className="quick-statistics stats-connected">
+        <article className="statistic-card" style={{ animationDelay: '0ms' }}>
           <span className="statistic-icon">◎</span>
           <div>
             <span className="statistic-label">{t('stats.outputIp')}</span>
             <div className="statistic-value-row">
               <strong dir="ltr">
-                {isConnected
-                  ? ipVerificationResult.proxyIp ?? t('stats.confirmed')
-                  : processStatus.ready
-                    ? t('stats.pendingVerify')
-                    : '—'}
+                {ipVerificationResult.proxyIp
+                  ? ipVerificationResult.proxyIp
+                  : activeMethod === 'codespace' && codespaceHost
+                    ? codespaceHost
+                    : heroConnected
+                      ? t('stats.confirmed')
+                      : '—'}
               </strong>
-              {isConnected && ipVerificationResult.proxyIp && (
+              {ipVerificationResult.proxyIp && (
                 <CopyButton text={ipVerificationResult.proxyIp} />
               )}
             </div>
           </div>
         </article>
-        <article className="statistic-card" style={heroConnected ? { animationDelay: '80ms' } : undefined}>
+        <article className="statistic-card" style={{ animationDelay: '80ms' }}>
           <span className="statistic-icon">◌</span>
           <div>
             <span className="statistic-label">{t('stats.prevServer')}</span>
-            <strong>{selectedServer?.name ?? t('stats.notSelected')}</strong>
+            <strong>
+              {activeMethod === 'codespace' && codespaceHost
+                ? codespaceHost
+                : activeMethod === 'free' && freeNodeName
+                  ? freeNodeName
+                  : activeMethod === 'bpb'
+                    ? 'BPB Panel'
+                    : selectedServer?.name ?? '—'}
+            </strong>
           </div>
         </article>
-        <article className="statistic-card" style={heroConnected ? { animationDelay: '160ms' } : undefined}>
-          <span className="statistic-icon">↗</span>
+        <article className="statistic-card" style={{ animationDelay: '160ms' }}>
+          <span className="statistic-icon">⏱</span>
           <div>
-            <span className="statistic-label">{t('stats.directSites')}</span>
-            <strong>{directDomains.length} {t('stats.domainCount')}</strong>
+            <span className="statistic-label">{t('stats.latency', 'پینگ')}</span>
+            <strong dir="ltr">
+              {activeMethod === 'free' && freeLatencyMs != null
+                ? `${freeLatencyMs} ms`
+                : activeMethod === 'subscription' && selectedServerLatency?.latencyMs != null
+                  ? `${selectedServerLatency.latencyMs} ms`
+                  : '—'}
+            </strong>
           </div>
         </article>
         {speedTest && (
@@ -2590,6 +2640,7 @@ function HomePage({
           </article>
         )}
       </section>
+      )}
 
       {!heroConnected && !fastestServer && !selectedServer && !latencyTesting && !dataLoading && (
         <div className="home-empty-state">
@@ -2674,53 +2725,70 @@ function HomePage({
         </div>
       )}
 
-      <section className="home-grid">
-        <article className="panel-card">
-          <div className="panel-heading">
-            <div><span className="panel-kicker">{t('home.core.kicker')}</span><h3>{t('home.core.title')}</h3></div>
-            <span className="panel-icon">◉</span>
+      {/* ── Top-5 sub + free server mini-lists ── */}
+      <section className="connection-choice-grid top-servers-grid">
+        <article className="top-server-card">
+          <div className="top-server-card-header">
+            <span className="panel-kicker">{t('home.topSub.kicker', 'بهترین سرورهای اشتراک')}</span>
+            <button className="text-button" type="button" onClick={onOpenServers}>{t('home.fastest.viewServers')}</button>
           </div>
-          <div className="connection-details">
-            <DetailRow
-              label={t('home.core.phase')}
-              value={isConnected ? t('home.core.connected') : t('home.core.localProxy')}
-            />
-            <DetailRow
-              label={t('home.core.port')}
-              value={`${processStatus.localHost}:${processStatus.localPort}`}
-              muted={!processStatus.ready}
-            />
-            <DetailRow
-              label={t('home.core.engine')}
-              value={engineInfo?.healthy ? `sing-box ${engineInfo.version}` : t('home.core.unavailable')}
-              muted={!engineInfo?.healthy}
-            />
-            <DetailRow label={t('home.core.proxyStatus')} value={t('home.core.notEnabled')} muted />
-            <DetailRow
-              label={t('home.core.ipCheck')}
-              value={
-                isConnected
-                  ? `${ipVerificationResult.directIp ?? '—'} → ${ipVerificationResult.proxyIp ?? '—'}`
-                  : ipVerificationChecking
-                    ? t('home.core.checking')
-                    : processStatus.ready
-                      ? t('home.core.unverified')
-                      : t('home.core.pending')
-              }
-              muted={!isConnected}
-            />
-          </div>
+          {topSubServers.length === 0 ? (
+            <p className="top-server-empty">{latencyTesting ? t('home.fastest.testing') : t('home.topSub.empty', 'سرور آزمایش‌شده‌ای یافت نشد')}</p>
+          ) : (
+            <ul className="top-server-list">
+              {topSubServers.map((s) => (
+                <li key={s.id} className="top-server-row">
+                  <span className="top-server-name">{s.name}</span>
+                  <span className="top-server-latency" dir="ltr">{s.latencyMs != null ? `${s.latencyMs} ms` : '—'}</span>
+                  <button
+                    className="top-server-connect-btn"
+                    type="button"
+                    disabled={processBusy}
+                    onClick={() => onConnectSubServer(s.id)}
+                  >▶</button>
+                </li>
+              ))}
+            </ul>
+          )}
         </article>
 
-        <article className="panel-card rescue-preview-card">
-          <div className="panel-heading">
-            <div><span className="panel-kicker">{t('home.rescue.kicker')}</span><h3>{t('home.rescue.title')}</h3></div>
-            <span className="rescue-badge">{t('home.rescue.badge')}</span>
+        <article className="top-server-card">
+          <div className="top-server-card-header">
+            <span className="panel-kicker">{t('home.topFree.kicker', 'بهترین سرورهای رایگان')}</span>
           </div>
-          <p>{t('home.rescue.desc')}</p>
-          <button className="secondary-button" type="button" onClick={onOpenRescue}>
-            {t('home.rescue.view')}
-          </button>
+          {topFreeServers.length === 0 ? (
+            <p className="top-server-empty">{t('home.topFree.empty', 'هنوز سرور رایگانی آزمایش نشده')}</p>
+          ) : (
+            <ul className="top-server-list">
+              {topFreeServers.map((s) => (
+                <li key={s.id} className="top-server-row">
+                  <span className="top-server-name">{s.name}</span>
+                  <span className="top-server-latency" dir="ltr">{s.latencyMs != null ? `${s.latencyMs} ms` : '—'}</span>
+                  <button
+                    className="top-server-connect-btn"
+                    type="button"
+                    disabled={freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting'}
+                    onClick={() => {
+                      if (activeMethod) {
+                        requireSwitch('تغییر روش', 'اتصال فعلی قطع و به سرور رایگان انتخابی متصل می‌شوید.', () => {
+                          setSwitchConfirm(null)
+                          void window.hamidsDeutsch.free.connectSpecificNode({
+                            nodeId: s.id, nodeUri: s.uri, nodeName: s.name,
+                            nodeHost: s.host, nodePort: s.port, nodeProtocol: s.protocol,
+                          })
+                        })
+                      } else {
+                        void window.hamidsDeutsch.free.connectSpecificNode({
+                          nodeId: s.id, nodeUri: s.uri, nodeName: s.name,
+                          nodeHost: s.host, nodePort: s.port, nodeProtocol: s.protocol,
+                        })
+                      }
+                    }}
+                  >▶</button>
+                </li>
+              ))}
+            </ul>
+          )}
         </article>
       </section>
     </div>
@@ -2959,29 +3027,6 @@ function LatencyBadge({
     >
       {latencyMs} ms
     </span>
-  )
-}
-
-function DetailRow({
-  label,
-  value,
-  muted = false,
-}: {
-  label: string
-  value: string
-  muted?: boolean
-}) {
-  return (
-    <div className="detail-row">
-      <span>{label}</span>
-      <strong
-        className={
-          muted ? 'muted-value' : ''
-        }
-      >
-        {value}
-      </strong>
-    </div>
   )
 }
 
@@ -5722,17 +5767,6 @@ function SettingsPage({
             />
             <span className="appearance-option-icon">🇬🇧</span>
             <span>{t('settings.langEn')}</span>
-          </label>
-          <label className="appearance-option">
-            <input
-              type="radio"
-              name="lang"
-              value="de"
-              checked={lang === 'de'}
-              onChange={() => setLang('de')}
-            />
-            <span className="appearance-option-icon">🇩🇪</span>
-            <span>{t('settings.langDe', 'Deutsch')}</span>
           </label>
         </div>
 
