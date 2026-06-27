@@ -3524,6 +3524,110 @@ function registerIpcHandlers() {
 
   // ── Geo-block test ──────────────────────────────────────────────────────────
 
+  // ── Speed test ───────────────────────────────────────────────────────────
+
+  ipcMain.handle('speedtest:run', async () => {
+    const PROXY_PORT = 2080
+    const TEST_HOST = 'speed.cloudflare.com'
+    const TEST_PATH = '/__down?bytes=5000000' // 5 MB
+    const TIMEOUT_MS = 20000
+
+    return new Promise((resolve) => {
+      const net = require('node:net')
+      const tls = require('node:tls')
+      let resolved = false
+
+      function done(result) {
+        if (!resolved) { resolved = true; resolve(result) }
+      }
+
+      const socket = new net.Socket()
+      socket.setTimeout(TIMEOUT_MS)
+      socket.connect(PROXY_PORT, '127.0.0.1', () => {
+        socket.write(`CONNECT ${TEST_HOST}:443 HTTP/1.1\r\nHost: ${TEST_HOST}:443\r\n\r\n`)
+      })
+
+      let buffer = ''
+      let tunnelEstablished = false
+      let tlsSocket = null
+      let bytesReceived = 0
+      let startTime = 0
+      let headersDone = false
+
+      socket.on('data', (chunk) => {
+        if (!tunnelEstablished) {
+          buffer += chunk.toString('ascii', 0, Math.min(chunk.length, 512))
+          const headerEnd = buffer.indexOf('\r\n\r\n')
+          if (headerEnd === -1) return
+          const firstLine = buffer.split('\r\n')[0] ?? ''
+          if (!firstLine.includes('200')) {
+            done({ success: false, mbps: null, error: 'پروکسی تانل برقرار نکرد' })
+            socket.destroy()
+            return
+          }
+          tunnelEstablished = true
+
+          tlsSocket = tls.connect({
+            socket,
+            servername: TEST_HOST,
+            rejectUnauthorized: false,
+          }, () => {
+            startTime = Date.now()
+            tlsSocket.write(
+              `GET ${TEST_PATH} HTTP/1.1\r\nHost: ${TEST_HOST}\r\nConnection: close\r\n\r\n`
+            )
+          })
+
+          tlsSocket.on('data', (tlsChunk) => {
+            if (!headersDone) {
+              const str = tlsChunk.toString('ascii', 0, Math.min(tlsChunk.length, 2048))
+              const hEnd = str.indexOf('\r\n\r\n')
+              if (hEnd !== -1) {
+                headersDone = true
+                bytesReceived += tlsChunk.length - hEnd - 4
+              }
+            } else {
+              bytesReceived += tlsChunk.length
+            }
+          })
+
+          tlsSocket.on('end', () => {
+            const elapsedSec = (Date.now() - startTime) / 1000
+            const mbps = elapsedSec > 0 ? (bytesReceived * 8) / (elapsedSec * 1_000_000) : 0
+            done({ success: true, mbps: Math.round(mbps * 10) / 10, bytes: bytesReceived, elapsedSec: Math.round(elapsedSec * 10) / 10, error: null })
+            socket.destroy()
+          })
+
+          tlsSocket.on('error', (err) => {
+            done({ success: false, mbps: null, error: err.message })
+            socket.destroy()
+          })
+
+          tlsSocket.setTimeout(TIMEOUT_MS)
+          tlsSocket.on('timeout', () => {
+            if (bytesReceived > 0 && startTime > 0) {
+              const elapsedSec = (Date.now() - startTime) / 1000
+              const mbps = elapsedSec > 0 ? (bytesReceived * 8) / (elapsedSec * 1_000_000) : 0
+              done({ success: true, mbps: Math.round(mbps * 10) / 10, bytes: bytesReceived, elapsedSec: Math.round(elapsedSec * 10) / 10, error: null })
+            } else {
+              done({ success: false, mbps: null, error: 'تایم‌اوت' })
+            }
+            socket.destroy()
+          })
+        }
+      })
+
+      socket.on('timeout', () => {
+        done({ success: false, mbps: null, error: 'تایم‌اوت اتصال پروکسی' })
+        socket.destroy()
+      })
+
+      socket.on('error', (err) => {
+        done({ success: false, mbps: null, error: err.message })
+      })
+    })
+  })
+
   ipcMain.handle('geoblock:test', async () => {
     const GEO_TARGETS = [
       { name: 'X (Twitter)', domain: 'x.com', path: '/' },

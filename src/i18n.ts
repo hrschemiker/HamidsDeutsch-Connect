@@ -96,6 +96,9 @@ export const TR: Record<Lang, Record<string, string>> = {
     'stats.notSelected': 'انتخاب نشده',
     'stats.directSites': 'سایت‌های مستقیم',
     'stats.domainCount': 'دامنه',
+    'stats.speed': 'سرعت دانلود',
+    'stats.speedTesting': 'در حال تست...',
+    'stats.speedError': 'خطا',
 
     // ── Home Cards ───────────────────────────────────────────────────────────
     'home.fastest.kicker': 'پیشنهاد خودکار',
@@ -592,6 +595,9 @@ export const TR: Record<Lang, Record<string, string>> = {
     'stats.notSelected': 'Not selected',
     'stats.directSites': 'Direct sites',
     'stats.domainCount': 'domains',
+    'stats.speed': 'Download speed',
+    'stats.speedTesting': 'Testing...',
+    'stats.speedError': 'Error',
 
     // ── Home Cards ────────────────────────────────────────────────────────────
     'home.fastest.kicker': 'Auto suggestion',
@@ -1088,6 +1094,9 @@ export const TR: Record<Lang, Record<string, string>> = {
     'stats.notSelected': 'Nicht ausgewählt',
     'stats.directSites': 'Direkte Seiten',
     'stats.domainCount': 'Domains',
+    'stats.speed': 'Download-Geschwindigkeit',
+    'stats.speedTesting': 'Wird getestet...',
+    'stats.speedError': 'Fehler',
 
     // ── Home Cards ────────────────────────────────────────────────────────────
     'home.fastest.kicker': 'Automatischer Vorschlag',

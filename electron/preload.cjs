@@ -259,6 +259,10 @@ contextBridge.exposeInMainWorld(
       },
     },
 
+    speedtest: {
+      run: () => ipcRenderer.invoke('speedtest:run'),
+    },
+
     geoblock: {
       test: () => ipcRenderer.invoke('geoblock:test'),
     },

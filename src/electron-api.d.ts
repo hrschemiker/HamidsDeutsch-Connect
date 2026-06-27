@@ -762,6 +762,10 @@ declare global {
         ) => () => void
       }
 
+      speedtest: {
+        run: () => Promise<{ success: boolean; mbps: number | null; bytes: number; elapsedSec: number; error: string | null }>
+      }
+
       geoblock: {
         test: () => Promise<GeoBlockResult>
       }

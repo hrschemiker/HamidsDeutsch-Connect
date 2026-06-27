@@ -248,6 +248,9 @@ function App() {
   // Engine update notification
   const [engineUpdateAvailable, setEngineUpdateAvailable] = useState(false)
 
+  // Speed test
+  const [speedTestResult, setSpeedTestResult] = useState<{ mbps: number | null; running: boolean; error: string | null } | null>(null)
+
   // For smart hero-button priority: know if BPB/codespace are configured
   const [codespaceHasToken, setCodespaceHasToken] = useState(false)
 
@@ -303,12 +306,22 @@ function App() {
           protocol: freePhase === 'connected' ? null : (selectedServer?.protocol ?? null),
           latencyMs: null,
         }
+        // Auto speed test: run 2 seconds after connect to let the tunnel stabilize
+        setSpeedTestResult({ mbps: null, running: true, error: null })
+        setTimeout(() => {
+          void window.hamidsDeutsch.speedtest.run().then((r) => {
+            setSpeedTestResult({ mbps: r.mbps, running: false, error: r.error })
+          }).catch(() => {
+            setSpeedTestResult({ mbps: null, running: false, error: 'خطا در اجرای تست' })
+          })
+        }, 2000)
       }
       prevHeroConnectedRef.current = true
     } else if (prevHeroConnectedRef.current && hasConnectedRef.current) {
       prevHeroConnectedRef.current = false
       const startEntry = connectionStartRef.current
       connectionStartRef.current = null
+      setSpeedTestResult(null)
       setToastMessage('اتصال قطع شد · پراکسی ویندوز بازگردانی شد')
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
       toastTimerRef.current = setTimeout(() => setToastMessage(null), 3200)
@@ -1552,6 +1565,7 @@ function App() {
               freeError={freeError}
               onFreeConnect={() => void connectFreeConfig()}
               onFreeDisconnect={() => void disconnectFreeConfig()}
+              speedTest={speedTestResult}
             />
           )}
 
@@ -1887,6 +1901,7 @@ type HomePageProps = {
   freeError: string | null
   onFreeConnect: () => void
   onFreeDisconnect: () => void
+  speedTest: { mbps: number | null; running: boolean; error: string | null } | null
 }
 
 function HomePage({
@@ -1934,6 +1949,7 @@ function HomePage({
   freeError,
   onFreeConnect,
   onFreeDisconnect,
+  speedTest,
 }: HomePageProps) {
   const t = useT()
   const mainActionAvailable = Boolean(
@@ -2202,6 +2218,21 @@ function HomePage({
             <strong>{directDomains.length} {t('stats.domainCount')}</strong>
           </div>
         </article>
+        {speedTest && (
+          <article className="statistic-card">
+            <span className="statistic-icon">⚡</span>
+            <div>
+              <span className="statistic-label">{t('stats.speed')}</span>
+              <strong dir="ltr">
+                {speedTest.running
+                  ? t('stats.speedTesting')
+                  : speedTest.mbps !== null
+                    ? `${speedTest.mbps} Mbps`
+                    : t('stats.speedError')}
+              </strong>
+            </div>
+          </article>
+        )}
       </section>
 
       {heroConnected && <GeoBlockPanel />}
