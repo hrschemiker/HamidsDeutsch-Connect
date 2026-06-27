@@ -252,24 +252,81 @@ async function testFreeNodes(records) {
   return result.results
 }
 
-async function testProxyConnectivity(port = 2080, timeoutMs = 6000) {
+async function testProxyConnectivity(port = 2080, timeoutMs = 10000) {
+  // Full-stack check: CONNECT tunnel + TLS handshake + actual HTTP response bytes.
+  // A server that only accepts CONNECT but can't relay TLS traffic will fail here.
+  const TEST_HOST = 'speed.cloudflare.com'
+  const TEST_PATH = '/__down?bytes=1024' // 1 KB — enough to prove real data flows
+
   return new Promise((resolve) => {
     const net = require('node:net')
-    const socket = new net.Socket()
-    const request = `CONNECT cloudflare.com:443 HTTP/1.1\r\nHost: cloudflare.com:443\r\n\r\n`
+    const tls = require('node:tls')
     let resolved = false
+    let tlsSocket = null
+
     const done = (ok) => {
-      if (!resolved) { resolved = true; socket.destroy(); resolve(ok) }
+      if (!resolved) {
+        resolved = true
+        try { tlsSocket?.destroy() } catch {}
+        try { socket.destroy() } catch {}
+        resolve(ok)
+      }
     }
+
+    const socket = new net.Socket()
     socket.setTimeout(timeoutMs)
-    socket.connect(port, '127.0.0.1', () => {
-      socket.write(request)
-    })
-    socket.once('data', (chunk) => {
-      done(chunk.toString().startsWith('HTTP/1') && chunk.toString().includes('200'))
-    })
     socket.on('timeout', () => done(false))
     socket.on('error', () => done(false))
+
+    socket.connect(port, '127.0.0.1', () => {
+      socket.write(`CONNECT ${TEST_HOST}:443 HTTP/1.1\r\nHost: ${TEST_HOST}:443\r\n\r\n`)
+    })
+
+    let connectBuf = ''
+    let tunnelReady = false
+
+    socket.on('data', (chunk) => {
+      if (tunnelReady) return // TLS layer takes over after this
+      connectBuf += chunk.toString('ascii', 0, Math.min(chunk.length, 512))
+      if (!connectBuf.includes('\r\n\r\n')) return
+
+      const firstLine = connectBuf.split('\r\n')[0] ?? ''
+      if (!firstLine.includes('200')) { done(false); return }
+
+      tunnelReady = true
+      socket.removeAllListeners('data')
+
+      tlsSocket = tls.connect({ socket, servername: TEST_HOST, rejectUnauthorized: false }, () => {
+        tlsSocket.write(
+          `GET ${TEST_PATH} HTTP/1.1\r\nHost: ${TEST_HOST}\r\nConnection: close\r\n\r\n`
+        )
+      })
+
+      tlsSocket.on('error', () => done(false))
+      tlsSocket.setTimeout(timeoutMs)
+      tlsSocket.on('timeout', () => done(false))
+
+      let responseBuf = ''
+      let headersDone = false
+      let dataBytes = 0
+
+      tlsSocket.on('data', (d) => {
+        if (!headersDone) {
+          responseBuf += d.toString('ascii', 0, Math.min(d.length, 1024))
+          const sep = responseBuf.indexOf('\r\n\r\n')
+          if (sep === -1) return
+          const status = responseBuf.split('\r\n')[0] ?? ''
+          if (!status.includes('200')) { done(false); return }
+          headersDone = true
+          dataBytes += Math.max(0, d.length - (sep + 4 - (responseBuf.length - d.length)))
+        } else {
+          dataBytes += d.length
+        }
+        if (dataBytes >= 512) done(true) // got real payload bytes — proxy is working
+      })
+
+      tlsSocket.on('end', () => done(dataBytes >= 512))
+    })
   })
 }
 
