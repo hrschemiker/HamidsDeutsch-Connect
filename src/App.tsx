@@ -1842,6 +1842,7 @@ function App() {
                   setFreePoolMeta((prev) => prev ? { ...prev, poolRefreshing: false } : prev)
                 }
               }}
+              onConnectSubNode={(node) => void prepareAndStart(node)}
             />
           )}
 
@@ -2215,9 +2216,30 @@ function HomePage({
     return () => clearInterval(id)
   }, [freePhase])
 
-  // ── Session timer ──────────────────────────────────────────────────────────
+  // ── Error banner (top of hero, auto-dismisses after 10s or on connection) ──
   const freeConnectedLocal = freePhase === 'connected'
   const heroConnectedLocal = isConnected || codespaceConnected || freeConnectedLocal
+  const [errorBanner, setErrorBanner] = useState<string | null>(null)
+  const errorBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dismissErrorBanner = () => {
+    if (errorBannerTimerRef.current) clearTimeout(errorBannerTimerRef.current)
+    setErrorBanner(null)
+  }
+  // Collect errors into banner
+  const activeError = (freePhase === 'error' && freeError) ? freeError
+    : processError ? processError
+    : codespaceError ? codespaceError
+    : (latencyError && !heroConnectedLocal) ? latencyError
+    : null
+  useEffect(() => {
+    if (!activeError) return
+    setErrorBanner(activeError)
+    if (errorBannerTimerRef.current) clearTimeout(errorBannerTimerRef.current)
+    errorBannerTimerRef.current = setTimeout(() => setErrorBanner(null), 10000)
+    return () => { if (errorBannerTimerRef.current) clearTimeout(errorBannerTimerRef.current) }
+  }, [activeError])
+  // Dismiss on successful connection
+  useEffect(() => { if (heroConnectedLocal) dismissErrorBanner() }, [heroConnectedLocal])
   const [sessionStart, setSessionStart] = useState<number | null>(null)
   const [elapsedSecs, setElapsedSecs] = useState(0)
 
@@ -2379,6 +2401,12 @@ function HomePage({
 
   return (
     <div className="home-layout">
+      {errorBanner && (
+        <div className="error-banner" role="alert">
+          <span className="error-banner-text">{friendlyError(errorBanner)}</span>
+          <button className="error-banner-close" type="button" onClick={dismissErrorBanner} aria-label="بستن">✕</button>
+        </div>
+      )}
       {!administratorAvailable && !processStatus.running && !adminBannerDismissed && (
         <div className="admin-banner">
           <div>
@@ -2714,16 +2742,9 @@ function HomePage({
         />
       </section>
 
-      {/* Codespace progress/error shown inline when active method is codespace */}
+      {/* Codespace progress shown inline when active */}
       {activeMethod === 'codespace' && codespaceProgress && (
         <div className="codespace-progress">{codespaceProgress}</div>
-      )}
-      {activeMethod === 'codespace' && codespaceError && (
-        <div className="form-message form-message-error">{codespaceError}</div>
-      )}
-      {/* Free progress/error shown inline */}
-      {(freePhase === 'error') && freeError && (
-        <div className="form-message form-message-error">{friendlyError(freeError)}</div>
       )}
 
       {switchConfirm && (
@@ -2735,12 +2756,6 @@ function HomePage({
           onConfirm={switchConfirm.onConfirm}
           onCancel={() => setSwitchConfirm(null)}
         />
-      )}
-
-      {(processError || latencyError || ipVerificationResult.error) && (
-        <div className="form-message form-message-error">
-          {friendlyError(processError ?? ipVerificationResult.error ?? latencyError)}
-        </div>
       )}
 
       {/* ── Top-5 sub + free server mini-lists ── */}
@@ -3618,6 +3633,7 @@ function ServersPage({
   onOpenSubscriptions,
   onConnectFreeNode,
   onRefreshFreePool,
+  onConnectSubNode,
 }: {
   loading: boolean
   nodes: SafeServerNode[]
@@ -3662,6 +3678,7 @@ function ServersPage({
   onOpenSubscriptions: () => void
   onConnectFreeNode: (server: FreePoolServer) => void
   onRefreshFreePool: () => void
+  onConnectSubNode: (node: SafeServerNode) => void
 }) {
   const t = useT()
   const [expandedServerId, setExpandedServerId] =
@@ -3906,54 +3923,71 @@ function ServersPage({
               key={node.id}
               style={latencyBarPct > 0 ? { '--lat-pct': `${latencyBarPct}%`, '--lat-color': getLatencyColor(latencyResult?.latencyMs ?? null) } as React.CSSProperties : undefined}
             >
-              <button
-                className="server-list-summary"
-                type="button"
-                aria-expanded={isExpanded}
-                onClick={() => {
-                  setExpandedServerId(
-                    isExpanded ? null : node.id,
-                  )
-                }}
-              >
-                <span className="server-list-rank">
-                  {isFastest ? '★' : '◉'}
-                </span>
-
-                <span className="server-list-name">
-                  <strong>{node.name}</strong>
-                  <small>
-                    {node.subscriptionName}
-                    {node.protocol && <ProtocolBadge protocol={node.protocol} />}
-                  </small>
-                </span>
-
-                <LatencyBadge
-                  latencyMs={
-                    latencyResult?.latencyMs ?? null
-                  }
-                  testing={
-                    latencyTesting &&
-                    !latencyResult
-                  }
-                />
-
-                <span
-                  className={`server-list-status ${status.className}`}
+              <div className="server-list-row">
+                <button
+                  className="server-list-summary"
+                  type="button"
+                  aria-expanded={isExpanded}
+                  onClick={() => {
+                    setExpandedServerId(
+                      isExpanded ? null : node.id,
+                    )
+                  }}
                 >
-                  {status.label}
-                </span>
-
-                {isSelected && (
-                  <span className="server-selected-label">
-                    {t('servers.selected')}
+                  <span className="server-list-rank">
+                    {isFastest ? '★' : '◉'}
                   </span>
-                )}
 
-                <span className="server-expand-icon">
-                  {isExpanded ? '⌃' : '⌄'}
-                </span>
-              </button>
+                  <span className="server-list-name">
+                    <strong>{node.name}</strong>
+                    <small>
+                      {node.subscriptionName}
+                      {node.protocol && <ProtocolBadge protocol={node.protocol} />}
+                    </small>
+                  </span>
+
+                  <LatencyBadge
+                    latencyMs={
+                      latencyResult?.latencyMs ?? null
+                    }
+                    testing={
+                      latencyTesting &&
+                      !latencyResult
+                    }
+                  />
+
+                  <span
+                    className={`server-list-status ${status.className}`}
+                  >
+                    {status.label}
+                  </span>
+
+                  {isSelected && (
+                    <span className="server-selected-label">
+                      {t('servers.selected')}
+                    </span>
+                  )}
+
+                  <span className="server-expand-icon">
+                    {isExpanded ? '⌃' : '⌄'}
+                  </span>
+                </button>
+                <button
+                  className={`server-list-connect-btn${isSelected && processRunning ? ' server-list-connect-btn-active' : ''}`}
+                  type="button"
+                  disabled={!node.valid}
+                  title={t('servers.selectThis')}
+                  onClick={() => {
+                    if (processRunning && !isSelected) {
+                      setSwitchConfirm({ server: toPublicServer(node) })
+                    } else {
+                      onConnectSubNode(node)
+                    }
+                  }}
+                >
+                  {isSelected && processRunning ? '■' : '▶'}
+                </button>
+              </div>
 
               {isExpanded && (
                 <div className="server-list-details">

@@ -1,20 +1,30 @@
 :root {
-  --background: #08090c;
-  --surface: #101217;
-  --surface-soft: #15181f;
-  --surface-hover: #1a1e27;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --text: #f5f5f4;
-  --text-soft: #a1a1aa;
-  --text-muted: #71717a;
-  --gold: #e6b84f;
-  --gold-soft: rgba(230, 184, 79, 0.14);
-  --red: #d44646;
-  --red-soft: rgba(212, 70, 70, 0.14);
-  --green: #36b37e;
-  --green-soft: rgba(54, 179, 126, 0.14);
-  --sidebar-bg: rgba(10, 11, 15, 0.92);
+  /* Base surfaces — deep indigo-black, layered for clear depth */
+  --background: #06070d;
+  --surface: #0b0d16;
+  --surface-soft: #10131c;
+  --surface-hover: #161a26;
+  /* Borders — visible but not distracting */
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  /* Typography — warm off-white, not pure #fff */
+  --text: #ededeb;
+  --text-soft: #8e8ea0;
+  --text-muted: #5a5a6a;
+  /* Brand gold — richer, more saturated */
+  --gold: #f2c055;
+  --gold-soft: rgba(242, 192, 85, 0.14);
+  /* Semantic colours */
+  --red: #e05555;
+  --red-soft: rgba(224, 85, 85, 0.13);
+  --green: #3dc87e;
+  --green-soft: rgba(61, 200, 126, 0.13);
+  --teal: #2dd4bf;
+  --teal-soft: rgba(45, 212, 191, 0.13);
+  --amber: #f59e0b;
+  --amber-soft: rgba(245, 158, 11, 0.13);
+  /* Sidebar — truly distinct from main bg */
+  --sidebar-bg: rgba(4, 5, 9, 0.97);
 }
 
 [data-theme="light"] {
@@ -27,9 +37,9 @@
   --text: #18181a;
   --text-soft: #52525a;
   --text-muted: #8a8a8e;
-  --gold-soft: rgba(230, 184, 79, 0.18);
+  --gold-soft: rgba(242, 192, 85, 0.18);
   --red-soft: rgba(212, 70, 70, 0.12);
-  --green-soft: rgba(54, 179, 126, 0.12);
+  --green-soft: rgba(61, 200, 126, 0.12);
   --sidebar-bg: rgba(242, 242, 240, 0.96);
 }
 
@@ -37,7 +47,7 @@
   background:
     radial-gradient(
       circle at 90% 5%,
-      rgba(230, 184, 79, 0.07),
+      rgba(242, 192, 85, 0.07),
       transparent 28%
     ),
     var(--background);
@@ -49,7 +59,7 @@
 
 [data-theme="light"] .brand-mark {
   background:
-    linear-gradient(145deg, rgba(230, 184, 79, 0.28), transparent),
+    linear-gradient(145deg, rgba(242, 192, 85, 0.28), transparent),
     #fdfbf5;
 }
 
@@ -78,8 +88,8 @@
 }
 
 [data-theme="light"] .connection-orbit-online .connection-orbit-core {
-  background: linear-gradient(145deg, rgba(54, 179, 126, 0.14), var(--surface));
-  box-shadow: 0 0 40px rgba(54, 179, 126, 0.12);
+  background: linear-gradient(145deg, rgba(61, 200, 126, 0.14), var(--surface));
+  box-shadow: 0 0 40px rgba(61, 200, 126, 0.12);
 }
 
 [data-theme="light"] .codespace-connect-section {
@@ -127,9 +137,14 @@ button {
   overflow: hidden;
   background:
     radial-gradient(
-      circle at 90% 5%,
-      rgba(230, 184, 79, 0.08),
-      transparent 28%
+      circle at 88% 4%,
+      rgba(242, 192, 85, 0.07),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 12% 96%,
+      rgba(45, 212, 191, 0.04),
+      transparent 24%
     ),
     var(--background);
   color: var(--text);
@@ -159,11 +174,11 @@ button {
   width: 42px;
   height: 42px;
   place-items: center;
-  border: 1px solid rgba(230, 184, 79, 0.4);
+  border: 1px solid rgba(242, 192, 85, 0.38);
   border-radius: 12px;
   background:
-    linear-gradient(145deg, rgba(230, 184, 79, 0.22), transparent),
-    #17130d;
+    linear-gradient(145deg, rgba(242, 192, 85, 0.22), transparent),
+    #16120c;
   color: var(--gold);
   font-size: 20px;
   font-weight: 900;
@@ -228,9 +243,10 @@ button {
 }
 
 .navigation-item-active {
-  border-color: rgba(230, 184, 79, 0.2);
-  background: var(--gold-soft);
+  border-color: rgba(242, 192, 85, 0.22);
+  background: rgba(242, 192, 85, 0.1);
   color: var(--gold);
+  box-shadow: inset 3px 0 0 rgba(242,192,85,0.5);
 }
 
 .navigation-icon {
@@ -303,8 +319,9 @@ button {
   justify-content: space-between;
   padding: 0 34px;
   border-bottom: 1px solid var(--border);
-  background: rgba(8, 9, 12, 0.68);
-  backdrop-filter: blur(16px);
+  background: rgba(6, 7, 13, 0.78);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 [data-theme="light"] .topbar {
@@ -375,7 +392,7 @@ button {
 }
 
 .connection-pill-online {
-  border-color: rgba(54, 179, 126, 0.22);
+  border-color: rgba(61, 200, 126, 0.22);
   color: var(--green);
 }
 
@@ -402,12 +419,13 @@ button {
   min-height: 330px;
   grid-template-columns: 1.15fr 0.85fr;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 22px;
   background:
-    linear-gradient(135deg, rgba(230, 184, 79, 0.08), transparent 40%),
+    linear-gradient(135deg, rgba(242, 192, 85, 0.10) 0%, transparent 42%),
+    linear-gradient(220deg, rgba(45, 212, 191, 0.04) 0%, transparent 40%),
     var(--surface);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38), 0 1px 0 rgba(255,255,255,0.05) inset;
 }
 
 .hero-content {
@@ -461,13 +479,13 @@ button {
   align-items: center;
   gap: 13px;
   padding: 12px 17px;
-  border: 1px solid rgba(230, 184, 79, 0.34);
+  border: 1px solid rgba(242, 192, 85, 0.32);
   border-radius: 13px;
   background: var(--gold);
   color: #1d1607;
   cursor: pointer;
   text-align: right;
-  box-shadow: 0 14px 36px rgba(230, 184, 79, 0.15);
+  box-shadow: 0 14px 36px rgba(242, 192, 85, 0.16);
   transition:
     transform 160ms ease,
     box-shadow 160ms ease;
@@ -475,7 +493,7 @@ button {
 
 .connect-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 18px 42px rgba(230, 184, 79, 0.22);
+  box-shadow: 0 18px 42px rgba(242, 192, 85, 0.24);
 }
 
 .connect-button-active {
@@ -516,8 +534,8 @@ button {
   background:
     radial-gradient(
       circle,
-      rgba(230, 184, 79, 0.09),
-      transparent 57%
+      rgba(242, 192, 85, 0.11),
+      transparent 58%
     );
 }
 
@@ -526,7 +544,7 @@ button {
   width: 230px;
   height: 230px;
   place-items: center;
-  border: 1px solid rgba(230, 184, 79, 0.14);
+  border: 1px solid rgba(242, 192, 85, 0.16);
   border-radius: 50%;
   animation: orbitPulse 3s ease-in-out infinite;
 }
@@ -536,7 +554,7 @@ button {
   width: 168px;
   height: 168px;
   place-items: center;
-  border: 1px solid rgba(230, 184, 79, 0.24);
+  border: 1px solid rgba(242, 192, 85, 0.26);
   border-radius: 50%;
 }
 
@@ -545,34 +563,34 @@ button {
   width: 104px;
   height: 104px;
   place-items: center;
-  border: 1px solid rgba(230, 184, 79, 0.4);
+  border: 1px solid rgba(242, 192, 85, 0.42);
   border-radius: 50%;
   background:
-    linear-gradient(145deg, rgba(230, 184, 79, 0.25), transparent),
-    #18140d;
+    linear-gradient(145deg, rgba(242, 192, 85, 0.28), transparent),
+    #0e0b05;
   color: var(--gold);
   font-size: 35px;
   font-weight: 900;
   box-shadow:
-    0 0 60px rgba(230, 184, 79, 0.12),
-    inset 0 0 30px rgba(230, 184, 79, 0.07);
+    0 0 70px rgba(242, 192, 85, 0.15),
+    inset 0 0 32px rgba(242, 192, 85, 0.09);
 }
 
 .connection-orbit-online {
-  border-color: rgba(54, 179, 126, 0.25);
+  border-color: rgba(61, 200, 126, 0.25);
 }
 
 .connection-orbit-online .connection-orbit-middle {
-  border-color: rgba(54, 179, 126, 0.34);
+  border-color: rgba(61, 200, 126, 0.34);
 }
 
 .connection-orbit-online .connection-orbit-core {
-  border-color: rgba(54, 179, 126, 0.45);
+  border-color: rgba(61, 200, 126, 0.45);
   background:
-    linear-gradient(145deg, rgba(54, 179, 126, 0.25), transparent),
+    linear-gradient(145deg, rgba(61, 200, 126, 0.25), transparent),
     #0d1814;
   color: var(--green);
-  box-shadow: 0 0 70px rgba(54, 179, 126, 0.18);
+  box-shadow: 0 0 70px rgba(61, 200, 126, 0.18);
 }
 
 @keyframes orbitPulse {
@@ -876,8 +894,8 @@ button {
 }
 
 .text-input:focus {
-  border-color: rgba(230, 184, 79, 0.42);
-  box-shadow: 0 0 0 3px rgba(230, 184, 79, 0.08);
+  border-color: rgba(242, 192, 85, 0.42);
+  box-shadow: 0 0 0 3px rgba(242, 192, 85, 0.09);
 }
 
 .text-input::placeholder {
@@ -940,7 +958,7 @@ button {
   gap: 18px;
   padding: 24px;
   background:
-    linear-gradient(135deg, rgba(230, 184, 79, 0.09), transparent),
+    linear-gradient(135deg, rgba(242, 192, 85, 0.09), transparent),
     var(--surface);
 }
 
@@ -1093,7 +1111,7 @@ button {
 }
 
 .switch input:checked + .switch-track {
-  border-color: rgba(230, 184, 79, 0.32);
+  border-color: rgba(242, 192, 85, 0.32);
   background: var(--gold-soft);
 }
 
@@ -1195,7 +1213,7 @@ button {
 }
 
 .form-message-success {
-  border-color: rgba(54, 179, 126, 0.25);
+  border-color: rgba(61, 200, 126, 0.25);
   background: var(--green-soft);
   color: var(--green);
 }
@@ -1362,7 +1380,7 @@ button {
 
 .inspect-subscription-button {
   padding: 6px 10px;
-  border: 1px solid rgba(230, 184, 79, 0.25);
+  border: 1px solid rgba(242, 192, 85, 0.25);
   border-radius: 7px;
   background: var(--gold-soft);
   color: var(--gold);
@@ -1371,7 +1389,7 @@ button {
 }
 
 .inspect-subscription-button:hover {
-  border-color: rgba(230, 184, 79, 0.48);
+  border-color: rgba(242, 192, 85, 0.48);
 }
 
 .inspect-subscription-button:disabled {
@@ -1388,8 +1406,8 @@ button {
 }
 
 .subscription-inspection-success {
-  border-color: rgba(54, 179, 126, 0.25);
-  background: rgba(54, 179, 126, 0.07);
+  border-color: rgba(61, 200, 126, 0.25);
+  background: rgba(61, 200, 126, 0.07);
 }
 
 .subscription-inspection-error {
@@ -1469,7 +1487,7 @@ button {
 
 .load-servers-button {
   padding: 6px 10px;
-  border: 1px solid rgba(54, 179, 126, 0.25);
+  border: 1px solid rgba(61, 200, 126, 0.25);
   border-radius: 7px;
   background: var(--green-soft);
   color: var(--green);
@@ -1478,7 +1496,7 @@ button {
 }
 
 .load-servers-button:hover {
-  border-color: rgba(54, 179, 126, 0.48);
+  border-color: rgba(61, 200, 126, 0.48);
 }
 
 .load-servers-button:disabled {
@@ -1614,9 +1632,9 @@ button {
 }
 
 .server-card-selected {
-  border-color: rgba(54, 179, 126, 0.5);
+  border-color: rgba(61, 200, 126, 0.5);
   box-shadow:
-    0 0 0 2px rgba(54, 179, 126, 0.08),
+    0 0 0 2px rgba(61, 200, 126, 0.08),
     0 18px 45px rgba(0, 0, 0, 0.18);
   transform: translateY(-2px);
 }
@@ -1626,7 +1644,7 @@ button {
   min-height: 36px;
   margin-top: 13px;
   padding: 7px 11px;
-  border: 1px solid rgba(230, 184, 79, 0.25);
+  border: 1px solid rgba(242, 192, 85, 0.25);
   border-radius: 9px;
   background: var(--gold-soft);
   color: var(--gold);
@@ -1636,11 +1654,11 @@ button {
 }
 
 .select-server-button:hover {
-  border-color: rgba(230, 184, 79, 0.5);
+  border-color: rgba(242, 192, 85, 0.5);
 }
 
 .select-server-button-selected {
-  border-color: rgba(54, 179, 126, 0.35);
+  border-color: rgba(61, 200, 126, 0.35);
   background: var(--green-soft);
   color: var(--green);
 }
@@ -1666,7 +1684,7 @@ button {
   background:
     linear-gradient(
       135deg,
-      rgba(230, 184, 79, 0.05),
+      rgba(242, 192, 85, 0.06),
       transparent 55%
     ),
     var(--surface);
@@ -1734,13 +1752,13 @@ button {
 }
 
 .latency-badge-good {
-  border-color: rgba(54, 179, 126, 0.3);
+  border-color: rgba(61, 200, 126, 0.3);
   background: var(--green-soft);
   color: var(--green);
 }
 
 .latency-badge-medium {
-  border-color: rgba(230, 184, 79, 0.32);
+  border-color: rgba(242, 192, 85, 0.32);
   background: var(--gold-soft);
   color: var(--gold);
 }
@@ -1759,9 +1777,9 @@ button {
 }
 
 .server-card-fastest {
-  border-color: rgba(230, 184, 79, 0.52);
+  border-color: rgba(242, 192, 85, 0.52);
   box-shadow:
-    0 0 0 2px rgba(230, 184, 79, 0.07),
+    0 0 0 2px rgba(242, 192, 85, 0.07),
     0 18px 45px rgba(0, 0, 0, 0.17);
 }
 
@@ -1828,22 +1846,22 @@ button {
   background: var(--surface);
   transition:
     border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+    box-shadow 160ms ease;
 }
 
 .server-list-item:hover {
-  border-color: rgba(230, 184, 79, 0.28);
+  border-color: rgba(242, 192, 85, 0.26);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
 }
 
 .server-list-item-fastest {
-  border-color: rgba(230, 184, 79, 0.46);
-  box-shadow: 0 0 0 1px rgba(230, 184, 79, 0.06);
+  border-color: rgba(242, 192, 85, 0.44);
+  box-shadow: 0 0 0 1px rgba(242, 192, 85, 0.07), 0 4px 16px rgba(0,0,0,0.2);
 }
 
 .server-list-item-selected {
-  border-color: rgba(54, 179, 126, 0.48);
-  box-shadow: 0 0 0 2px rgba(54, 179, 126, 0.06);
+  border-color: rgba(45, 212, 191, 0.44);
+  box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.07), 0 4px 16px rgba(0,0,0,0.2);
 }
 
 .server-list-item-invalid {
@@ -1934,7 +1952,7 @@ button {
 }
 
 .server-selected-label {
-  background: rgba(54, 179, 126, 0.09);
+  background: rgba(61, 200, 126, 0.09);
   color: var(--green);
 }
 
@@ -1995,8 +2013,8 @@ button {
 }
 
 .config-check-result-success {
-  border-color: rgba(54, 179, 126, 0.28);
-  background: rgba(54, 179, 126, 0.06);
+  border-color: rgba(61, 200, 126, 0.28);
+  background: rgba(61, 200, 126, 0.06);
   color: var(--green);
 }
 
@@ -2051,12 +2069,12 @@ button {
   justify-content: space-between;
   gap: 18px;
   padding: 17px 19px;
-  border: 1px solid rgba(54, 179, 126, 0.3);
+  border: 1px solid rgba(61, 200, 126, 0.3);
   border-radius: 15px;
   background:
     linear-gradient(
       135deg,
-      rgba(54, 179, 126, 0.1),
+      rgba(61, 200, 126, 0.1),
       transparent 60%
     ),
     var(--surface);
@@ -2090,11 +2108,11 @@ button {
 /* Verified IP connection state */
 
 .local-proxy-status-card-verified {
-  border-color: rgba(54, 179, 126, 0.42);
+  border-color: rgba(61, 200, 126, 0.42);
   background:
     linear-gradient(
       135deg,
-      rgba(54, 179, 126, 0.12),
+      rgba(61, 200, 126, 0.12),
       transparent 60%
     ),
     var(--surface);
@@ -2121,12 +2139,12 @@ button {
 
 .ip-verification-card {
   padding: 20px;
-  border: 1px solid rgba(54, 179, 126, 0.38);
+  border: 1px solid rgba(61, 200, 126, 0.38);
   border-radius: 16px;
   background:
     linear-gradient(
       135deg,
-      rgba(54, 179, 126, 0.1),
+      rgba(61, 200, 126, 0.1),
       transparent 55%
     ),
     var(--surface);
@@ -3697,8 +3715,8 @@ button {
 /* ── BPB home card ────────────────────────────────────────────────────────── */
 
 .bpb-home-card {
-  background: linear-gradient(135deg, rgba(230, 184, 79, 0.09) 0%, var(--surface) 70%);
-  border: 1px solid rgba(230, 184, 79, 0.28);
+  background: linear-gradient(135deg, rgba(242, 192, 85, 0.09) 0%, var(--surface) 70%);
+  border: 1px solid rgba(242, 192, 85, 0.28);
   border-radius: 16px;
   padding: 24px;
   display: flex;
@@ -3707,7 +3725,7 @@ button {
 }
 
 [data-theme="light"] .bpb-home-card {
-  background: linear-gradient(135deg, rgba(230, 184, 79, 0.08) 0%, var(--surface) 70%);
+  background: linear-gradient(135deg, rgba(242, 192, 85, 0.08) 0%, var(--surface) 70%);
 }
 
 .bpb-home-kicker {
@@ -3731,8 +3749,8 @@ button {
   gap: 14px;
   width: 100%;
   padding: 14px 20px;
-  background: linear-gradient(135deg, var(--gold), rgba(230, 184, 79, 0.8));
-  border: 1px solid rgba(230, 184, 79, 0.3);
+  background: linear-gradient(135deg, var(--gold), rgba(242, 192, 85, 0.8));
+  border: 1px solid rgba(242, 192, 85, 0.3);
   border-radius: 12px;
   color: #1a1200;
   cursor: pointer;
@@ -3807,7 +3825,7 @@ button {
 .guide-badge-bpb {
   background: var(--gold-soft);
   color: var(--gold);
-  border: 1px solid rgba(230, 184, 79, 0.3);
+  border: 1px solid rgba(242, 192, 85, 0.3);
 }
 
 .guide-badge-gh {
@@ -3817,9 +3835,9 @@ button {
 }
 
 .guide-badge-ext {
-  background: rgba(54, 179, 126, 0.12);
+  background: rgba(61, 200, 126, 0.12);
   color: var(--green);
-  border: 1px solid rgba(54, 179, 126, 0.28);
+  border: 1px solid rgba(61, 200, 126, 0.28);
 }
 
 .guide-steps {
@@ -4183,7 +4201,7 @@ button {
   padding: 8px 18px;
   border-radius: 10px;
   border: none;
-  background: linear-gradient(135deg, var(--gold), rgba(230, 184, 79, 0.85));
+  background: linear-gradient(135deg, var(--gold), rgba(242, 192, 85, 0.85));
   color: #1a1200;
   cursor: pointer;
   font-size: 0.85rem;
@@ -4204,7 +4222,7 @@ button {
 }
 
 [data-theme="light"] .bpb-auto-summary > div {
-  background: rgba(230, 184, 79, 0.06);
+  background: rgba(242, 192, 85, 0.06);
   border-color: rgba(0, 0, 0, 0.09);
 }
 
@@ -4214,8 +4232,8 @@ button {
 }
 
 [data-theme="light"] .bpb-server-row:hover:not(:disabled) {
-  background: rgba(230, 184, 79, 0.08);
-  border-color: rgba(230, 184, 79, 0.5);
+  background: rgba(242, 192, 85, 0.08);
+  border-color: rgba(242, 192, 85, 0.5);
 }
 
 [data-theme="light"] .bpb-server-row.is-active {
@@ -4230,8 +4248,8 @@ button {
 /* ── Light theme: inline notice/error boxes ───────────────────────────────── */
 
 [data-theme="light"] .inline-notice {
-  background: rgba(230, 184, 79, 0.1);
-  border: 1px solid rgba(230, 184, 79, 0.3);
+  background: rgba(242, 192, 85, 0.1);
+  border: 1px solid rgba(242, 192, 85, 0.3);
   color: #7c5f00;
 }
 
@@ -4259,7 +4277,7 @@ button {
 }
 
 [data-theme="light"] .bpb-server-rank {
-  background: rgba(230, 184, 79, 0.08);
+  background: rgba(242, 192, 85, 0.08);
   border-color: rgba(0, 0, 0, 0.1);
 }
 
@@ -4270,12 +4288,12 @@ button {
 /* ── Free Config Card (home screen) ─────────────────────────────────────── */
 
 .free-config-card {
-  border: 1px solid rgba(6, 182, 212, 0.28);
+  border: 1px solid rgba(45, 212, 191, 0.28);
   border-radius: 16px;
   padding: 18px 20px;
   background: linear-gradient(
     135deg,
-    rgba(6, 182, 212, 0.07) 0%,
+    rgba(45, 212, 191, 0.07) 0%,
     rgba(15, 23, 42, 0.42) 100%
   );
   transition: opacity 0.2s, filter 0.2s;
@@ -4311,7 +4329,7 @@ button {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #22d3ee !important;
+  color: var(--teal) !important;
 }
 
 .free-config-progress {
@@ -4351,7 +4369,7 @@ button {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #22d3ee;
+  background: var(--teal);
   box-shadow: 0 0 6px rgba(34, 211, 238, 0.6);
   flex-shrink: 0;
   animation: free-pulse 2s ease-in-out infinite;
@@ -4365,7 +4383,7 @@ button {
 .free-latency {
   margin-right: 4px;
   font-size: 0.75rem;
-  color: #22d3ee;
+  color: var(--teal);
   font-variant-numeric: tabular-nums;
   direction: ltr;
 }
@@ -4380,8 +4398,8 @@ button {
   gap: 14px;
   width: 100%;
   padding: 13px 18px;
-  background: linear-gradient(135deg, #0891b2, rgba(6, 182, 212, 0.82));
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  background: linear-gradient(135deg, #1a9ea0, rgba(45, 212, 191, 0.88));
+  border: 1px solid rgba(45, 212, 191, 0.3);
   border-radius: 12px;
   color: #f0faff;
   cursor: pointer;
@@ -4400,7 +4418,7 @@ button {
 }
 
 .free-connect-button.loading {
-  background: linear-gradient(135deg, rgba(8, 145, 178, 0.6), rgba(6, 182, 212, 0.5));
+  background: linear-gradient(135deg, rgba(26, 158, 160, 0.6), rgba(45, 212, 191, 0.5));
 }
 
 .free-btn-icon {
@@ -4432,9 +4450,9 @@ button {
   width: 100%;
   padding: 10px 18px;
   border-radius: 10px;
-  border: 1px solid rgba(6, 182, 212, 0.35);
-  background: rgba(6, 182, 212, 0.08);
-  color: #22d3ee;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  background: rgba(45, 212, 191, 0.08);
+  color: var(--teal);
   cursor: pointer;
   font-size: 0.86rem;
   font-weight: 500;
@@ -4442,8 +4460,8 @@ button {
 }
 
 .free-disconnect-button:hover {
-  background: rgba(6, 182, 212, 0.15);
-  border-color: rgba(6, 182, 212, 0.55);
+  background: rgba(45, 212, 191, 0.15);
+  border-color: rgba(45, 212, 191, 0.55);
 }
 
 /* ── Free Pool Section (servers page) ────────────────────────────────────── */
@@ -4455,7 +4473,7 @@ button {
 }
 
 .free-pool-kicker {
-  color: #22d3ee !important;
+  color: var(--teal) !important;
 }
 
 .free-pool-list {
@@ -4477,8 +4495,8 @@ button {
 }
 
 .free-pool-row:hover {
-  border-color: rgba(6, 182, 212, 0.35);
-  background: rgba(6, 182, 212, 0.04);
+  border-color: rgba(45, 212, 191, 0.32);
+  background: rgba(45, 212, 191, 0.05);
 }
 
 .free-pool-rank {
@@ -4517,9 +4535,9 @@ button {
 .free-pool-connect-btn {
   padding: 6px 10px;
   border-radius: 8px;
-  border: 1px solid rgba(6, 182, 212, 0.4);
-  background: rgba(6, 182, 212, 0.08);
-  color: #22d3ee;
+  border: 1px solid rgba(45, 212, 191, 0.38);
+  background: rgba(45, 212, 191, 0.08);
+  color: var(--teal);
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
@@ -4528,8 +4546,8 @@ button {
 }
 
 .free-pool-connect-btn:hover:not(:disabled) {
-  background: rgba(6, 182, 212, 0.18);
-  border-color: rgba(6, 182, 212, 0.6);
+  background: rgba(45, 212, 191, 0.16);
+  border-color: rgba(45, 212, 191, 0.55);
 }
 
 .free-pool-connect-btn:disabled {
@@ -4540,8 +4558,8 @@ button {
 /* ── Light theme: free config ─────────────────────────────────────────────── */
 
 [data-theme="light"] .free-config-card {
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.06) 0%, var(--surface) 100%);
-  border-color: rgba(6, 182, 212, 0.25);
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.06) 0%, var(--surface) 100%);
+  border-color: rgba(45, 212, 191, 0.25);
 }
 
 [data-theme="light"] .free-pool-row {
@@ -4550,8 +4568,8 @@ button {
 }
 
 [data-theme="light"] .free-pool-row:hover {
-  background: rgba(6, 182, 212, 0.04);
-  border-color: rgba(6, 182, 212, 0.3);
+  background: rgba(45, 212, 191, 0.04);
+  border-color: rgba(45, 212, 191, 0.3);
 }
 
 [data-theme="light"] .free-config-kicker,
@@ -4589,7 +4607,7 @@ button {
 
 .orbit-logo-online {
   opacity: 1;
-  filter: saturate(1.1) brightness(1.05) drop-shadow(0 0 12px rgba(54, 179, 126, 0.55));
+  filter: saturate(1.1) brightness(1.05) drop-shadow(0 0 12px rgba(61, 200, 126, 0.55));
   animation: orbitLogoPulse 2.6s ease-in-out infinite;
 }
 
@@ -4600,8 +4618,8 @@ button {
 }
 
 @keyframes orbitLogoPulse {
-  0%, 100% { transform: scale(1); filter: saturate(1.1) brightness(1.05) drop-shadow(0 0 12px rgba(54, 179, 126, 0.55)); }
-  50%       { transform: scale(1.06); filter: saturate(1.2) brightness(1.1) drop-shadow(0 0 18px rgba(54, 179, 126, 0.75)); }
+  0%, 100% { transform: scale(1); filter: saturate(1.1) brightness(1.05) drop-shadow(0 0 12px rgba(61, 200, 126, 0.55)); }
+  50%       { transform: scale(1.06); filter: saturate(1.2) brightness(1.1) drop-shadow(0 0 18px rgba(61, 200, 126, 0.75)); }
 }
 
 @keyframes orbitLogoConnecting {
@@ -4618,13 +4636,13 @@ button {
 }
 
 .connection-orbit-connecting .connection-orbit-middle {
-  border-color: rgba(230, 184, 79, 0.28);
+  border-color: rgba(242, 192, 85, 0.28);
 }
 
 .connection-orbit-connecting .connection-orbit-core {
-  border-color: rgba(230, 184, 79, 0.5);
+  border-color: rgba(242, 192, 85, 0.5);
   background:
-    linear-gradient(145deg, rgba(230, 184, 79, 0.18), transparent),
+    linear-gradient(145deg, rgba(242, 192, 85, 0.18), transparent),
     #18140d;
 }
 
@@ -4637,7 +4655,7 @@ button {
 }
 
 .connection-orbit-reconnecting .connection-orbit-core {
-  border-color: rgba(230, 184, 79, 0.5);
+  border-color: rgba(242, 192, 85, 0.5);
 }
 
 @keyframes orbitReconnectPulse {
@@ -4652,7 +4670,7 @@ button {
   margin-inline-start: 10px;
   padding: 1px 8px;
   border-radius: 20px;
-  background: rgba(54, 179, 126, 0.12);
+  background: rgba(61, 200, 126, 0.12);
   color: var(--green);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -4668,7 +4686,7 @@ button {
   height: 3px;
   margin: 10px auto 0;
   border-radius: 99px;
-  background: rgba(230, 184, 79, 0.12);
+  background: rgba(242, 192, 85, 0.12);
   overflow: hidden;
 }
 
@@ -4747,7 +4765,7 @@ button {
   align-items: center;
   gap: 10px;
   padding: 12px 18px;
-  border: 1px solid rgba(54, 179, 126, 0.25);
+  border: 1px solid rgba(61, 200, 126, 0.25);
   border-radius: 12px;
   background: var(--surface);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
@@ -4780,7 +4798,7 @@ button {
 }
 
 .empty-state-icon-servers {
-  background: rgba(6, 182, 212, 0.1);
+  background: rgba(45, 212, 191, 0.1);
   color: #06b6d4;
 }
 
@@ -4796,7 +4814,7 @@ button {
 }
 
 [data-theme="light"] .session-timer {
-  background: rgba(54, 179, 126, 0.1);
+  background: rgba(61, 200, 126, 0.1);
 }
 
 /* ── Protocol badge ───────────────────────────────────────────────────────── */
@@ -5410,74 +5428,77 @@ button {
 
 /* Black — Personal Subscription */
 .method-btn-black {
-  background: #1a1a1a;
-  border-color: rgba(255,255,255,0.14);
-  color: #f0f0f0;
-  box-shadow: 0 4px 18px rgba(0,0,0,0.35);
+  background: linear-gradient(145deg, #1e1f26, #14151b);
+  border-color: rgba(255,255,255,0.16);
+  color: #ededeb;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 .method-btn-black:hover:not(:disabled) {
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  background: linear-gradient(145deg, #242530, #181920);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.65);
 }
 .method-btn-black.method-btn-active {
-  border-color: rgba(255,255,255,0.3);
-  background: #2a2a2a;
-  box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 8px 24px rgba(0,0,0,0.5);
+  border-color: rgba(255,255,255,0.28);
+  background: linear-gradient(145deg, #2c2d38, #1e1f28);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.1), 0 8px 28px rgba(0,0,0,0.6);
 }
 
-/* Red — GitHub Subscription */
+/* Red — GitHub Codespace */
 .method-btn-red {
-  background: #a50000;
-  border-color: rgba(255,255,255,0.12);
+  background: linear-gradient(145deg, #b80000, #8b0000);
+  border-color: rgba(255,140,140,0.18);
   color: #fff;
-  box-shadow: 0 4px 18px rgba(165,0,0,0.35);
+  box-shadow: 0 4px 20px rgba(180,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
 }
 .method-btn-red:hover:not(:disabled) {
-  box-shadow: 0 8px 24px rgba(165,0,0,0.5);
+  background: linear-gradient(145deg, #cc0000, #9c0000);
+  box-shadow: 0 8px 28px rgba(180,0,0,0.55);
 }
 .method-btn-red.method-btn-active {
-  background: #cc0000;
-  border-color: rgba(255,200,200,0.3);
-  box-shadow: 0 0 0 2px rgba(255,100,100,0.2), 0 8px 24px rgba(165,0,0,0.5);
+  background: linear-gradient(145deg, #d40000, #aa0000);
+  border-color: rgba(255,160,160,0.32);
+  box-shadow: 0 0 0 2px rgba(255,80,80,0.18), 0 8px 28px rgba(180,0,0,0.55);
 }
 
 /* Gold — BPB Subscription */
 .method-btn-gold {
-  background: #d4a800;
-  border-color: rgba(255,255,255,0.12);
-  color: #1a1200;
-  box-shadow: 0 4px 18px rgba(212,168,0,0.35);
+  background: linear-gradient(145deg, #e6a800, #b87e00);
+  border-color: rgba(255,220,100,0.2);
+  color: #1a1100;
+  box-shadow: 0 4px 20px rgba(220,160,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
 }
 .method-btn-gold:hover:not(:disabled) {
-  box-shadow: 0 8px 24px rgba(212,168,0,0.5);
+  background: linear-gradient(145deg, #f2b800, #cc9000);
+  box-shadow: 0 8px 28px rgba(220,160,0,0.55);
 }
 .method-btn-gold.method-btn-active {
-  background: #ffce00;
-  border-color: rgba(255,240,100,0.4);
-  box-shadow: 0 0 0 2px rgba(255,220,0,0.25), 0 8px 24px rgba(212,168,0,0.5);
+  background: linear-gradient(145deg, #ffd000, #e0a800);
+  border-color: rgba(255,240,80,0.4);
+  box-shadow: 0 0 0 2px rgba(255,220,0,0.22), 0 8px 28px rgba(220,160,0,0.55);
 }
 .method-btn-gold .method-btn-icon {
-  background: rgba(0,0,0,0.12);
+  background: rgba(0,0,0,0.15);
 }
 
-/* Teal — Free Subscription */
+/* Teal — Free Configs */
 .method-btn-teal {
-  background: rgba(54, 179, 126, 0.15);
-  border-color: rgba(54, 179, 126, 0.35);
+  background: linear-gradient(145deg, rgba(45,212,191,0.16), rgba(45,212,191,0.08));
+  border-color: rgba(45,212,191,0.32);
   color: var(--text);
-  box-shadow: 0 4px 18px rgba(54,179,126,0.12);
+  box-shadow: 0 4px 20px rgba(45,212,191,0.12);
 }
 .method-btn-teal:hover:not(:disabled) {
-  background: rgba(54, 179, 126, 0.22);
-  box-shadow: 0 8px 24px rgba(54,179,126,0.22);
+  background: linear-gradient(145deg, rgba(45,212,191,0.24), rgba(45,212,191,0.14));
+  box-shadow: 0 8px 28px rgba(45,212,191,0.2);
 }
 .method-btn-teal.method-btn-active {
-  background: rgba(54, 179, 126, 0.25);
-  border-color: rgba(54, 179, 126, 0.55);
-  box-shadow: 0 0 0 2px rgba(54,179,126,0.15), 0 8px 24px rgba(54,179,126,0.22);
+  background: linear-gradient(145deg, rgba(45,212,191,0.28), rgba(45,212,191,0.16));
+  border-color: rgba(45,212,191,0.52);
+  box-shadow: 0 0 0 2px rgba(45,212,191,0.14), 0 8px 28px rgba(45,212,191,0.2);
 }
 .method-btn-teal .method-btn-icon {
-  background: rgba(54, 179, 126, 0.2);
-  color: #36b37e;
+  background: rgba(45,212,191,0.18);
+  color: #2dd4bf;
 }
 
 /* Active state shared pulse */
@@ -5543,12 +5564,12 @@ button {
 }
 
 .connection-stage-active {
-  background: rgba(230, 184, 79, 0.09);
+  background: rgba(242, 192, 85, 0.09);
   color: var(--gold);
 }
 
 .connection-stage-done {
-  background: rgba(54, 179, 126, 0.08);
+  background: rgba(61, 200, 126, 0.08);
   color: var(--green);
 }
 
@@ -5702,8 +5723,8 @@ button {
 }
 
 .top-server-connect-btn:hover:not(:disabled) {
-  background: rgba(230, 184, 79, 0.14);
-  border-color: rgba(230, 184, 79, 0.35);
+  background: rgba(242, 192, 85, 0.16);
+  border-color: rgba(242, 192, 85, 0.38);
 }
 
 .top-server-connect-btn:disabled {
@@ -5732,4 +5753,95 @@ button {
 .free-pool-refresh-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ── Error banner (top of home, replaces inline error messages) ───────────── */
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(224, 85, 85, 0.3);
+  background: rgba(224, 85, 85, 0.1);
+  backdrop-filter: blur(8px);
+  margin-bottom: 16px;
+  animation: slide-down 180ms ease;
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.error-banner-text {
+  flex: 1;
+  font-size: 12px;
+  color: #ff8080;
+  line-height: 1.55;
+}
+
+.error-banner-close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid rgba(224,85,85,0.28);
+  background: rgba(224,85,85,0.12);
+  color: #ff8080;
+  font-size: 11px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 140ms ease;
+}
+
+.error-banner-close:hover {
+  background: rgba(224,85,85,0.24);
+}
+
+/* ── Subscription server list — inline connect button ─────────────────────── */
+.server-list-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.server-list-row .server-list-summary {
+  flex: 1;
+  min-width: 0;
+}
+
+.server-list-connect-btn {
+  flex-shrink: 0;
+  width: 38px;
+  border: none;
+  border-radius: 0 10px 10px 0;
+  border-inline-start: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.server-list-connect-btn:hover:not(:disabled) {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+
+.server-list-connect-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.server-list-connect-btn-active {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.server-list-connect-btn-active:hover:not(:disabled) {
+  background: rgba(224,85,85,0.18);
+  color: var(--red);
 }
