@@ -116,13 +116,15 @@ async function writeSingboxConfig(outbound, userDataPath, directDomains, proxyDo
   if (proxyDoH) {
     config.dns = {
       servers: [
-        { tag: 'dns-proxy', address: 'tls://1.1.1.1', detour: 'proxy' },
-        { tag: 'dns-direct', address: 'local', detour: 'direct' },
+        { tag: 'dns-proxy', type: 'tls', server: '1.1.1.1', detour: 'proxy' },
+        { tag: 'dns-direct', type: 'local' },
       ],
-      rules: [{ outbound: 'direct', server: 'dns-direct' }],
       final: 'dns-proxy',
       independent_cache: true,
     }
+    // Route direct outbound's DNS through local resolver (sing-box 1.12+ format)
+    const directOut = config.outbounds.find(o => o.tag === 'direct')
+    if (directOut) directOut.domain_resolver = 'dns-direct'
   }
 
   const runtimeDir = path.join(

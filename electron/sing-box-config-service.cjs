@@ -1197,19 +1197,13 @@ function buildProxyDnsBlock() {
     servers: [
       {
         tag: 'dns-proxy',
-        address: 'tls://1.1.1.1',
+        type: 'tls',
+        server: '1.1.1.1',
         detour: 'proxy',
       },
       {
         tag: 'dns-direct',
-        address: 'local',
-        detour: 'direct',
-      },
-    ],
-    rules: [
-      {
-        outbound: 'direct',
-        server: 'dns-direct',
+        type: 'local',
       },
     ],
     final: 'dns-proxy',
@@ -1245,10 +1239,9 @@ function buildConfig(
 
     outbounds: [
       proxyOutbound,
-      {
-        type: 'direct',
-        tag: 'direct',
-      },
+      proxyDoH
+        ? { type: 'direct', tag: 'direct', domain_resolver: 'dns-direct' }
+        : { type: 'direct', tag: 'direct' },
     ],
 
     route: {

@@ -66,14 +66,17 @@ async function enableStandaloneDoH(server) {
     originalDnsMap[adapter] = await getAdapterDns(adapter)
   }
 
-  // Set DNS servers and register DoH encryption template on each adapter
+  // Set DNS servers — requires Administrator. Throw on failure so the UI can show the error.
   for (const adapter of adapters) {
-    // Set DNS IPs
-    await runPS(
-      `Set-DnsClientServerAddress -InterfaceAlias '${adapter}' -ServerAddresses ('${cfg.primary}','${cfg.secondary}')`
-    ).catch(() => {})
+    const { stderr } = await runPS(
+      `Set-DnsClientServerAddress -InterfaceAlias '${adapter}' -ServerAddresses ('${cfg.primary}','${cfg.secondary}') -ErrorAction Stop`
+    ).catch((err) => ({ stderr: err?.message ?? 'Access denied' }))
 
-    // Register DoH template (Windows 11 native DoH — silently ignored on Win10)
+    if (stderr && stderr.length > 0) {
+      throw new Error(`Failed to set DNS on "${adapter}": administrator privileges required. Relaunch the app as Administrator and try again.`)
+    }
+
+    // Register DoH encryption template (Windows 11 only — silently skipped on Win10)
     await runPS(
       `Add-DnsClientDohServerAddress -ServerAddress '${cfg.primary}' -DohTemplate '${cfg.template}' -AutoUpgrade $true -ErrorAction SilentlyContinue`
     ).catch(() => {})
