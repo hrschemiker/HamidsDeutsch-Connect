@@ -798,6 +798,26 @@ declare global {
         setCloseToTray: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean; error: string | null }>
       }
 
+      doh: {
+        getSettings: () => Promise<{
+          standaloneDoHServer: 'off' | 'cloudflare' | 'google'
+          proxyDoHEnabled: boolean
+          standaloneActive: boolean
+          error: string | null
+        }>
+        setStandalone: (server: 'off' | 'cloudflare' | 'google') => Promise<{
+          success: boolean
+          standaloneDoHServer: 'off' | 'cloudflare' | 'google'
+          standaloneActive: boolean
+          error: string | null
+        }>
+        setProxyDoH: (enabled: boolean) => Promise<{
+          success: boolean
+          proxyDoHEnabled: boolean
+          error: string | null
+        }>
+      }
+
       codespace: {
         getStatus: () => Promise<CodespaceStatus>
 

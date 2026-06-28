@@ -286,6 +286,12 @@ contextBridge.exposeInMainWorld(
       setCloseToTray: (enabled) => ipcRenderer.invoke('system:set-close-to-tray', enabled),
     },
 
+    doh: {
+      getSettings: () => ipcRenderer.invoke('doh:get-settings'),
+      setStandalone: (server) => ipcRenderer.invoke('doh:set-standalone', server),
+      setProxyDoH: (enabled) => ipcRenderer.invoke('doh:set-proxy-doh', enabled),
+    },
+
     codespace: {
       getStatus: () =>
         ipcRenderer.invoke(

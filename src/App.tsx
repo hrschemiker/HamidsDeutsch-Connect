@@ -267,6 +267,17 @@ function App() {
     void window.hamidsDeutsch.startup.getCloseToTray().then((r) => { setCloseToTray(r.enabled) }).catch(() => {})
   }, [])
 
+  type DoHServer = 'off' | 'cloudflare' | 'google'
+  const [standaloneDoH, setStandaloneDoH] = useState<DoHServer>('off')
+  const [standaloneDoHLoading, setStandaloneDoHLoading] = useState(false)
+  const [proxyDoH, setProxyDoH] = useState(false)
+  useEffect(() => {
+    void window.hamidsDeutsch.doh.getSettings().then((r) => {
+      setStandaloneDoH(r.standaloneDoHServer)
+      setProxyDoH(r.proxyDoHEnabled)
+    }).catch(() => {})
+  }, [])
+
   // For smart hero-button priority: know if BPB/codespace are configured
   const [codespaceHasToken, setCodespaceHasToken] = useState(false)
   const [bpbConfigured, setBpbConfigured] = useState(false)
@@ -2008,6 +2019,19 @@ function App() {
               onCloseToTrayToggle={async (v) => {
                 setCloseToTray(v)
                 await window.hamidsDeutsch.startup.setCloseToTray(v)
+              }}
+              standaloneDoH={standaloneDoH}
+              standaloneDoHLoading={standaloneDoHLoading}
+              onStandaloneDoHChange={async (server) => {
+                setStandaloneDoHLoading(true)
+                const r = await window.hamidsDeutsch.doh.setStandalone(server)
+                if (r.success) setStandaloneDoH(server)
+                setStandaloneDoHLoading(false)
+              }}
+              proxyDoH={proxyDoH}
+              onProxyDoHToggle={async (v) => {
+                setProxyDoH(v)
+                await window.hamidsDeutsch.doh.setProxyDoH(v)
               }}
             />
           )}
@@ -5514,6 +5538,11 @@ function SettingsPage({
   onCtrlEnterToggle,
   closeToTray,
   onCloseToTrayToggle,
+  standaloneDoH,
+  standaloneDoHLoading,
+  onStandaloneDoHChange,
+  proxyDoH,
+  onProxyDoHToggle,
 }: {
   settings: {
     mode:
@@ -5578,6 +5607,11 @@ function SettingsPage({
   onCtrlEnterToggle: (v: boolean) => void
   closeToTray: boolean
   onCloseToTrayToggle: (v: boolean) => Promise<void>
+  standaloneDoH: 'off' | 'cloudflare' | 'google'
+  standaloneDoHLoading: boolean
+  onStandaloneDoHChange: (server: 'off' | 'cloudflare' | 'google') => Promise<void>
+  proxyDoH: boolean
+  onProxyDoHToggle: (v: boolean) => Promise<void>
 }) {
   const t = useT()
   const [
@@ -5924,6 +5958,41 @@ function SettingsPage({
           description={lang === 'fa' ? 'با بستن پنجره، برنامه به‌جای خروج، در سینی سیستم باقی می‌ماند.' : 'Closing the window hides the app to the system tray instead of quitting.'}
           checked={closeToTray}
           onChange={(v) => void onCloseToTrayToggle(v)}
+        />
+
+        {/* ── DNS over HTTPS ──────────────────────────────────────────────── */}
+        <div className="settings-section-divider">
+          <span>{lang === 'fa' ? 'DNS over HTTPS' : 'DNS over HTTPS (DoH)'}</span>
+        </div>
+
+        <div className="setting-row">
+          <div>
+            <strong>{lang === 'fa' ? 'سرور DoH مستقل' : 'Standalone DoH Server'}</strong>
+            <span>{lang === 'fa'
+              ? 'بدون نیاز به اتصال VPN، DNS را رمزگذاری می‌کند و شنود ISP را مسدود می‌کند.'
+              : 'Encrypts DNS without a VPN connection — hides visited domains from your ISP.'
+            }</span>
+          </div>
+          <select
+            className="doh-server-select"
+            value={standaloneDoH}
+            disabled={standaloneDoHLoading}
+            onChange={(e) => void onStandaloneDoHChange(e.target.value as 'off' | 'cloudflare' | 'google')}
+          >
+            <option value="off">{lang === 'fa' ? 'غیرفعال' : 'Off'}</option>
+            <option value="cloudflare">Cloudflare (1.1.1.1)</option>
+            <option value="google">Google (8.8.8.8)</option>
+          </select>
+        </div>
+
+        <SettingRow
+          title={lang === 'fa' ? 'DoH داخل پروکسی' : 'DoH Inside Proxy'}
+          description={lang === 'fa'
+            ? 'هنگام اتصال VPN، درخواست‌های DNS را هم از داخل تونل پروکسی ارسال می‌کند — از نشت DNS جلوگیری می‌کند.'
+            : 'When connected via proxy, routes DNS through the tunnel too — prevents DNS leaks.'
+          }
+          checked={proxyDoH}
+          onChange={(v) => void onProxyDoHToggle(v)}
         />
 
         <div className="connection-mode-summary">

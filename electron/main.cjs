@@ -8,6 +8,12 @@ const {
   nativeImage,
 } = require('electron')
 
+const {
+  enableStandaloneDoH,
+  disableStandaloneDoH,
+  getStandaloneStatus,
+} = require('./doh-manager.cjs')
+
 const path = require('node:path')
 const fs = require('node:fs')
 const crypto = require('node:crypto')
@@ -179,28 +185,47 @@ let activeConnectionParams = null
 let isQuitting = false
 let fatalCleanupStarted = false
 
-// ── Close-to-tray setting ─────────────────────────────────────────────────────
+// ── App settings (close-to-tray + DoH) ───────────────────────────────────────
 let closeToTrayEnabled = true
+let standaloneDoHServer = 'off'   // 'off' | 'cloudflare' | 'google'
+let proxyDoHEnabled = false
 
-function getCloseToTraySettingPath() {
+function getAppSettingsPath() {
   return path.join(app.getPath('userData'), 'HamidsDeutsch-Connect', 'app-settings.json')
 }
 
-async function loadCloseToTraySetting() {
+// kept for backwards compat alias
+function getCloseToTraySettingPath() { return getAppSettingsPath() }
+
+async function loadAppSettings() {
   try {
-    const raw = await fs.promises.readFile(getCloseToTraySettingPath(), 'utf8')
+    const raw = await fs.promises.readFile(getAppSettingsPath(), 'utf8')
     const parsed = JSON.parse(raw)
     closeToTrayEnabled = parsed.closeToTray !== false
+    standaloneDoHServer = parsed.standaloneDoHServer ?? 'off'
+    proxyDoHEnabled = parsed.proxyDoHEnabled === true
   } catch {
     closeToTrayEnabled = true
+    standaloneDoHServer = 'off'
+    proxyDoHEnabled = false
   }
 }
 
-async function saveCloseToTraySetting(value) {
-  const settingsPath = getCloseToTraySettingPath()
+async function saveAppSettings() {
+  const settingsPath = getAppSettingsPath()
   const dir = path.dirname(settingsPath)
   await fs.promises.mkdir(dir, { recursive: true })
-  await fs.promises.writeFile(settingsPath, JSON.stringify({ closeToTray: value }, null, 2), 'utf8')
+  await fs.promises.writeFile(settingsPath, JSON.stringify({
+    closeToTray: closeToTrayEnabled,
+    standaloneDoHServer,
+    proxyDoHEnabled,
+  }, null, 2), 'utf8')
+}
+
+// Legacy single-value save — kept so existing callers still work
+async function saveCloseToTraySetting(value) {
+  closeToTrayEnabled = value
+  await saveAppSettings()
 }
 
 function setupTray() {
@@ -532,6 +557,7 @@ async function tryConnectFreeNode(record, directDomains, rescueOptions) {
         configFileName: 'free-config.json',
         localPort: 2080,
         setSystemProxy: true,
+        proxyDoH: proxyDoHEnabled,
       })
       if (!configResult.success) return null
 
@@ -1532,6 +1558,7 @@ async function connectBpbAutomatically({
           'bpb-auto-config.json',
         localPort: 2081,
         setSystemProxy: true,
+        proxyDoH: proxyDoHEnabled,
       })
 
     if (
@@ -2868,6 +2895,7 @@ function registerIpcHandlers() {
                 'bpb-config.json',
               localPort: 2081,
               setSystemProxy: true,
+              proxyDoH: proxyDoHEnabled,
             })
 
           if (
@@ -3369,6 +3397,7 @@ function registerIpcHandlers() {
             ),
           directDomains,
           rescueOptions,
+          proxyDoH: proxyDoHEnabled,
         }
         const result =
           await createAndCheckConfig(configParams)
@@ -3589,6 +3618,7 @@ function registerIpcHandlers() {
       const connectResult = await connectViaCodespace(
         app.getPath('userData'),
         directDomains ?? [],
+        proxyDoHEnabled,
       )
 
       if (!connectResult.success) {
@@ -3926,6 +3956,43 @@ function registerIpcHandlers() {
     closeToTrayEnabled = enabled === true
     await saveCloseToTraySetting(closeToTrayEnabled)
     return { success: true, enabled: closeToTrayEnabled, error: null }
+  })
+
+  // ── DoH IPC handlers ────────────────────────────────────────────────────────
+
+  ipcMain.handle('doh:get-settings', () => {
+    return {
+      standaloneDoHServer,
+      proxyDoHEnabled,
+      standaloneActive: getStandaloneStatus().active,
+      error: null,
+    }
+  })
+
+  ipcMain.handle('doh:set-standalone', async (_event, server) => {
+    // server: 'off' | 'cloudflare' | 'google'
+    const prev = standaloneDoHServer
+    try {
+      if (prev !== 'off') {
+        await disableStandaloneDoH()
+      }
+      if (server !== 'off') {
+        await enableStandaloneDoH(server)
+      }
+      standaloneDoHServer = server
+      await saveAppSettings()
+      return { success: true, standaloneDoHServer, standaloneActive: server !== 'off', error: null }
+    } catch (err) {
+      // Roll back in memory
+      standaloneDoHServer = prev
+      return { success: false, standaloneDoHServer: prev, standaloneActive: prev !== 'off', error: err?.message ?? 'Failed to change DoH server.' }
+    }
+  })
+
+  ipcMain.handle('doh:set-proxy-doh', async (_event, enabled) => {
+    proxyDoHEnabled = enabled === true
+    await saveAppSettings()
+    return { success: true, proxyDoHEnabled, error: null }
   })
 
   ipcMain.handle('system:get-login-item', () => {
@@ -4447,7 +4514,7 @@ app.whenReady().then(async () => {
   )
 
   registerIpcHandlers()
-  loadCloseToTraySetting().then(() => {
+  loadAppSettings().then(() => {
     createMainWindow()
     setupTray()
   })

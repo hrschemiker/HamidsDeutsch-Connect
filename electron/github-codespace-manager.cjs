@@ -83,7 +83,7 @@ async function waitForCodespaceAvailable(token, name) {
 
 // ── Sing-box config writer ────────────────────────────────────────────────────
 
-async function writeSingboxConfig(outbound, userDataPath, directDomains) {
+async function writeSingboxConfig(outbound, userDataPath, directDomains, proxyDoH = false) {
   const rules = []
   if (Array.isArray(directDomains) && directDomains.length > 0) {
     rules.push({
@@ -111,6 +111,18 @@ async function writeSingboxConfig(outbound, userDataPath, directDomains) {
       final: 'proxy',
       auto_detect_interface: true,
     },
+  }
+
+  if (proxyDoH) {
+    config.dns = {
+      servers: [
+        { tag: 'dns-proxy', address: 'tls://1.1.1.1', detour: 'proxy' },
+        { tag: 'dns-direct', address: 'local', detour: 'direct' },
+      ],
+      rules: [{ outbound: 'direct', server: 'dns-direct' }],
+      final: 'dns-proxy',
+      independent_cache: true,
+    }
   }
 
   const runtimeDir = path.join(
@@ -164,7 +176,7 @@ async function setupGitHub(userDataPath, token) {
 
 // ── Connect ───────────────────────────────────────────────────────────────────
 
-async function connectViaCodespace(userDataPath, directDomains) {
+async function connectViaCodespace(userDataPath, directDomains, proxyDoH = false) {
   const { settings } = await loadCodespaceSettings(userDataPath)
 
   if (!settings.token) {
@@ -267,7 +279,7 @@ async function attemptConnect(userDataPath, settings, directDomains, forceNew) {
   const outbound = buildSingboxOutbound(uuid, codespaceName)
 
   // Write sing-box config
-  const configPath = await writeSingboxConfig(outbound, userDataPath, directDomains)
+  const configPath = await writeSingboxConfig(outbound, userDataPath, directDomains, proxyDoH)
 
   const host = buildVlessHost(codespaceName)
 

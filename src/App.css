@@ -1058,6 +1058,53 @@ button {
   border-bottom: 0;
 }
 
+.settings-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 2px;
+}
+
+.settings-section-divider span {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--teal);
+  white-space: nowrap;
+}
+
+.settings-section-divider::before,
+.settings-section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.doh-server-select {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 160ms ease;
+  min-width: 170px;
+}
+
+.doh-server-select:focus {
+  border-color: rgba(45, 212, 191, 0.42);
+}
+
+.doh-server-select:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 .setting-row > div {
   display: flex;
   flex-direction: column;

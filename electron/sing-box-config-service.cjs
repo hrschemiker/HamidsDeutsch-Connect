@@ -37,6 +37,7 @@ async function createAndCheckConfig({
   configFileName = 'config.json',
   localPort = 2080,
   setSystemProxy = false,
+  proxyDoH = false,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -91,6 +92,7 @@ async function createAndCheckConfig({
     normalizedDirectDomains,
     localPort,
     setSystemProxy,
+    proxyDoH,
   )
 
   const runtimeDirectory = path.join(
@@ -1190,15 +1192,41 @@ function buildDirectRules(directDomains) {
   ]
 }
 
+function buildProxyDnsBlock() {
+  return {
+    servers: [
+      {
+        tag: 'dns-proxy',
+        address: 'tls://1.1.1.1',
+        detour: 'proxy',
+      },
+      {
+        tag: 'dns-direct',
+        address: 'local',
+        detour: 'direct',
+      },
+    ],
+    rules: [
+      {
+        outbound: 'direct',
+        server: 'dns-direct',
+      },
+    ],
+    final: 'dns-proxy',
+    independent_cache: true,
+  }
+}
+
 function buildConfig(
   proxyOutbound,
   directDomains,
   localPort = 2080,
   setSystemProxy = false,
+  proxyDoH = false,
 ) {
   const rules = buildDirectRules(directDomains)
 
-  return {
+  const config = {
     log: {
       level: 'warn',
       timestamp: true,
@@ -1229,6 +1257,12 @@ function buildConfig(
       auto_detect_interface: true,
     },
   }
+
+  if (proxyDoH) {
+    config.dns = buildProxyDnsBlock()
+  }
+
+  return config
 }
 
 function buildTunConfig(
