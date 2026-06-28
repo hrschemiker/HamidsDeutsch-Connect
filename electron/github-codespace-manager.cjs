@@ -122,9 +122,11 @@ async function writeSingboxConfig(outbound, userDataPath, directDomains, proxyDo
       final: 'dns-proxy',
       independent_cache: true,
     }
-    // Route direct outbound's DNS through local resolver (sing-box 1.12+ format)
-    const directOut = config.outbounds.find(o => o.tag === 'direct')
-    if (directOut) directOut.domain_resolver = 'dns-direct'
+    // Both outbounds need domain_resolver to break the circular DNS dependency:
+    // proxy uses local DNS to reach its server; app DNS goes through the tunnel.
+    for (const out of config.outbounds) {
+      out.domain_resolver = 'dns-direct'
+    }
   }
 
   const runtimeDir = path.join(

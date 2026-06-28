@@ -1238,7 +1238,9 @@ function buildConfig(
     ],
 
     outbounds: [
-      proxyOutbound,
+      proxyDoH
+        ? { ...proxyOutbound, domain_resolver: 'dns-direct' }
+        : proxyOutbound,
       proxyDoH
         ? { type: 'direct', tag: 'direct', domain_resolver: 'dns-direct' }
         : { type: 'direct', tag: 'direct' },
