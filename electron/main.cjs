@@ -14,6 +14,8 @@ const {
   getStandaloneStatus,
 } = require('./doh-manager.cjs')
 
+const { getCfrayConfigs } = require('./cfray-manager.cjs')
+
 const path = require('node:path')
 const fs = require('node:fs')
 const crypto = require('node:crypto')
@@ -437,65 +439,116 @@ async function backgroundRefreshFreePool() {
   sendFreePoolStatus()
 
   try {
-    // 1. Fetch all sources
-    const { texts, sourceCount } = await fetchAllFreeSources()
-    if (texts.length === 0) return
-
-    // 2. Parse all protocols from combined content
-    const combined = texts.join('\n')
-    const records = parseAllProtocols(combined)
-    if (records.length === 0) return
-
-    // 3. Deduplicate by id (stable hash of uri)
-    const seen = new Set()
-    const unique = records.filter((r) => {
-      if (!r.node.valid || !r.node.host || !r.node.port) return false
-      if (seen.has(r.id)) return false
-      seen.add(r.id)
-      return true
-    })
-
-    // 4. Re-validate existing pool first (remove dead servers)
     const { testServerBatch } = require('./server-latency.cjs')
-    await revalidateFreePool(async (inputs) => testServerBatch(inputs)).catch(() => {})
 
-    // 5. Ping-test new candidates in chunks to avoid overwhelming the network
-    const CHUNK = 80
-    const now = new Date().toISOString()
-    let totalMerged = 0
-
-    for (let i = 0; i < unique.length; i += CHUNK) {
-      if (freeConfigState.userDisconnected === false && freePoolRefreshing === false) break
-      const chunk = unique.slice(i, i + CHUNK)
-      const inputs = chunk.map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
-      const result = await testServerBatch(inputs)
-      const latencyMap = new Map(result.results.map((r) => [r.id, r]))
-
-      const toStore = chunk
-        .filter((r) => {
-          const lr = latencyMap.get(r.id)
-          return lr && lr.reachable && typeof lr.latencyMs === 'number' && lr.latencyMs >= MIN_PING_MS && lr.latencyMs < PING_THRESHOLD_MS
+    // 1a. PRIMARY: try cfray (speed+latency tested, most reliable results)
+    sendFreeProgress('در حال دریافت کانفیگ از cfray...', 'fetching')
+    let cfrayMergedCount = 0
+    try {
+      const { uris, source } = await getCfrayConfigs(FREE_CONFIG_SOURCES)
+      if (source === 'cfray' && uris.length > 0) {
+        const cfrayRecords = parseAllProtocols(uris.join('\n'))
+        const now = new Date().toISOString()
+        const cfraySeen = new Set()
+        const cfrayUnique = cfrayRecords.filter((r) => {
+          if (!r.node.valid || !r.node.host || !r.node.port) return false
+          if (cfraySeen.has(r.id)) return false
+          cfraySeen.add(r.id)
+          return true
         })
-        .map((r) => ({
-          id: r.id,
-          uri: r.uri,
-          name: r.node.name ?? r.node.protocol,
-          protocol: r.node.protocol,
-          host: r.node.host,
-          port: r.node.port,
-          latencyMs: latencyMap.get(r.id)?.latencyMs ?? null,
-          lastTestedAt: now,
-          addedAt: now,
-        }))
+        // cfray already speed-tested these — just verify TCP reachability
+        const cfrayInputs = cfrayUnique.map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
+        const cfrayLatency = await testServerBatch(cfrayInputs)
+        const cfrayLatencyMap = new Map(cfrayLatency.results.map((r) => [r.id, r]))
+        const cfrayToStore = cfrayUnique
+          .filter((r) => {
+            const lr = cfrayLatencyMap.get(r.id)
+            return lr && lr.reachable && typeof lr.latencyMs === 'number' && lr.latencyMs >= MIN_PING_MS && lr.latencyMs < PING_THRESHOLD_MS
+          })
+          .map((r) => ({
+            id: r.id,
+            uri: r.uri,
+            name: r.node.name ?? r.node.protocol,
+            protocol: r.node.protocol,
+            host: r.node.host,
+            port: r.node.port,
+            latencyMs: cfrayLatencyMap.get(r.id)?.latencyMs ?? null,
+            lastTestedAt: now,
+            addedAt: now,
+            source: 'cfray',
+          }))
+        if (cfrayToStore.length > 0) {
+          await mergeFreeServers(cfrayToStore).catch(() => {})
+          cfrayMergedCount = cfrayToStore.length
+        }
+      }
+    } catch {
+      // cfray unavailable — proceed to fallback sources
+    }
 
-      if (toStore.length > 0) {
-        await mergeFreeServers(toStore).catch(() => {})
-        totalMerged += toStore.length
+    // 1b. FALLBACK: fetch from all subscription sources (ping-only test)
+    sendFreeProgress(`در حال دریافت از ${FREE_CONFIG_SOURCES.length} منبع...`, 'fetching')
+    const { texts, sourceCount } = await fetchAllFreeSources()
+    if (texts.length === 0 && cfrayMergedCount === 0) return
+
+    let totalMerged = cfrayMergedCount
+
+    if (texts.length > 0) {
+      // 2. Parse all protocols from combined content
+      const combined = texts.join('\n')
+      const records = parseAllProtocols(combined)
+
+      if (records.length > 0) {
+        // 3. Deduplicate by id (stable hash of uri)
+        const seen = new Set()
+        const unique = records.filter((r) => {
+          if (!r.node.valid || !r.node.host || !r.node.port) return false
+          if (seen.has(r.id)) return false
+          seen.add(r.id)
+          return true
+        })
+
+        // 4. Re-validate existing pool first (remove dead servers)
+        await revalidateFreePool(async (inputs) => testServerBatch(inputs)).catch(() => {})
+
+        // 5. Ping-test new candidates in chunks
+        const CHUNK = 80
+        const now = new Date().toISOString()
+
+        for (let i = 0; i < unique.length; i += CHUNK) {
+          if (freeConfigState.userDisconnected === false && freePoolRefreshing === false) break
+          const chunk = unique.slice(i, i + CHUNK)
+          const inputs = chunk.map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
+          const result = await testServerBatch(inputs)
+          const latencyMap = new Map(result.results.map((r) => [r.id, r]))
+
+          const toStore = chunk
+            .filter((r) => {
+              const lr = latencyMap.get(r.id)
+              return lr && lr.reachable && typeof lr.latencyMs === 'number' && lr.latencyMs >= MIN_PING_MS && lr.latencyMs < PING_THRESHOLD_MS
+            })
+            .map((r) => ({
+              id: r.id,
+              uri: r.uri,
+              name: r.node.name ?? r.node.protocol,
+              protocol: r.node.protocol,
+              host: r.node.host,
+              port: r.node.port,
+              latencyMs: latencyMap.get(r.id)?.latencyMs ?? null,
+              lastTestedAt: now,
+              addedAt: now,
+            }))
+
+          if (toStore.length > 0) {
+            await mergeFreeServers(toStore).catch(() => {})
+            totalMerged += toStore.length
+          }
+        }
       }
     }
 
     const refreshedAt = new Date().toISOString()
-    await updateFreePoolMeta({ lastRefreshedAt: refreshedAt, sourceCount }).catch(() => {})
+    await updateFreePoolMeta({ lastRefreshedAt: refreshedAt, sourceCount: (texts.length > 0 ? texts.length : 0) + (cfrayMergedCount > 0 ? 1 : 0) }).catch(() => {})
     freeConfigState.poolLastRefreshedAt = refreshedAt
 
     const meta = await getFreePoolMeta().catch(() => null)
@@ -631,9 +684,12 @@ async function runFreeConnect({ directDomains, rescueOptions, fetchFresh }) {
   const storedPool = await getAllFreePool().catch(() => [])
   if (storedPool.length > 0) {
     sendFreeProgress('در حال اتصال از مخزن سرورهای ذخیره‌شده...', 'connecting')
-    // REALITY priority: sort REALITY servers first, then by latency
+    // Sort priority: cfray-sourced first (speed-tested), then REALITY, then by latency
     const REALITY_POOL_PROTOCOLS = new Set(['vless', 'vmess', 'trojan'])
     const sortedPool = [...storedPool].sort((a, b) => {
+      const aIsCfray = a.source === 'cfray'
+      const bIsCfray = b.source === 'cfray'
+      if (aIsCfray !== bIsCfray) return aIsCfray ? -1 : 1
       const aIsReality = REALITY_POOL_PROTOCOLS.has((a.protocol || '').toLowerCase()) && (a.security || '').toLowerCase() === 'reality'
       const bIsReality = REALITY_POOL_PROTOCOLS.has((b.protocol || '').toLowerCase()) && (b.security || '').toLowerCase() === 'reality'
       if (aIsReality !== bIsReality) return aIsReality ? -1 : 1
