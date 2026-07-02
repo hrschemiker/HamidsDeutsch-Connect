@@ -2087,18 +2087,14 @@ function registerIpcHandlers() {
     async () => {
       try {
         assertBpbInactive()
-        const xraySubConfig = pendingXraySubscriptionConfig
-        pendingXraySubscriptionConfig = null
         const result =
           await startLocalProxy({
             enginePath:
-              xraySubConfig ? getXrayPath() : getEnginePath(),
+              getEnginePath(),
             userDataPath:
               app.getPath(
                 'userData',
               ),
-            configPath: xraySubConfig || undefined,
-            skipConfigValidation: Boolean(xraySubConfig),
           })
 
         console.log(
@@ -3585,32 +3581,6 @@ function registerIpcHandlers() {
           activeConnectionParams = configParams
           pendingXraySubscriptionConfig = null
           lastCheckedSubscriptionUri = nodeUri
-        } else if (nodeUri && isXrayCompatible(nodeUri)) {
-          // sing-box validation failed — try building xray config as fallback
-          const userDataPath = app.getPath('userData')
-          const xraySubConfigPath = path.join(
-            userDataPath,
-            'HamidsDeutsch-Connect',
-            'runtime',
-            'xray-sub-config.json',
-          )
-          const xrayBuilt = await buildAndWriteXrayConfig({
-            uri: nodeUri,
-            directDomains,
-            configPath: xraySubConfigPath,
-            localPort: 2080,
-          }).catch(() => false)
-
-          if (xrayBuilt) {
-            pendingXraySubscriptionConfig = xraySubConfigPath
-            console.log('[Servers] sing-box failed, xray fallback config ready:', nodeId)
-            return {
-              ...result,
-              success: true,
-              configPath: xraySubConfigPath,
-              usedXrayFallback: true,
-            }
-          }
         }
 
         console.log(
