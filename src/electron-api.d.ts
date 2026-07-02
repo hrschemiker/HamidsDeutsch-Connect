@@ -625,6 +625,11 @@ declare global {
 
         getProcessStatus: () =>
           Promise<EngineProcessStatus>
+
+        tryXrayForUri: (input: {
+          uri: string
+          directDomains: string[]
+        }) => Promise<{ success: boolean; error: string | null }>
       }
 
       network: {

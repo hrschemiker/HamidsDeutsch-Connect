@@ -189,6 +189,8 @@ let activeConnectionParams = null
 // subscription node, this holds the xray config path so engine:start-local-proxy
 // can start xray instead of sing-box.
 let pendingXraySubscriptionConfig = null
+// URI of the most recently checked subscription node — used by try-xray-for-uri
+let lastCheckedSubscriptionUri = null
 let isQuitting = false
 let fatalCleanupStarted = false
 
@@ -2121,6 +2123,40 @@ function registerIpcHandlers() {
     },
   )
 
+  // Tries to start xray for a given URI (stops any running proxy first).
+  // Returns { success, error } — frontend calls this when sing-box fails.
+  ipcMain.handle(
+    'engine:try-xray-for-uri',
+    async (_event, input) => {
+      try {
+        assertBpbInactive()
+        const uri = input?.uri || lastCheckedSubscriptionUri
+        const directDomains = Array.isArray(input?.directDomains) ? input.directDomains : []
+        if (!uri || !isXrayCompatible(uri)) {
+          return { success: false, error: 'این پروتکل توسط xray پشتیبانی نمی‌شود.' }
+        }
+        const xrayPath = getXrayPath()
+        if (!fs.existsSync(xrayPath)) {
+          return { success: false, error: 'فایل xray.exe پیدا نشد.' }
+        }
+        // Stop any running proxy first
+        await stopLocalProxy({ userDataPath: app.getPath('userData') }).catch(() => {})
+
+        const userDataPath = app.getPath('userData')
+        const configPath = path.join(userDataPath, 'HamidsDeutsch-Connect', 'runtime', 'xray-sub-config.json')
+        const built = await buildAndWriteXrayConfig({ uri, directDomains, configPath, localPort: 2080 })
+        if (!built) return { success: false, error: 'ساخت کانفیگ xray ناموفق بود.' }
+
+        const started = await startLocalProxy({ enginePath: xrayPath, userDataPath, configPath, skipConfigValidation: true })
+        if (!started.success) return { success: false, error: started.error ?? 'xray شروع نشد.' }
+
+        return { success: true, error: null }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : 'خطای ناشناخته در xray' }
+      }
+    },
+  )
+
   ipcMain.handle(
     'engine:start-tun',
     async () => {
@@ -3548,6 +3584,7 @@ function registerIpcHandlers() {
         if (result.success) {
           activeConnectionParams = configParams
           pendingXraySubscriptionConfig = null
+          lastCheckedSubscriptionUri = nodeUri
         } else if (nodeUri && isXrayCompatible(nodeUri)) {
           // sing-box validation failed — try building xray config as fallback
           const userDataPath = app.getPath('userData')

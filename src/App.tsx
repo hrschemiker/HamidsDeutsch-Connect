@@ -754,15 +754,36 @@ function App() {
         !localVerification.changed ||
         !localVerification.directIp
       ) {
+        // Final fallback: try xray engine (TLS fragmentation bypasses DPI)
         await engineProcess.stop()
         ipVerification.reset()
 
-        return {
-          success: false as const,
-          fatal: false as const,
-          error:
-            localVerification.error ??
-            'این سرور ترافیک واقعی عبور نداد.',
+        // URI was stored server-side when check-config ran; pass empty string to use it
+        const xrayResult = await window.hamidsDeutsch.engine.tryXrayForUri({
+          uri: '',
+          directDomains: directDomains.domains,
+        }).catch(() => ({ success: false, error: null }))
+
+        if (xrayResult.success) {
+          // xray started — now verify IP through xray
+          localVerification = await ipVerification.verify()
+        }
+
+        if (
+          !localVerification.success ||
+          !localVerification.changed ||
+          !localVerification.directIp
+        ) {
+          await engineProcess.stop()
+          ipVerification.reset()
+
+          return {
+            success: false as const,
+            fatal: false as const,
+            error:
+              localVerification.error ??
+              'این سرور ترافیک واقعی عبور نداد.',
+          }
         }
       }
     }

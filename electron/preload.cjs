@@ -85,6 +85,12 @@ contextBridge.exposeInMainWorld(
         ipcRenderer.invoke(
           'engine:get-process-status',
         ),
+
+      tryXrayForUri: (input) =>
+        ipcRenderer.invoke(
+          'engine:try-xray-for-uri',
+          input,
+        ),
     },
 
     network: {
