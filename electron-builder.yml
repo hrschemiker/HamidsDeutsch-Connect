@@ -35,7 +35,7 @@ compression: maximum
 publish:
   provider: github
   owner: hrschemiker
-  repo: HamidsDeutsch-Connect
+  repo: hamidsdeutsch-connect
   releaseType: release
 
 win:
