@@ -15,6 +15,7 @@ const {
 } = require('./doh-manager.cjs')
 
 const { getCfrayConfigs } = require('./cfray-manager.cjs')
+const { buildAndWriteXrayConfig, isXrayCompatible } = require('./xray-config-service.cjs')
 
 const path = require('node:path')
 const fs = require('node:fs')
@@ -184,6 +185,10 @@ let appTray = null
 // Tracks the last successful subscription/free connect call so we can rebuild
 // the config when the bypass list changes while connected.
 let activeConnectionParams = null
+// When sing-box config validation fails but xray fallback succeeds for a
+// subscription node, this holds the xray config path so engine:start-local-proxy
+// can start xray instead of sing-box.
+let pendingXraySubscriptionConfig = null
 let isQuitting = false
 let fatalCleanupStarted = false
 
@@ -635,7 +640,7 @@ async function tryConnectFreeNode(record, directDomains, rescueOptions) {
   const firstResult = await attempt(rescueOptions ?? null)
   if (firstResult) return firstResult
 
-  // Auto DPI bypass retry: if dpiBypassAuto is enabled and rescue is not already forcing dpiBypass
+  // Auto DPI bypass retry via sing-box uTLS
   const dpiBypassAuto = rescueOptions?.dpiBypassAuto !== false
   const alreadyUsingDpi = rescueOptions?.dpiBypass === true
   if (dpiBypassAuto && !alreadyUsingDpi) {
@@ -646,7 +651,21 @@ async function tryConnectFreeNode(record, directDomains, rescueOptions) {
       recordFragment: true,
       dpiBypass: true,
     }
-    return attempt(dpiOptions)
+    const dpiResult = await attempt(dpiOptions)
+    if (dpiResult) return dpiResult
+  }
+
+  // Final fallback: xray-core with native TLS fragmentation
+  if (record.uri) {
+    sendFreeProgress('تلاش با موتور xray...', 'connecting')
+    const xrayResult = await tryStartWithXrayFallback({
+      uri: record.uri,
+      directDomains: directDomains ?? [],
+      userDataPath,
+      runtimeDir: 'free-runtime',
+      configFileName: 'xray-free-config.json',
+    })
+    if (xrayResult) return xrayResult
   }
 
   return null
@@ -1019,6 +1038,45 @@ function getEnginePath() {
   }
 
   return getBundledEnginePath()
+}
+
+function getXrayPath() {
+  if (isDevelopment) {
+    return path.join(__dirname, '..', 'resources', 'xray', 'xray.exe')
+  }
+  return path.join(process.resourcesPath, 'xray', 'xray.exe')
+}
+
+/**
+ * After sing-box has failed, try the same config via xray-core.
+ * Xray natively supports TLS fragmentation which bypasses Iranian DPI.
+ * Returns the xray config path on success, null on failure or unsupported protocol.
+ */
+async function tryStartWithXrayFallback({ uri, directDomains, userDataPath, runtimeDir = 'runtime', configFileName = 'xray-config.json' }) {
+  if (!uri || !isXrayCompatible(uri)) return null
+
+  const xrayPath = getXrayPath()
+  if (!fs.existsSync(xrayPath)) return null
+
+  try {
+    const configPath = path.join(userDataPath, 'HamidsDeutsch-Connect', runtimeDir, configFileName)
+    const built = await buildAndWriteXrayConfig({ uri, directDomains: directDomains ?? [], configPath, localPort: 2080 })
+    if (!built) return null
+
+    await backupWindowsProxyState(userDataPath).catch(() => {})
+    const started = await startLocalProxy({ enginePath: xrayPath, userDataPath, configPath, skipConfigValidation: true })
+    if (!started.success) return null
+
+    const proxyWorks = await testProxyConnectivity(2080)
+    if (!proxyWorks) {
+      await stopLocalProxy({ userDataPath }).catch(() => {})
+      return null
+    }
+
+    return configPath
+  } catch {
+    return null
+  }
 }
 
 
@@ -1506,6 +1564,7 @@ async function connectBpbAutomatically({
   let selectedNodeId = null
   let selectedNodeName =
     `BPB ${type.toUpperCase()} Best Ping`
+  let usedXrayForBpb = false
 
   if (
     source.mode ===
@@ -1620,24 +1679,46 @@ async function connectBpbAutomatically({
     if (
       !configResult.success
     ) {
-      throw new Error(
-        configResult.error ||
-        'ساخت کانفیگ سریع BPB ناموفق بود.',
+      // sing-box validation failed — try xray as fallback
+      const xrayBpbConfigPath = path.join(
+        app.getPath('userData'),
+        'HamidsDeutsch-Connect',
+        'bpb-runtime',
+        'xray-bpb-config.json',
       )
-    }
+      const xrayBuilt = record?.uri && await buildAndWriteXrayConfig({
+        uri: record.uri,
+        directDomains: Array.isArray(directDomains) ? directDomains : [],
+        configPath: xrayBpbConfigPath,
+        localPort: 2081,
+      }).catch(() => false)
 
-    configPath =
-      configResult.configPath
-    selectedNodeId =
-      node.id
-    selectedNodeName =
-      node.name
+      if (xrayBuilt) {
+        configPath = xrayBpbConfigPath
+        usedXrayForBpb = true
+        selectedNodeId = node.id
+        selectedNodeName = node.name
+        console.log('[BPB] sing-box failed, using xray fallback')
+      } else {
+        throw new Error(
+          configResult.error ||
+          'ساخت کانفیگ سریع BPB ناموفق بود.',
+        )
+      }
+    } else {
+      configPath =
+        configResult.configPath
+      selectedNodeId =
+        node.id
+      selectedNodeName =
+        node.name
+    }
   }
 
   const started =
     await startBpbProxy({
       enginePath:
-        getEnginePath(),
+        usedXrayForBpb ? getXrayPath() : getEnginePath(),
       userDataPath:
         app.getPath(
           'userData',
@@ -1649,6 +1730,8 @@ async function connectBpbAutomatically({
         selectedNodeId,
       nodeName:
         selectedNodeName,
+      skipConfigValidation:
+        usedXrayForBpb,
     })
 
   if (
@@ -2002,14 +2085,18 @@ function registerIpcHandlers() {
     async () => {
       try {
         assertBpbInactive()
+        const xraySubConfig = pendingXraySubscriptionConfig
+        pendingXraySubscriptionConfig = null
         const result =
           await startLocalProxy({
             enginePath:
-              getEnginePath(),
+              xraySubConfig ? getXrayPath() : getEnginePath(),
             userDataPath:
               app.getPath(
                 'userData',
               ),
+            configPath: xraySubConfig || undefined,
+            skipConfigValidation: Boolean(xraySubConfig),
           })
 
         console.log(
@@ -3460,6 +3547,33 @@ function registerIpcHandlers() {
 
         if (result.success) {
           activeConnectionParams = configParams
+          pendingXraySubscriptionConfig = null
+        } else if (nodeUri && isXrayCompatible(nodeUri)) {
+          // sing-box validation failed — try building xray config as fallback
+          const userDataPath = app.getPath('userData')
+          const xraySubConfigPath = path.join(
+            userDataPath,
+            'HamidsDeutsch-Connect',
+            'runtime',
+            'xray-sub-config.json',
+          )
+          const xrayBuilt = await buildAndWriteXrayConfig({
+            uri: nodeUri,
+            directDomains,
+            configPath: xraySubConfigPath,
+            localPort: 2080,
+          }).catch(() => false)
+
+          if (xrayBuilt) {
+            pendingXraySubscriptionConfig = xraySubConfigPath
+            console.log('[Servers] sing-box failed, xray fallback config ready:', nodeId)
+            return {
+              ...result,
+              success: true,
+              configPath: xraySubConfigPath,
+              usedXrayFallback: true,
+            }
+          }
         }
 
         console.log(
@@ -3687,16 +3801,35 @@ function registerIpcHandlers() {
         configPath: connectResult.configPath,
       })
 
-      if (!startResult.success) {
-        return { success: false, error: startResult.error ?? 'راه‌اندازی sing-box ناموفق بود.' }
+      if (startResult.success) {
+        return {
+          success: true,
+          codespaceName: connectResult.codespaceName,
+          host: connectResult.host,
+          error: null,
+        }
       }
 
-      return {
-        success: true,
-        codespaceName: connectResult.codespaceName,
-        host: connectResult.host,
-        error: null,
+      // sing-box failed — try xray fallback
+      if (connectResult.uri) {
+        const xrayResult = await tryStartWithXrayFallback({
+          uri: connectResult.uri,
+          directDomains: directDomains ?? [],
+          userDataPath: app.getPath('userData'),
+          runtimeDir: 'runtime',
+          configFileName: 'xray-codespace-config.json',
+        })
+        if (xrayResult) {
+          return {
+            success: true,
+            codespaceName: connectResult.codespaceName,
+            host: connectResult.host,
+            error: null,
+          }
+        }
       }
+
+      return { success: false, error: startResult.error ?? 'راه‌اندازی موتور ناموفق بود.' }
     } catch (error) {
       return {
         success: false,

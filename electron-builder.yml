@@ -22,6 +22,10 @@ extraResources:
     to: sing-box
     filter:
       - "**/*"
+  - from: resources/xray
+    to: xray
+    filter:
+      - "**/*"
 
 asar: true
 asarUnpack:

@@ -16,6 +16,7 @@ const {
   listCodespacesForRepo,
   buildSingboxOutbound,
   buildVlessHost,
+  buildVlessUri,
 } = require('./github-codespace-service.cjs')
 
 const {
@@ -286,6 +287,7 @@ async function attemptConnect(userDataPath, settings, directDomains, forceNew) {
   const configPath = await writeSingboxConfig(outbound, userDataPath, directDomains, proxyDoH)
 
   const host = buildVlessHost(codespaceName)
+  const uri = buildVlessUri(uuid, codespaceName)
 
   return {
     success: true,
@@ -293,6 +295,7 @@ async function attemptConnect(userDataPath, settings, directDomains, forceNew) {
     uuid,
     host,
     configPath,
+    uri,
     error: null,
   }
 }

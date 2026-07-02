@@ -287,6 +287,11 @@ function buildSingboxOutbound(uuid, codespaceName) {
   }
 }
 
+function buildVlessUri(uuid, codespaceName) {
+  const host = buildVlessHost(codespaceName)
+  return `vless://${uuid}@${host}:443?type=ws&security=tls&sni=${host}&fp=chrome&path=%2F#codespace`
+}
+
 module.exports = {
   PROXY_REPO_NAME,
   validateToken,
@@ -302,4 +307,5 @@ module.exports = {
   listCodespacesForRepo,
   buildVlessHost,
   buildSingboxOutbound,
+  buildVlessUri,
 }
