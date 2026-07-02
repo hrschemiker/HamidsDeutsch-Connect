@@ -28,12 +28,40 @@ function getScannerPath() {
 
 let _pythonExe = null
 
+function getBundledPythonPath() {
+  const { app } = require('electron')
+  if (!app) return null
+  try {
+    const base = app.isPackaged
+      ? path.join(process.resourcesPath, 'python')
+      : path.join(__dirname, '..', 'resources', 'python')
+    const exe = path.join(base, 'python.exe')
+    return require('node:fs').existsSync(exe) ? exe : null
+  } catch {
+    return null
+  }
+}
+
 async function findPython() {
   if (_pythonExe) return _pythonExe
 
-  // On Windows the launcher is usually 'py' or 'python'; 'python3' is rare
-  const candidates = ['python', 'python3', 'py']
+  // Check bundled Python first (always works without system install)
+  const bundled = getBundledPythonPath()
+  if (bundled) {
+    try {
+      const { stdout } = await execFileAsync(bundled, ['--version'], { timeout: 6000 })
+      const match = (stdout || '').match(/Python (\d+)\.(\d+)/)
+      if (match && parseInt(match[1]) >= 3 && parseInt(match[2]) >= 8) {
+        _pythonExe = bundled
+        return bundled
+      }
+    } catch {
+      // bundled python broken — fall through to system
+    }
+  }
 
+  // Fall back to system Python
+  const candidates = ['python', 'python3', 'py']
   for (const cmd of candidates) {
     try {
       const { stdout } = await execFileAsync(cmd, ['--version'], { timeout: 6000 })

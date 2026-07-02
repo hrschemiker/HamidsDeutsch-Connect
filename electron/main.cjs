@@ -6,7 +6,10 @@ const {
   Tray,
   Menu,
   nativeImage,
+  dialog,
 } = require('electron')
+
+const { autoUpdater } = require('electron-updater')
 
 const {
   enableStandaloneDoH,
@@ -15,7 +18,6 @@ const {
 } = require('./doh-manager.cjs')
 
 const { getCfrayConfigs } = require('./cfray-manager.cjs')
-const { buildAndWriteXrayConfig, isXrayCompatible } = require('./xray-config-service.cjs')
 
 const path = require('node:path')
 const fs = require('node:fs')
@@ -185,12 +187,6 @@ let appTray = null
 // Tracks the last successful subscription/free connect call so we can rebuild
 // the config when the bypass list changes while connected.
 let activeConnectionParams = null
-// When sing-box config validation fails but xray fallback succeeds for a
-// subscription node, this holds the xray config path so engine:start-local-proxy
-// can start xray instead of sing-box.
-let pendingXraySubscriptionConfig = null
-// URI of the most recently checked subscription node — used by try-xray-for-uri
-let lastCheckedSubscriptionUri = null
 let isQuitting = false
 let fatalCleanupStarted = false
 
@@ -285,7 +281,6 @@ function setupTray() {
 
 const FREE_CONFIG_SOURCES = [
   'https://raw.githubusercontent.com/MohammadBahemmat/V2ray-Collector/main/all_servers.txt',
-  'https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/all/configs.txt',
   'https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/mix',
   'https://raw.githubusercontent.com/Pawdroid/Free-servers/main/sub',
   'https://raw.githubusercontent.com/sinavm/SVM/main/Splitted-By-Protocol/mix',
@@ -642,7 +637,7 @@ async function tryConnectFreeNode(record, directDomains, rescueOptions) {
   const firstResult = await attempt(rescueOptions ?? null)
   if (firstResult) return firstResult
 
-  // Auto DPI bypass retry via sing-box uTLS
+  // Auto DPI bypass retry: if dpiBypassAuto is enabled and rescue is not already forcing dpiBypass
   const dpiBypassAuto = rescueOptions?.dpiBypassAuto !== false
   const alreadyUsingDpi = rescueOptions?.dpiBypass === true
   if (dpiBypassAuto && !alreadyUsingDpi) {
@@ -653,21 +648,7 @@ async function tryConnectFreeNode(record, directDomains, rescueOptions) {
       recordFragment: true,
       dpiBypass: true,
     }
-    const dpiResult = await attempt(dpiOptions)
-    if (dpiResult) return dpiResult
-  }
-
-  // Final fallback: xray-core with native TLS fragmentation
-  if (record.uri) {
-    sendFreeProgress('تلاش با موتور xray...', 'connecting')
-    const xrayResult = await tryStartWithXrayFallback({
-      uri: record.uri,
-      directDomains: directDomains ?? [],
-      userDataPath,
-      runtimeDir: 'free-runtime',
-      configFileName: 'xray-free-config.json',
-    })
-    if (xrayResult) return xrayResult
+    return attempt(dpiOptions)
   }
 
   return null
@@ -1040,45 +1021,6 @@ function getEnginePath() {
   }
 
   return getBundledEnginePath()
-}
-
-function getXrayPath() {
-  if (isDevelopment) {
-    return path.join(__dirname, '..', 'resources', 'xray', 'xray.exe')
-  }
-  return path.join(process.resourcesPath, 'xray', 'xray.exe')
-}
-
-/**
- * After sing-box has failed, try the same config via xray-core.
- * Xray natively supports TLS fragmentation which bypasses Iranian DPI.
- * Returns the xray config path on success, null on failure or unsupported protocol.
- */
-async function tryStartWithXrayFallback({ uri, directDomains, userDataPath, runtimeDir = 'runtime', configFileName = 'xray-config.json' }) {
-  if (!uri || !isXrayCompatible(uri)) return null
-
-  const xrayPath = getXrayPath()
-  if (!fs.existsSync(xrayPath)) return null
-
-  try {
-    const configPath = path.join(userDataPath, 'HamidsDeutsch-Connect', runtimeDir, configFileName)
-    const built = await buildAndWriteXrayConfig({ uri, directDomains: directDomains ?? [], configPath, localPort: 2080 })
-    if (!built) return null
-
-    await backupWindowsProxyState(userDataPath).catch(() => {})
-    const started = await startLocalProxy({ enginePath: xrayPath, userDataPath, configPath, skipConfigValidation: true })
-    if (!started.success) return null
-
-    const proxyWorks = await testProxyConnectivity(2080)
-    if (!proxyWorks) {
-      await stopLocalProxy({ userDataPath }).catch(() => {})
-      return null
-    }
-
-    return configPath
-  } catch {
-    return null
-  }
 }
 
 
@@ -1566,7 +1508,6 @@ async function connectBpbAutomatically({
   let selectedNodeId = null
   let selectedNodeName =
     `BPB ${type.toUpperCase()} Best Ping`
-  let usedXrayForBpb = false
 
   if (
     source.mode ===
@@ -1681,46 +1622,24 @@ async function connectBpbAutomatically({
     if (
       !configResult.success
     ) {
-      // sing-box validation failed — try xray as fallback
-      const xrayBpbConfigPath = path.join(
-        app.getPath('userData'),
-        'HamidsDeutsch-Connect',
-        'bpb-runtime',
-        'xray-bpb-config.json',
+      throw new Error(
+        configResult.error ||
+        'ساخت کانفیگ سریع BPB ناموفق بود.',
       )
-      const xrayBuilt = record?.uri && await buildAndWriteXrayConfig({
-        uri: record.uri,
-        directDomains: Array.isArray(directDomains) ? directDomains : [],
-        configPath: xrayBpbConfigPath,
-        localPort: 2081,
-      }).catch(() => false)
-
-      if (xrayBuilt) {
-        configPath = xrayBpbConfigPath
-        usedXrayForBpb = true
-        selectedNodeId = node.id
-        selectedNodeName = node.name
-        console.log('[BPB] sing-box failed, using xray fallback')
-      } else {
-        throw new Error(
-          configResult.error ||
-          'ساخت کانفیگ سریع BPB ناموفق بود.',
-        )
-      }
-    } else {
-      configPath =
-        configResult.configPath
-      selectedNodeId =
-        node.id
-      selectedNodeName =
-        node.name
     }
+
+    configPath =
+      configResult.configPath
+    selectedNodeId =
+      node.id
+    selectedNodeName =
+      node.name
   }
 
   const started =
     await startBpbProxy({
       enginePath:
-        usedXrayForBpb ? getXrayPath() : getEnginePath(),
+        getEnginePath(),
       userDataPath:
         app.getPath(
           'userData',
@@ -1732,8 +1651,6 @@ async function connectBpbAutomatically({
         selectedNodeId,
       nodeName:
         selectedNodeName,
-      skipConfigValidation:
-        usedXrayForBpb,
     })
 
   if (
@@ -2115,40 +2032,6 @@ function registerIpcHandlers() {
         return createProcessErrorResult(
           error,
         )
-      }
-    },
-  )
-
-  // Tries to start xray for a given URI (stops any running proxy first).
-  // Returns { success, error } — frontend calls this when sing-box fails.
-  ipcMain.handle(
-    'engine:try-xray-for-uri',
-    async (_event, input) => {
-      try {
-        assertBpbInactive()
-        const uri = input?.uri || lastCheckedSubscriptionUri
-        const directDomains = Array.isArray(input?.directDomains) ? input.directDomains : []
-        if (!uri || !isXrayCompatible(uri)) {
-          return { success: false, error: 'این پروتکل توسط xray پشتیبانی نمی‌شود.' }
-        }
-        const xrayPath = getXrayPath()
-        if (!fs.existsSync(xrayPath)) {
-          return { success: false, error: 'فایل xray.exe پیدا نشد.' }
-        }
-        // Stop any running proxy first
-        await stopLocalProxy({ userDataPath: app.getPath('userData') }).catch(() => {})
-
-        const userDataPath = app.getPath('userData')
-        const configPath = path.join(userDataPath, 'HamidsDeutsch-Connect', 'runtime', 'xray-sub-config.json')
-        const built = await buildAndWriteXrayConfig({ uri, directDomains, configPath, localPort: 2080 })
-        if (!built) return { success: false, error: 'ساخت کانفیگ xray ناموفق بود.' }
-
-        const started = await startLocalProxy({ enginePath: xrayPath, userDataPath, configPath, skipConfigValidation: true })
-        if (!started.success) return { success: false, error: started.error ?? 'xray شروع نشد.' }
-
-        return { success: true, error: null }
-      } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : 'خطای ناشناخته در xray' }
       }
     },
   )
@@ -3579,8 +3462,6 @@ function registerIpcHandlers() {
 
         if (result.success) {
           activeConnectionParams = configParams
-          pendingXraySubscriptionConfig = null
-          lastCheckedSubscriptionUri = nodeUri
         }
 
         console.log(
@@ -3808,35 +3689,16 @@ function registerIpcHandlers() {
         configPath: connectResult.configPath,
       })
 
-      if (startResult.success) {
-        return {
-          success: true,
-          codespaceName: connectResult.codespaceName,
-          host: connectResult.host,
-          error: null,
-        }
+      if (!startResult.success) {
+        return { success: false, error: startResult.error ?? 'راه‌اندازی sing-box ناموفق بود.' }
       }
 
-      // sing-box failed — try xray fallback
-      if (connectResult.uri) {
-        const xrayResult = await tryStartWithXrayFallback({
-          uri: connectResult.uri,
-          directDomains: directDomains ?? [],
-          userDataPath: app.getPath('userData'),
-          runtimeDir: 'runtime',
-          configFileName: 'xray-codespace-config.json',
-        })
-        if (xrayResult) {
-          return {
-            success: true,
-            codespaceName: connectResult.codespaceName,
-            host: connectResult.host,
-            error: null,
-          }
-        }
+      return {
+        success: true,
+        codespaceName: connectResult.codespaceName,
+        host: connectResult.host,
+        error: null,
       }
-
-      return { success: false, error: startResult.error ?? 'راه‌اندازی موتور ناموفق بود.' }
     } catch (error) {
       return {
         success: false,
@@ -4609,6 +4471,55 @@ for (
 
 
 
+// ── Auto-Update ───────────────────────────────────────────────────────────────
+
+function setupAutoUpdater() {
+  if (isDevelopment) return
+
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('[Updater] Update available:', info.version)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-available', {
+        version: info.version,
+        releaseNotes: info.releaseNotes ?? null,
+      })
+    }
+  })
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[Updater] Update downloaded:', info.version)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-downloaded', {
+        version: info.version,
+      })
+    }
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'آپدیت آماده است',
+      message: `نسخه ${info.version} دانلود شد. بعد از بستن برنامه نصب می‌شود.`,
+      buttons: ['نصب و ری‌استارت', 'بعداً'],
+      defaultId: 0,
+    }).then(({ response }) => {
+      if (response === 0) autoUpdater.quitAndInstall()
+    }).catch(() => {})
+  })
+
+  autoUpdater.on('error', (err) => {
+    console.error('[Updater] Error:', err?.message ?? err)
+  })
+
+  // Check for updates 10 seconds after launch, then every 4 hours
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(() => {})
+  }, 10000)
+  setInterval(() => {
+    autoUpdater.checkForUpdates().catch(() => {})
+  }, 4 * 60 * 60 * 1000)
+}
+
 app.whenReady().then(async () => {
   console.log(
     '[Electron] Application is ready',
@@ -4713,6 +4624,7 @@ app.whenReady().then(async () => {
   loadAppSettings().then(() => {
     createMainWindow()
     setupTray()
+    setupAutoUpdater()
   })
 
   // Initialize pool metadata from disk, then start background refresh

@@ -91,7 +91,6 @@ async function startLocalProxy({
   enginePath,
   userDataPath,
   configPath: overrideConfigPath,
-  skipConfigValidation = false,
 }) {
   if (
     activeProcess &&
@@ -135,12 +134,10 @@ async function startLocalProxy({
       configPath,
     )
 
-  if (!skipConfigValidation) {
-    await validateConfigAgain({
-      enginePath,
-      configPath,
-    })
-  }
+  await validateConfigAgain({
+    enginePath,
+    configPath,
+  })
 
   resetForStart(
     systemProxyEnabled,

@@ -68,7 +68,6 @@ async function startBpbProxy({
   profileType,
   nodeId,
   nodeName,
-  skipConfigValidation = false,
 }) {
   if (
     activeProcess &&
@@ -87,7 +86,7 @@ async function startBpbProxy({
     )
   ) {
     throw new Error(
-      'فایل موتور پروکسی پیدا نشد.',
+      'فایل sing-box.exe پیدا نشد.',
     )
   }
 
@@ -105,12 +104,10 @@ async function startBpbProxy({
     userDataPath,
   )
 
-  if (!skipConfigValidation) {
-    await checkConfig({
-      enginePath,
-      configPath,
-    })
-  }
+  await checkConfig({
+    enginePath,
+    configPath,
+  })
 
   state =
     createInitialState()

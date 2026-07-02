@@ -22,8 +22,8 @@ extraResources:
     to: sing-box
     filter:
       - "**/*"
-  - from: resources/xray
-    to: xray
+  - from: resources/python
+    to: python
     filter:
       - "**/*"
 
@@ -31,6 +31,12 @@ asar: true
 asarUnpack:
   - "electron/cfray/**"
 compression: maximum
+
+publish:
+  provider: github
+  owner: hrschemiker
+  repo: HamidsDeutsch-Connect
+  releaseType: release
 
 win:
   target:
