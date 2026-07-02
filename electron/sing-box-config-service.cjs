@@ -1021,9 +1021,10 @@ function buildTlsConfig(
   }
 
   const fingerprint =
-    params.get('fp')
+    params.get('fp') || 'chrome'  // default to Chrome uTLS for all TLS outbounds
 
-  if (fingerprint) {
+  // Skip uTLS for REALITY (it has its own handshake mechanism)
+  if (security !== 'reality') {
     tls.utls = {
       enabled: true,
       fingerprint,
@@ -1348,30 +1349,16 @@ function applyRescueOptions(
       options.customSni
   }
 
-  if (
-    options.recordFragment
-  ) {
-    tls.record_fragment =
-      true
-  }
-
-  if (
-    options.handshakeFragment
-  ) {
-    tls.fragment = true
-    tls.fragment_fallback_delay =
-      options.fragmentFallbackDelay
-  }
-
-  if (options.dpiBypass) {
-    tls.tls_fragment = {
-      enabled: true,
-      size: '1-500',
-      sleep: '0-5',
-    }
-    tls.tls_padding = {
-      enabled: true,
-      size: '100-300',
+  // Enable uTLS fingerprinting — makes sing-box's TLS handshake look like a real
+  // browser, which defeats DPI-based protocol fingerprinting (most effective in Iran).
+  // Only set if not already present (the URI's fp= param may have set it already).
+  if (!tls.utls) {
+    if (options.dpiBypass) {
+      // Chrome fingerprint is the most widely accepted and hardest to block
+      tls.utls = { enabled: true, fingerprint: 'chrome' }
+    } else if (options.handshakeFragment || options.recordFragment) {
+      // Even light rescue enables randomized uTLS
+      tls.utls = { enabled: true, fingerprint: 'randomized' }
     }
   }
 
@@ -1402,6 +1389,8 @@ function normalizeRescueOptions(
 
   return {
     enabled,
+    // recordFragment and handshakeFragment kept for UI compatibility but now
+    // they trigger uTLS 'randomized' instead of the old (Xray-only) fields
     recordFragment:
       enabled &&
       value?.recordFragment !==

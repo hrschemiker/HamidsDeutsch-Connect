@@ -8,10 +8,20 @@ const os = require('node:os')
 
 const execFileAsync = promisify(execFile)
 
-// Path to bundled scanner.py
+// ── Scanner path ──────────────────────────────────────────────────────────────
+// In development: electron/cfray/scanner.py (accessible via __dirname)
+// In production (asar): asarUnpack extracts it to app.asar.unpacked/electron/cfray/scanner.py
+
 function getScannerPath() {
-  // In production (asar) the electron/ folder is inside app.asar; use __dirname which points there.
-  return path.join(__dirname, 'cfray', 'scanner.py')
+  const candidate = path.join(__dirname, 'cfray', 'scanner.py')
+  // If running from inside an asar bundle, rewrite to the .asar.unpacked sibling path
+  if (candidate.includes('.asar' + path.sep) && !candidate.includes('.asar.unpacked')) {
+    return candidate.replace(
+      '.asar' + path.sep,
+      '.asar.unpacked' + path.sep,
+    )
+  }
+  return candidate
 }
 
 // ── Python detection ──────────────────────────────────────────────────────────
@@ -21,12 +31,13 @@ let _pythonExe = null
 async function findPython() {
   if (_pythonExe) return _pythonExe
 
-  const candidates = ['python3', 'python', 'py']
+  // On Windows the launcher is usually 'py' or 'python'; 'python3' is rare
+  const candidates = ['python', 'python3', 'py']
 
   for (const cmd of candidates) {
     try {
-      const { stdout } = await execFileAsync(cmd, ['--version'], { timeout: 5000 })
-      const version = stdout.trim()
+      const { stdout } = await execFileAsync(cmd, ['--version'], { timeout: 6000 })
+      const version = (stdout || '').trim()
       const match = version.match(/Python (\d+)\.(\d+)/)
       if (match && parseInt(match[1]) >= 3 && parseInt(match[2]) >= 8) {
         _pythonExe = cmd
@@ -40,11 +51,15 @@ async function findPython() {
   return null
 }
 
-// ── Run cfray for one subscription URL ───────────────────────────────────────
+// ── Run cfray against a saved text file of configs ────────────────────────────
 
-// Returns an array of VLESS/VMess URI strings (empty if cfray fails).
-// timeoutMs: max time to wait for cfray (default 3 minutes for quick mode)
-async function fetchViaCfray(subscriptionUrl, timeoutMs = 180000) {
+/**
+ * Given a string of VLESS/VMess URIs (one per line), run cfray speed-test and
+ * return the ranked URIs from cfray's output file.
+ *
+ * timeoutMs: default 4 minutes for quick mode
+ */
+async function fetchViaCfray(combinedText, timeoutMs = 240000) {
   const python = await findPython()
   if (!python) return []
 
@@ -52,17 +67,21 @@ async function fetchViaCfray(subscriptionUrl, timeoutMs = 180000) {
   try {
     await fs.access(scannerPath)
   } catch {
-    return [] // scanner.py not found in bundle
+    return [] // scanner.py not accessible
   }
 
-  // Run cfray in a per-call temp dir so its results/ folder is isolated
+  // Isolated temp dir so cfray's results/ folder doesn't collide
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cfray-'))
+  const inputPath = path.join(tmpDir, 'input.txt')
   const outputPath = path.join(tmpDir, 'top_configs.txt')
 
   try {
-    await runCfrayProcess(python, scannerPath, subscriptionUrl, outputPath, tmpDir, timeoutMs)
+    // Write the combined subscription content as the input file
+    await fs.writeFile(inputPath, combinedText, 'utf8')
 
-    // Read the output file
+    await runCfrayProcess(python, scannerPath, inputPath, outputPath, tmpDir, timeoutMs)
+
+    // Read the output (top ranked URIs)
     try {
       const content = await fs.readFile(outputPath, 'utf8')
       const uris = content
@@ -74,20 +93,18 @@ async function fetchViaCfray(subscriptionUrl, timeoutMs = 180000) {
       return []
     }
   } finally {
-    // Clean up temp dir (best-effort)
     fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {})
   }
 }
 
-function runCfrayProcess(python, scannerPath, subscriptionUrl, outputPath, cwd, timeoutMs) {
+function runCfrayProcess(python, scannerPath, inputPath, outputPath, cwd, timeoutMs) {
   return new Promise((resolve) => {
     const args = [
       scannerPath,
-      '--sub', subscriptionUrl,
+      '--input', inputPath,
       '--no-tui',
-      '--mode', 'quick',
+      '--mode', 'quick',     // latency + small download (2-3 min)
       '--top', '20',
-      '--skip-download',    // latency-only for speed; drop for full speed test
       '--output-configs', outputPath,
     ]
 
@@ -99,51 +116,38 @@ function runCfrayProcess(python, scannerPath, subscriptionUrl, outputPath, cwd, 
 
     const timer = setTimeout(() => {
       try { child.kill('SIGTERM') } catch {}
-      resolve() // timeout — whatever was written is still usable
+      resolve() // partial results may still be in outputPath
     }, timeoutMs)
 
-    child.on('close', () => {
-      clearTimeout(timer)
-      resolve()
-    })
-
-    child.on('error', () => {
-      clearTimeout(timer)
-      resolve()
-    })
+    child.on('close', () => { clearTimeout(timer); resolve() })
+    child.on('error', () => { clearTimeout(timer); resolve() })
   })
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Try to get speed-ranked free configs via cfray for the given subscription URLs.
+ * Run cfray against pre-fetched subscription content strings.
  * Returns { uris: string[], source: 'cfray' | 'unavailable' }
- *
- * Strategy: try each URL in order; stop after the first that returns ≥5 results.
  */
-async function getCfrayConfigs(subscriptionUrls) {
+async function getCfrayConfigs(texts) {
+  if (!texts || texts.length === 0) return { uris: [], source: 'unavailable' }
+
   const python = await findPython()
   if (!python) return { uris: [], source: 'unavailable' }
 
-  for (const url of subscriptionUrls) {
-    try {
-      const uris = await fetchViaCfray(url)
-      if (uris.length >= 5) {
-        return { uris, source: 'cfray' }
-      }
-    } catch {
-      // try next
-    }
-  }
+  const combined = texts.join('\n')
+  const uris = await fetchViaCfray(combined)
 
+  if (uris.length >= 3) {
+    return { uris, source: 'cfray' }
+  }
   return { uris: [], source: 'unavailable' }
 }
 
-/** Returns true if Python 3.8+ is available for cfray. */
+/** Returns true if Python 3.8+ is available. */
 async function isCfrayAvailable() {
-  const python = await findPython()
-  return python !== null
+  return (await findPython()) !== null
 }
 
 module.exports = {

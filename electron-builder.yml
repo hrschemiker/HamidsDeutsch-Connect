@@ -24,6 +24,8 @@ extraResources:
       - "**/*"
 
 asar: true
+asarUnpack:
+  - "electron/cfray/**"
 compression: maximum
 
 win:
