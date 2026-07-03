@@ -75,7 +75,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'هسته برنامه',
-    'version': 'نسخه ۰.۱.۰',
+    'version': 'نسخه ۲.۰.۰',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'برای TUN دسترسی Administrator لازم است',
@@ -678,7 +678,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'Engine Core',
-    'version': 'Version 0.1.0',
+    'version': 'Version 2.0.0',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'Administrator access required for TUN',
@@ -1283,7 +1283,7 @@ export const _UNUSED_DE_PLACEHOLDER = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'Programm-Kern',
-    'version': 'Version 0.1.0',
+    'version': 'Version 2.0.0',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'Administratorrechte für TUN erforderlich',

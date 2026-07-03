@@ -261,8 +261,12 @@ function App() {
   const [subConnectingNodeId, setSubConnectingNodeId] = useState<string | null>(null)
   const [subConnectingStep, setSubConnectingStep] = useState<string | null>(null)
 
+  // WARP connection state
+  const [warpConnecting, setWarpConnecting] = useState(false)
+  const [warpError, setWarpError] = useState<string | null>(null)
+
   // Last connection for one-tap reconnect
-  const [lastConnectionType, setLastConnectionType] = useState<'free' | 'subscription' | 'bpb' | 'codespace' | null>(null)
+  const [lastConnectionType, setLastConnectionType] = useState<'free' | 'subscription' | 'bpb' | 'codespace' | 'warp' | null>(null)
   const [showReconnectBar, setShowReconnectBar] = useState(false)
 
   // Ctrl+Enter keyboard shortcut toggle (UX #9)
@@ -353,7 +357,7 @@ function App() {
     if (appHeroConnected) {
       hasConnectedRef.current = true
       if (!prevHeroConnectedRef.current) {
-        const mode = freePhase === 'connected' ? 'free' : codespaceConnected ? 'codespace' : lastConnectionType === 'bpb' ? 'bpb' : 'subscription'
+        const mode = freePhase === 'connected' ? 'free' : codespaceConnected ? 'codespace' : lastConnectionType === 'bpb' ? 'bpb' : lastConnectionType === 'warp' ? 'warp' : 'subscription'
         setLastConnectionType(mode)
         setShowReconnectBar(false)
         connectionStartRef.current = {
@@ -520,6 +524,34 @@ function App() {
       setFreeError(null)
     } catch {
       // ignore
+    }
+  }
+
+  async function connectWarp() {
+    if (warpConnecting) return
+    setWarpConnecting(true)
+    setWarpError(null)
+    setLastConnectionType('warp')
+    setConnectionActionError(null)
+
+    if (engineProcess.status.running) {
+      await engineProcess.stop()
+      ipVerification.reset()
+    }
+
+    const result = await window.hamidsDeutsch.warp.connect({ directDomains: directDomains.domains })
+    if (!result.success) {
+      setWarpConnecting(false)
+      setWarpError(result.error ?? 'اتصال WARP ناموفق بود.')
+      setLastConnectionType(null)
+      return
+    }
+
+    const proxyResult = await engineProcess.enableSystemProxy()
+    setWarpConnecting(false)
+    if (!proxyResult.success) {
+      setWarpError(proxyResult.error ?? 'خطا در فعال‌سازی پراکسی سیستم')
+      void stopLocalProxy()
     }
   }
 
@@ -1073,6 +1105,7 @@ function App() {
     setConnectionActionError(null)
     setSubConnectingNodeId(node.id)
     setSubConnectingStep('در حال قطع اتصال قبلی...')
+    setLastConnectionType('subscription')
 
     if (engineProcess.status.running) {
       await engineProcess.stop()
@@ -1282,7 +1315,9 @@ function App() {
 
   async function quickReconnect() {
     if (appHeroConnected) return
-    if (lastConnectionType === 'free') {
+    if (lastConnectionType === 'warp') {
+      void connectWarp()
+    } else if (lastConnectionType === 'free') {
       void connectFreeConfig()
     } else if (lastConnectionType === 'codespace') {
       void connectViaCodespace()
@@ -1751,6 +1786,10 @@ function App() {
                   setActivePage('bpb')
                 }
               }}
+              warpConnecting={warpConnecting}
+              warpError={warpError}
+              onWarpConnect={() => void connectWarp()}
+              onWarpDisconnect={() => void stopLocalProxy()}
               freePhase={freePhase}
               freeNodeName={freeNodeName}
               freeLatencyMs={freeLatencyMs}
@@ -2236,6 +2275,10 @@ type HomePageProps = {
   onOpenBpb: () => void
   onBpbQuickConnect: () => Promise<void>
   bpbConfigured: boolean
+  warpConnecting: boolean
+  warpError: string | null
+  onWarpConnect: () => void
+  onWarpDisconnect: () => void
   topSubServers: Array<{ id: string; name: string; protocol: string; latencyMs: number | null }>
   topFreeServers: FreePoolServer[]
   onConnectSubServer: (id: string) => void
@@ -2295,6 +2338,10 @@ function HomePage({
   onOpenBpb,
   onBpbQuickConnect: _onBpbQuickConnect,
   bpbConfigured,
+  warpConnecting,
+  warpError: _warpError,
+  onWarpConnect,
+  onWarpDisconnect,
   freePhase,
   freeNodeName,
   freeLatencyMs,
@@ -2425,8 +2472,8 @@ function HomePage({
   const freeConnected = freeConnectedLocal
   const otherMethodActive = processStatus.running || codespaceConnected || freeConnected
   const heroConnected = heroConnectedLocal
-  const activeMethod: 'codespace' | 'free' | 'subscription' | 'bpb' | null =
-    codespaceConnected ? 'codespace' : freeConnected ? 'free' : processStatus.running ? (lastConnectionType === 'bpb' ? 'bpb' : 'subscription') : null
+  const activeMethod: 'codespace' | 'free' | 'subscription' | 'bpb' | 'warp' | null =
+    codespaceConnected ? 'codespace' : freeConnected ? 'free' : (warpConnecting || (processStatus.running && lastConnectionType === 'warp')) ? 'warp' : processStatus.running ? (lastConnectionType === 'bpb' ? 'bpb' : 'subscription') : null
 
   const isConnecting = processBusy && !heroConnected
   const isReconnecting = freePhase === 'reconnecting'
@@ -2498,7 +2545,7 @@ function HomePage({
         { icon: '✓', label: 'تأیید IP', status: done && isConnected ? 'done' : done ? 'active' : 'idle' },
       ]
     }
-    if (isConnecting || activeMethod === 'subscription' || activeMethod === 'bpb') {
+    if (isConnecting || activeMethod === 'subscription' || activeMethod === 'bpb' || activeMethod === 'warp' || warpConnecting) {
       return [
         { icon: '◌', label: 'شروع sing-box', status: processBusy && !processStatus.ready ? 'active' : (processStatus.ready || isConnected) ? 'done' : 'idle' },
         { icon: '⇄', label: 'پراکسی محلی', status: processStatus.ready && !isConnected ? 'active' : isConnected ? 'done' : 'idle' },
@@ -2651,6 +2698,22 @@ function HomePage({
                     : 'سرور رایگان'}
                 </strong>
                 <small>{freeConnected && freeNodeName ? freeNodeName : 'V2ray Collector'}</small>
+              </span>
+            </button>
+
+            {/* ── Cloudflare WARP — Purple ── */}
+            <button
+              className={`method-btn method-btn-purple${activeMethod === 'warp' ? ' method-btn-active' : ''}`}
+              type="button"
+              onClick={() => { activeMethod === 'warp' ? onWarpDisconnect() : onWarpConnect() }}
+              disabled={warpConnecting && !processStatus.running}
+            >
+              <span className="method-btn-icon">
+                {warpConnecting ? <span className="connection-stage-spinner">◌</span> : activeMethod === 'warp' ? '■' : '⬡'}
+              </span>
+              <span className="method-btn-label">
+                <strong>{activeMethod === 'warp' ? 'WARP متصل است' : warpConnecting ? '■ توقف' : 'Cloudflare WARP'}</strong>
+                <small>WireGuard · CF</small>
               </span>
             </button>
           </div>
@@ -7125,6 +7188,22 @@ function CfScannerSection() {
   const [scanning, setScanning] = useState(false)
   const [result, setResult] = useState<CfScanResult | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const [autoScanEnabled, setAutoScanEnabled] = useState(true)
+  const [cachedIp, setCachedIp] = useState<string | null>(null)
+  const [cacheDate, setCacheDate] = useState<string | null>(null)
+
+  useEffect(() => {
+    void window.hamidsDeutsch.tools.getCfAutoScan().then((r) => {
+      setAutoScanEnabled(r.settings.enabled)
+      setCachedIp(r.cache?.bestIp ?? null)
+      setCacheDate(r.cache?.scannedAt ?? null)
+    }).catch(() => {})
+  }, [])
+
+  async function toggleAutoScan(enabled: boolean) {
+    setAutoScanEnabled(enabled)
+    await window.hamidsDeutsch.tools.setCfAutoScan({ enabled }).catch(() => {})
+  }
 
   async function startScan() {
     setScanning(true)
@@ -7132,6 +7211,10 @@ function CfScannerSection() {
     try {
       const r = await window.hamidsDeutsch.tools.cfScan({ port })
       setResult(r)
+      if (r.success && r.results?.[0]) {
+        setCachedIp(r.results[0].ip)
+        setCacheDate(new Date().toISOString())
+      }
     } finally {
       setScanning(false)
     }
@@ -7147,7 +7230,23 @@ function CfScannerSection() {
     <div className="settings-section">
       <div className="section-kicker">{t('tools.cfscanner.kicker')}</div>
       <h3 className="section-title">{t('tools.cfscanner.title')}</h3>
-      <p className="section-desc">{t('tools.cfscanner.desc')}</p>
+      <p className="section-desc">اسکن خودکار در پس‌زمینه هنگام باز شدن برنامه انجام می‌شود و سریع‌ترین IP کلودفلر برای همه اتصال‌ها به‌طور خودکار اعمال می‌گردد.</p>
+      <div className="toggle-row">
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={autoScanEnabled}
+            onChange={(e) => void toggleAutoScan(e.target.checked)}
+          />
+          <span>اسکن خودکار هنگام راه‌اندازی</span>
+        </label>
+      </div>
+      {cachedIp && (
+        <div className="cf-cached-ip">
+          <span>IP فعلی: <strong>{cachedIp}</strong></span>
+          {cacheDate && <span className="cf-cache-date">{new Date(cacheDate).toLocaleString('fa-IR')}</span>}
+        </div>
+      )}
       <div className="field-row">
         <label className="field-label">{t('tools.cfscanner.port')}</label>
         <input

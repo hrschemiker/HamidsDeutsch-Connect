@@ -95,21 +95,25 @@ async function createWarpAccount() {
 }
 
 function buildWarpSingboxOutbound(warpAccount) {
-  const outbound = {
-    type: 'wireguard',
-    tag: 'proxy',
-    server: warpAccount.endpointHost,
-    server_port: warpAccount.endpointPort,
-    local_address: warpAccount.localAddresses,
-    private_key: warpAccount.privateKey,
-    peer_public_key: warpAccount.peerPublicKey,
+  const peer = {
+    address: warpAccount.endpointHost,
+    port: warpAccount.endpointPort,
+    public_key: warpAccount.peerPublicKey,
+    allowed_ips: ['0.0.0.0/0', '::/0'],
   }
 
   if (Array.isArray(warpAccount.reserved) && warpAccount.reserved.length === 3) {
-    outbound.reserved = warpAccount.reserved
+    peer.reserved = warpAccount.reserved
   }
 
-  return outbound
+  return {
+    type: 'wireguard',
+    tag: 'proxy',
+    local_address: warpAccount.localAddresses,
+    private_key: warpAccount.privateKey,
+    peers: [peer],
+    mtu: 1280,
+  }
 }
 
 async function loadWarpAccount(userDataPath) {

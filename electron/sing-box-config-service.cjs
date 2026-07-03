@@ -2,6 +2,10 @@ const {
   createStableNodeId,
 } = require('./server-node-id.cjs')
 
+const {
+  isCloudflareHost,
+} = require('./cf-scan-store.cjs')
+
 const { net } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs/promises')
@@ -40,6 +44,7 @@ async function createAndCheckConfig({
   proxyDoH = false,
   upstreamProxy = null,
   utlsSettings = null,
+  cfCleanIp = null,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -91,7 +96,7 @@ async function createAndCheckConfig({
     )
 
   const config = buildConfig(
-    outbound,
+    applyCfCleanIp(outbound, cfCleanIp),
     normalizedDirectDomains,
     localPort,
     setSystemProxy,
@@ -1431,6 +1436,16 @@ async function createAndCheckWarpConfig({
     stdout: checkResult.stdout,
     error: checkResult.error,
   }
+}
+
+function applyCfCleanIp(outbound, cfCleanIp) {
+  if (!cfCleanIp || !outbound?.server) return outbound
+  if (!isCloudflareHost(outbound.server)) return outbound
+  const tls = outbound.tls ? { ...outbound.tls } : null
+  if (tls && !tls.server_name) {
+    tls.server_name = outbound.server
+  }
+  return { ...outbound, server: cfCleanIp, ...(tls ? { tls } : {}) }
 }
 
 function applyRescueOptions(

@@ -344,6 +344,8 @@ contextBridge.exposeInMainWorld(
 
     tools: {
       cfScan: (input) => ipcRenderer.invoke('tools:cf-scan', input),
+      getCfAutoScan: () => ipcRenderer.invoke('tools:get-cf-auto-scan'),
+      setCfAutoScan: (input) => ipcRenderer.invoke('tools:set-cf-auto-scan', input),
       getConverterBackends: () => ipcRenderer.invoke('tools:get-converter-backends'),
       convertSubscription: (input) => ipcRenderer.invoke('tools:convert-subscription', input),
       getUpstreamProxy: () => ipcRenderer.invoke('tools:get-upstream-proxy'),

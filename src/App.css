@@ -5682,9 +5682,30 @@ button {
 }
 
 .method-btn-black.method-btn-active::before { border-color: #fff; }
-.method-btn-red.method-btn-active::before   { border-color: #ff9090; }
-.method-btn-gold.method-btn-active::before  { border-color: #ffe05a; }
-.method-btn-teal.method-btn-active::before  { border-color: var(--green); }
+.method-btn-red.method-btn-active::before    { border-color: #ff9090; }
+.method-btn-gold.method-btn-active::before   { border-color: #ffe05a; }
+.method-btn-teal.method-btn-active::before   { border-color: var(--green); }
+.method-btn-purple.method-btn-active::before { border-color: #c084fc; }
+
+.method-btn-purple {
+  background: linear-gradient(145deg, rgba(192,132,252,0.16), rgba(192,132,252,0.08));
+  border-color: rgba(192,132,252,0.32);
+  color: var(--text);
+  box-shadow: 0 4px 20px rgba(192,132,252,0.12);
+}
+.method-btn-purple:hover:not(:disabled) {
+  background: linear-gradient(145deg, rgba(192,132,252,0.24), rgba(192,132,252,0.14));
+  box-shadow: 0 8px 28px rgba(192,132,252,0.2);
+}
+.method-btn-purple.method-btn-active {
+  background: linear-gradient(145deg, rgba(192,132,252,0.28), rgba(192,132,252,0.16));
+  border-color: rgba(192,132,252,0.52);
+  box-shadow: 0 0 0 2px rgba(192,132,252,0.14), 0 8px 28px rgba(192,132,252,0.2);
+}
+.method-btn-purple .method-btn-icon {
+  background: rgba(192,132,252,0.18);
+  color: #c084fc;
+}
 
 /* ── Top-5 server mini-list cards ────────────────────────────────────────── */
 
@@ -6236,6 +6257,24 @@ button {
   font-size: 11px;
   color: var(--teal);
   width: 30%;
+}
+
+.cf-cached-ip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.cf-cache-date {
+  font-size: 10px;
+  color: var(--text-muted);
 }
 
 /* WARP account info */

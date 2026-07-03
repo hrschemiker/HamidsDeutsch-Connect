@@ -71,6 +71,14 @@ const {
 } = require('./cf-scanner-service.cjs')
 
 const {
+  getCfAutoScanSettings,
+  setCfAutoScanSettings,
+  getCfScanCache,
+  saveCfScanCache,
+  isCloudflareHost,
+} = require('./cf-scan-store.cjs')
+
+const {
   createWarpAccount,
   buildWarpSingboxOutbound,
   loadWarpAccount,
@@ -642,6 +650,12 @@ async function tryConnectFreeNode(record, directDomains, rescueOptions) {
   const enginePath = getEnginePath()
   const userDataPath = app.getPath('userData')
 
+  const [upstreamProxy, utlsSettings, cfScanCache] = await Promise.all([
+    getUpstreamProxy(userDataPath).catch(() => null),
+    getUTlsSettings(userDataPath).catch(() => null),
+    getCfScanCache(userDataPath).catch(() => null),
+  ])
+
   async function attempt(options) {
     try {
       const configResult = await createAndCheckConfig({
@@ -657,6 +671,9 @@ async function tryConnectFreeNode(record, directDomains, rescueOptions) {
         localPort: 2080,
         setSystemProxy: true,
         proxyDoH: proxyDoHEnabled,
+        upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
+        utlsSettings,
+        cfCleanIp: cfScanCache?.bestIp ?? null,
       })
       if (!configResult.success) return null
 
@@ -3583,9 +3600,10 @@ function registerIpcHandlers() {
           )
         }
 
-        const [upstreamProxy, utlsSettings] = await Promise.all([
+        const [upstreamProxy, utlsSettings, cfScanCache] = await Promise.all([
           getUpstreamProxy(app.getPath('userData')).catch(() => null),
           getUTlsSettings(app.getPath('userData')).catch(() => null),
+          getCfScanCache(app.getPath('userData')).catch(() => null),
         ])
 
         const configParams = {
@@ -3603,6 +3621,7 @@ function registerIpcHandlers() {
           proxyDoH: proxyDoHEnabled,
           upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
           utlsSettings,
+          cfCleanIp: cfScanCache?.bestIp ?? null,
         }
         const result =
           await createAndCheckConfig(configParams)
@@ -4246,11 +4265,23 @@ function registerIpcHandlers() {
 
   ipcMain.handle('tools:cf-scan', async (_event, { port } = {}) => {
     try {
-      const result = await scanCloudflareIps({ port: Number(port) || 443 })
-      return { success: true, ...result }
+      const scanResult = await scanCloudflareIps({ port: Number(port) || 443 })
+      await saveCfScanCache(app.getPath('userData'), scanResult.results ?? []).catch(() => {})
+      return { success: true, ...scanResult }
     } catch (err) {
       return { success: false, error: err?.message ?? 'اسکن IP ناموفق بود.' }
     }
+  })
+
+  ipcMain.handle('tools:get-cf-auto-scan', async () => {
+    const settings = await getCfAutoScanSettings(app.getPath('userData')).catch(() => ({ enabled: true }))
+    const cache = await getCfScanCache(app.getPath('userData')).catch(() => null)
+    return { settings, cache }
+  })
+
+  ipcMain.handle('tools:set-cf-auto-scan', async (_event, { enabled }) => {
+    await setCfAutoScanSettings(app.getPath('userData'), { enabled: enabled !== false })
+    return { success: true }
   })
 
   // ── WARP ───────────────────────────────────────────────────────────────────
@@ -4928,6 +4959,21 @@ app.whenReady().then(async () => {
     freeConfigState.poolLastRefreshedAt = meta.lastRefreshedAt
   }).catch(() => {})
   startFreeBackgroundRefresh()
+
+  // Auto CF IP scan in background (non-blocking)
+  getCfAutoScanSettings(app.getPath('userData')).then(async (settings) => {
+    if (!settings.enabled) return
+    console.log('[CF-Scan] Starting background auto-scan...')
+    try {
+      const scanResult = await scanCloudflareIps({ port: 443 })
+      if (scanResult.reachable > 0) {
+        await saveCfScanCache(app.getPath('userData'), scanResult.results ?? [])
+        console.log(`[CF-Scan] Auto-scan complete. Best IP: ${scanResult.results?.[0]?.ip} (${scanResult.results?.[0]?.latencyMs}ms)`)
+      }
+    } catch (err) {
+      console.error('[CF-Scan] Auto-scan failed:', err?.message ?? err)
+    }
+  }).catch(() => {})
 
   app.on(
     'activate',

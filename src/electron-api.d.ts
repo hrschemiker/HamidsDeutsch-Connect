@@ -895,6 +895,8 @@ declare global {
 
       tools: {
         cfScan: (input?: { port?: number }) => Promise<CfScanResult>
+        getCfAutoScan: () => Promise<{ settings: { enabled: boolean }; cache: { bestIp: string | null; scannedAt: string } | null }>
+        setCfAutoScan: (input: { enabled: boolean }) => Promise<{ success: boolean }>
         getConverterBackends: () => Promise<{ backends: ConverterBackend[]; targets: ConverterTarget[] }>
         convertSubscription: (input: {
           subscriptionUrl: string
