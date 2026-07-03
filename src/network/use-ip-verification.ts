@@ -13,6 +13,7 @@ export type IpVerificationResult = {
   proxyDurationMs: number | null
   service: string
   error: string | null
+  directBlocked?: boolean
 }
 
 const INITIAL_RESULT: IpVerificationResult = {

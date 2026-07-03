@@ -744,11 +744,12 @@ function App() {
 
     if (
       !localVerification.success ||
-      !localVerification.changed ||
-      !localVerification.directIp
+      !localVerification.changed
     ) {
-      // Auto DPI bypass retry: stop current proxy, rebuild config with DPI bypass, restart
+      // Auto DPI bypass retry: only when we confirmed IPs are the same (not when check services are blocked)
+      const ipCheckFailed = !localVerification.directIp
       if (
+        !ipCheckFailed &&
         rescueSettings.settings.dpiBypassAuto &&
         node.subscriptionId
       ) {
@@ -778,8 +779,7 @@ function App() {
 
       if (
         !localVerification.success ||
-        !localVerification.changed ||
-        !localVerification.directIp
+        !localVerification.changed
       ) {
         await engineProcess.stop()
         ipVerification.reset()

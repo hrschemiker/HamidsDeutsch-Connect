@@ -70,6 +70,7 @@ type IpVerificationResult = {
   proxyDurationMs: number | null
   service: string
   error: string | null
+  directBlocked?: boolean
 }
 
 type CurrentIpResult = {

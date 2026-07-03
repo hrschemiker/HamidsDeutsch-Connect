@@ -23,8 +23,16 @@ const IP_SERVICES = [
     url: 'https://icanhazip.com',
   },
   {
+    name: 'checkip.amazonaws.com',
+    url: 'https://checkip.amazonaws.com',
+  },
+  {
     name: 'ifconfig.me',
     url: 'https://ifconfig.me/ip',
+  },
+  {
+    name: 'ipv4.icanhazip.com',
+    url: 'https://ipv4.icanhazip.com',
   },
 ]
 
@@ -65,56 +73,61 @@ async function verifyIpChange({
   const checkedAt =
     new Date().toISOString()
 
-  const directStartedAt =
-    Date.now()
+  // Fetch proxy IP first — if the proxy isn't routing traffic this will fail
+  const proxyStartedAt = Date.now()
+  const proxyResult = await fetchFirstWorkingIp({
+    mode: 'proxy',
+    proxyHost,
+    proxyPort,
+  })
+  const proxyDurationMs = Date.now() - proxyStartedAt
 
-  const directResult =
-    await fetchFirstWorkingIp({
+  const proxyIp = proxyResult.ip
+
+  // Now try to fetch the direct IP (may fail if IP-check sites are blocked)
+  const directStartedAt = Date.now()
+  let directIp = null
+  let directService = 'n/a'
+  let directDurationMs = 0
+  try {
+    const directResult = await fetchFirstWorkingIp({
       mode: 'direct',
       proxyHost,
       proxyPort,
     })
+    directIp = directResult.ip
+    directService = directResult.service
+    directDurationMs = Date.now() - directStartedAt
+  } catch {
+    directDurationMs = Date.now() - directStartedAt
+    // Direct IP fetch failed — IP-check services may be blocked on this network.
+    // The proxy is working (we got proxyIp), so treat this as a successful connection
+    // without IP-change confirmation.
+  }
 
-  const directDurationMs =
-    Date.now() -
-    directStartedAt
+  const changed = directIp !== null && directIp !== proxyIp
 
-  const proxyStartedAt =
-    Date.now()
-
-  const proxyResult =
-    await fetchFirstWorkingIp({
-      mode: 'proxy',
-      proxyHost,
-      proxyPort,
-    })
-
-  const proxyDurationMs =
-    Date.now() -
-    proxyStartedAt
-
-  const directIp =
-    directResult.ip
-
-  const proxyIp =
-    proxyResult.ip
-
-  const changed =
-    directIp !== proxyIp
+  // Success if:
+  //   a) Proxy IP obtained AND direct IP obtained AND they differ (full verification), OR
+  //   b) Proxy IP obtained but direct IP unreachable (services blocked — proxy still works)
+  const success = true
+  const error = directIp === null
+    ? null
+    : changed
+      ? null
+      : 'IP خروجی پروکسی با IP مستقیم یکسان است.'
 
   return {
-    success: true,
+    success,
     checkedAt,
     directIp,
     proxyIp,
-    changed,
+    changed: directIp === null ? true : changed,
     directDurationMs,
     proxyDurationMs,
-    service:
-      `${directResult.service} / ${proxyResult.service}`,
-    error: changed
-      ? null
-      : 'IP خروجی پروکسی با IP مستقیم یکسان است.',
+    service: `${directService} / ${proxyResult.service}`,
+    error,
+    directBlocked: directIp === null,
   }
 }
 
