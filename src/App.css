@@ -6045,3 +6045,231 @@ button {
 .update-banner-dismiss:hover {
   color: rgba(255,255,255,0.8);
 }
+
+/* ── Tools Page ────────────────────────────────────────────────────────────── */
+
+.tools-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 4px 0 24px;
+}
+
+.settings-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+}
+
+.section-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--gold);
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.section-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.section-desc {
+  margin: 0 0 14px;
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.field-row-gap {
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.toggle-label {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  background: var(--gold);
+  color: #1a1a1e;
+  border: none;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 140ms ease;
+  white-space: nowrap;
+}
+
+.action-btn:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  background: var(--surface-soft);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 140ms ease;
+  white-space: nowrap;
+}
+
+.secondary-btn:hover {
+  background: var(--surface-hover);
+}
+
+.select-input {
+  padding: 9px 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+  min-width: 140px;
+}
+
+.select-input:focus {
+  border-color: rgba(242, 192, 85, 0.42);
+}
+
+.text-input.full-width {
+  width: 100%;
+}
+
+.result-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.error-text {
+  margin: 8px 0 0;
+  color: var(--red);
+  font-size: 11px;
+}
+
+.success-text {
+  margin: 8px 0 0;
+  color: var(--green);
+  font-size: 11px;
+}
+
+/* CF Scanner results */
+.cf-scan-results {
+  margin-top: 14px;
+}
+
+.cf-scan-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.cf-scan-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cf-scan-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.cf-scan-row:last-child {
+  border-bottom: none;
+}
+
+.cf-scan-ip {
+  padding: 7px 0;
+  font-size: 12px;
+  color: var(--text);
+  font-family: monospace;
+  width: 50%;
+}
+
+.cf-scan-latency {
+  padding: 7px 0;
+  font-size: 11px;
+  color: var(--teal);
+  width: 30%;
+}
+
+/* WARP account info */
+.warp-account-info {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.warp-info-row {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.warp-label {
+  color: var(--text-soft);
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.warp-value {
+  color: var(--text);
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.warp-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}

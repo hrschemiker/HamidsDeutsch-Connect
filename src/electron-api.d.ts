@@ -885,7 +885,74 @@ declare global {
           callback: (payload: { step: string; message: string }) => void,
         ) => () => void
       }
+
+      warp: {
+        getAccount: () => Promise<{ success: boolean; account: WarpAccount | null; error?: string }>
+        createAccount: () => Promise<{ success: boolean; account?: WarpAccount; error?: string }>
+        deleteAccount: () => Promise<{ success: boolean; error?: string }>
+        connect: (input: { directDomains?: string[] }) => Promise<{ success: boolean; error?: string }>
+      }
+
+      tools: {
+        cfScan: (input?: { port?: number }) => Promise<CfScanResult>
+        getConverterBackends: () => Promise<{ backends: ConverterBackend[]; targets: ConverterTarget[] }>
+        convertSubscription: (input: {
+          subscriptionUrl: string
+          backendId: string
+          targetId: string
+        }) => Promise<{ success: boolean; convertedContent?: string; convertUrl?: string; backend?: string; target?: string; error?: string }>
+        getUpstreamProxy: () => Promise<{ success: boolean; settings: UpstreamProxySettings }>
+        setUpstreamProxy: (settings: UpstreamProxySettings) => Promise<{ success: boolean; settings: UpstreamProxySettings; error?: string }>
+        getUTlsSettings: () => Promise<{ success: boolean; settings: UTlsSettings }>
+        setUTlsSettings: (settings: UTlsSettings) => Promise<{ success: boolean; settings: UTlsSettings; error?: string }>
+      }
     }
+  }
+
+  type WarpAccount = {
+    privateKey: string
+    publicKey: string
+    peerPublicKey: string
+    localAddresses: string[]
+    endpointHost: string
+    endpointPort: number
+    reserved: number[]
+    clientId: string
+    createdAt: string
+  }
+
+  type CfScanResult = {
+    success: boolean
+    scannedAt?: string
+    total?: number
+    reachable?: number
+    port?: number
+    results?: Array<{ ip: string; latencyMs: number }>
+    error?: string
+  }
+
+  type ConverterBackend = {
+    id: string
+    label: string
+    url: string
+  }
+
+  type ConverterTarget = {
+    id: string
+    label: string
+    value: string
+  }
+
+  type UpstreamProxySettings = {
+    enabled: boolean
+    type: 'socks5' | 'http'
+    host: string
+    port: number
+  }
+
+  type UTlsSettings = {
+    globalFingerprint: 'auto' | 'chrome' | 'firefox' | 'safari' | 'ios' | 'android' | 'random' | 'randomized'
+    echEnabled: boolean
   }
 }
 
@@ -921,3 +988,4 @@ type CodespaceStatus = {
   lastCodespaceState: string | null
   lastConnectedUuid: string | null
 }
+

@@ -335,6 +335,23 @@ contextBridge.exposeInMainWorld(
       setProxyDoH: (enabled) => ipcRenderer.invoke('doh:set-proxy-doh', enabled),
     },
 
+    warp: {
+      getAccount: () => ipcRenderer.invoke('warp:get-account'),
+      createAccount: () => ipcRenderer.invoke('warp:create-account'),
+      deleteAccount: () => ipcRenderer.invoke('warp:delete-account'),
+      connect: (input) => ipcRenderer.invoke('warp:connect', input),
+    },
+
+    tools: {
+      cfScan: (input) => ipcRenderer.invoke('tools:cf-scan', input),
+      getConverterBackends: () => ipcRenderer.invoke('tools:get-converter-backends'),
+      convertSubscription: (input) => ipcRenderer.invoke('tools:convert-subscription', input),
+      getUpstreamProxy: () => ipcRenderer.invoke('tools:get-upstream-proxy'),
+      setUpstreamProxy: (settings) => ipcRenderer.invoke('tools:set-upstream-proxy', settings),
+      getUTlsSettings: () => ipcRenderer.invoke('tools:get-utls-settings'),
+      setUTlsSettings: (settings) => ipcRenderer.invoke('tools:set-utls-settings', settings),
+    },
+
     codespace: {
       getStatus: () =>
         ipcRenderer.invoke(

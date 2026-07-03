@@ -63,7 +63,36 @@ const {
 const {
   createAndCheckConfig,
   createAndCheckTunConfig,
+  createAndCheckWarpConfig,
 } = require('./sing-box-config-service.cjs')
+
+const {
+  scanCloudflareIps,
+} = require('./cf-scanner-service.cjs')
+
+const {
+  createWarpAccount,
+  buildWarpSingboxOutbound,
+  loadWarpAccount,
+  saveWarpAccount,
+  deleteWarpAccount,
+} = require('./warp-service.cjs')
+
+const {
+  convertSubscription,
+  getBackends: getConverterBackends,
+  getTargets: getConverterTargets,
+} = require('./subscription-converter-service.cjs')
+
+const {
+  getUpstreamProxy,
+  setUpstreamProxy,
+} = require('./upstream-proxy-store.cjs')
+
+const {
+  getUTlsSettings,
+  setUTlsSettings,
+} = require('./utls-settings-store.cjs')
 
 const {
   startLocalProxy,
@@ -3554,6 +3583,11 @@ function registerIpcHandlers() {
           )
         }
 
+        const [upstreamProxy, utlsSettings] = await Promise.all([
+          getUpstreamProxy(app.getPath('userData')).catch(() => null),
+          getUTlsSettings(app.getPath('userData')).catch(() => null),
+        ])
+
         const configParams = {
           subscriptionUrl,
           nodeId,
@@ -3567,6 +3601,8 @@ function registerIpcHandlers() {
           directDomains,
           rescueOptions,
           proxyDoH: proxyDoHEnabled,
+          upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
+          utlsSettings,
         }
         const result =
           await createAndCheckConfig(configParams)
@@ -4203,6 +4239,132 @@ function registerIpcHandlers() {
       return { success: true, error: null }
     } catch (err) {
       return { success: false, error: err?.message ?? 'قطع اتصال سرور رایگان ناموفق بود.' }
+    }
+  })
+
+  // ── CF IP Scanner ──────────────────────────────────────────────────────────
+
+  ipcMain.handle('tools:cf-scan', async (_event, { port } = {}) => {
+    try {
+      const result = await scanCloudflareIps({ port: Number(port) || 443 })
+      return { success: true, ...result }
+    } catch (err) {
+      return { success: false, error: err?.message ?? 'اسکن IP ناموفق بود.' }
+    }
+  })
+
+  // ── WARP ───────────────────────────────────────────────────────────────────
+
+  ipcMain.handle('warp:get-account', async () => {
+    try {
+      const account = await loadWarpAccount(app.getPath('userData'))
+      return { success: true, account }
+    } catch (err) {
+      return { success: false, account: null, error: err?.message }
+    }
+  })
+
+  ipcMain.handle('warp:create-account', async () => {
+    try {
+      const account = await createWarpAccount()
+      await saveWarpAccount(app.getPath('userData'), account)
+      return { success: true, account }
+    } catch (err) {
+      return { success: false, error: err?.message ?? 'ثبت‌نام WARP ناموفق بود.' }
+    }
+  })
+
+  ipcMain.handle('warp:delete-account', async () => {
+    try {
+      await deleteWarpAccount(app.getPath('userData'))
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err?.message }
+    }
+  })
+
+  ipcMain.handle('warp:connect', async (_event, { directDomains } = {}) => {
+    try {
+      const account = await loadWarpAccount(app.getPath('userData'))
+      if (!account) return { success: false, error: 'حساب WARP پیدا نشد. ابتدا یک حساب ایجاد کنید.' }
+
+      const userDataPath = app.getPath('userData')
+      const warpOutbound = buildWarpSingboxOutbound(account)
+
+      const checkResult = await createAndCheckWarpConfig({
+        warpOutbound,
+        enginePath: getEnginePath(),
+        userDataPath,
+        directDomains: directDomains ?? [],
+      })
+
+      if (!checkResult.success) {
+        return { success: false, error: checkResult.error ?? 'اعتبارسنجی کانفیگ WARP ناموفق بود.' }
+      }
+
+      const startResult = await startLocalProxy({ enginePath: getEnginePath(), userDataPath, configPath: checkResult.configPath })
+      if (!startResult.success) {
+        return { success: false, error: startResult.error ?? 'راه‌اندازی WARP ناموفق بود.' }
+      }
+
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err?.message ?? 'اتصال WARP ناموفق بود.' }
+    }
+  })
+
+  // ── Subscription Converter ─────────────────────────────────────────────────
+
+  ipcMain.handle('tools:get-converter-backends', () => {
+    return { backends: getConverterBackends(), targets: getConverterTargets() }
+  })
+
+  ipcMain.handle('tools:convert-subscription', async (_event, { subscriptionUrl, backendId, targetId }) => {
+    try {
+      const result = await convertSubscription({ subscriptionUrl, backendId, targetId })
+      return result
+    } catch (err) {
+      return { success: false, error: err?.message ?? 'تبدیل اشتراک ناموفق بود.' }
+    }
+  })
+
+  // ── Upstream Proxy ─────────────────────────────────────────────────────────
+
+  ipcMain.handle('tools:get-upstream-proxy', async () => {
+    try {
+      const settings = await getUpstreamProxy(app.getPath('userData'))
+      return { success: true, settings }
+    } catch (err) {
+      return { success: false, error: err?.message }
+    }
+  })
+
+  ipcMain.handle('tools:set-upstream-proxy', async (_event, settings) => {
+    try {
+      const saved = await setUpstreamProxy(app.getPath('userData'), settings)
+      return { success: true, settings: saved }
+    } catch (err) {
+      return { success: false, error: err?.message }
+    }
+  })
+
+  // ── uTLS / ECH Settings ────────────────────────────────────────────────────
+
+  ipcMain.handle('tools:get-utls-settings', async () => {
+    try {
+      const settings = await getUTlsSettings(app.getPath('userData'))
+      return { success: true, settings }
+    } catch (err) {
+      return { success: false, error: err?.message }
+    }
+  })
+
+  ipcMain.handle('tools:set-utls-settings', async (_event, settings) => {
+    try {
+      const saved = await setUTlsSettings(app.getPath('userData'), settings)
+      return { success: true, settings: saved }
+    } catch (err) {
+      return { success: false, error: err?.message }
     }
   })
 }

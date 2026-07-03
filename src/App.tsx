@@ -131,6 +131,7 @@ type PageId =
   | 'logs'
   | 'guide'
   | 'settings'
+  | 'tools'
 
 type NavigationItem = {
   id: PageId
@@ -190,6 +191,7 @@ function App() {
     { id: 'bpb', label: t('nav.bpb'), icon: '◈' },
     { id: 'direct-sites', label: t('nav.directSites'), icon: '↗' },
     { id: 'rescue', label: t('nav.rescue'), icon: '✦' },
+    { id: 'tools', label: t('nav.tools'), icon: '⬡' },
     { id: 'statistics', label: t('nav.statistics'), icon: '▥' },
     { id: 'logs', label: t('nav.logs'), icon: '≡' },
     { id: 'guide', label: t('nav.guide'), icon: '?' },
@@ -207,6 +209,7 @@ function App() {
     logs: t('page.logs'),
     guide: t('page.guide'),
     settings: t('page.settings'),
+    tools: t('page.tools'),
   }
 
   const [activePage, setActivePage] = useState<PageId>('home')
@@ -2096,6 +2099,9 @@ function App() {
                 await window.hamidsDeutsch.doh.setProxyDoH(v)
               }}
             />
+          )}
+          {activePage === 'tools' && (
+            <ToolsPage directDomains={directDomains.domains} onNavigateToSubscriptions={() => setActivePage('subscriptions')} />
           )}
         </main>
       </section>
@@ -7087,6 +7093,463 @@ function SettingRow({
         />
         <span className="switch-track" />
       </label>
+    </div>
+  )
+}
+
+// ── ToolsPage ────────────────────────────────────────────────────────────────
+
+function ToolsPage({
+  directDomains,
+  onNavigateToSubscriptions,
+}: {
+  directDomains: string[]
+  onNavigateToSubscriptions: () => void
+}) {
+  return (
+    <div className="page-content tools-page">
+      <CfScannerSection />
+      <WarpSection directDomains={directDomains} />
+      <SubscriptionConverterSection onNavigateToSubscriptions={onNavigateToSubscriptions} />
+      <UpstreamProxySection />
+      <UTlsSection />
+    </div>
+  )
+}
+
+// ── CF Scanner Section ────────────────────────────────────────────────────────
+
+function CfScannerSection() {
+  const t = useT()
+  const [port, setPort] = useState(443)
+  const [scanning, setScanning] = useState(false)
+  const [result, setResult] = useState<CfScanResult | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
+
+  async function startScan() {
+    setScanning(true)
+    setResult(null)
+    try {
+      const r = await window.hamidsDeutsch.tools.cfScan({ port })
+      setResult(r)
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  function copyIp(ip: string) {
+    navigator.clipboard.writeText(ip).catch(() => {})
+    setCopied(ip)
+    setTimeout(() => setCopied(null), 1500)
+  }
+
+  return (
+    <div className="settings-section">
+      <div className="section-kicker">{t('tools.cfscanner.kicker')}</div>
+      <h3 className="section-title">{t('tools.cfscanner.title')}</h3>
+      <p className="section-desc">{t('tools.cfscanner.desc')}</p>
+      <div className="field-row">
+        <label className="field-label">{t('tools.cfscanner.port')}</label>
+        <input
+          className="text-input"
+          type="number"
+          min={1}
+          max={65535}
+          value={port}
+          onChange={(e) => setPort(Number(e.target.value) || 443)}
+          style={{ width: 100 }}
+          disabled={scanning}
+        />
+        <button className="action-btn" type="button" onClick={startScan} disabled={scanning}>
+          {scanning ? t('tools.cfscanner.scanning') : t('tools.cfscanner.startBtn')}
+        </button>
+      </div>
+      {result && (
+        <div className="cf-scan-results">
+          <div className="cf-scan-meta">
+            {t('tools.cfscanner.results')}: {result.reachable}/{result.total}
+          </div>
+          {result.results && result.results.length > 0 ? (
+            <table className="cf-scan-table">
+              <tbody>
+                {result.results.map((r: { ip: string; latencyMs: number }) => (
+                  <tr key={r.ip} className="cf-scan-row">
+                    <td className="cf-scan-ip">{r.ip}</td>
+                    <td className="cf-scan-latency">{r.latencyMs} ms</td>
+                    <td>
+                      <button
+                        className="copy-btn"
+                        type="button"
+                        onClick={() => copyIp(r.ip)}
+                      >
+                        {copied === r.ip ? '✓' : t('tools.cfscanner.copy')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="section-desc">{t('tools.cfscanner.noResults')}</p>
+          )}
+        </div>
+      )}
+      {result && !result.success && (
+        <p className="error-text">{result.error}</p>
+      )}
+    </div>
+  )
+}
+
+// ── WARP Section ──────────────────────────────────────────────────────────────
+
+function WarpSection({ directDomains }: { directDomains: string[] }) {
+  const t = useT()
+  const [account, setAccount] = useState<WarpAccount | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [connecting, setConnecting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [status, setStatus] = useState<string | null>(null)
+
+  useEffect(() => {
+    window.hamidsDeutsch.warp.getAccount().then((r) => {
+      setAccount(r.account ?? null)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [])
+
+  async function createAccount() {
+    setCreating(true)
+    setError(null)
+    const r = await window.hamidsDeutsch.warp.createAccount()
+    setCreating(false)
+    if (r.success && r.account) {
+      setAccount(r.account as WarpAccount)
+      setStatus(t('tools.warp.accountCreated'))
+    } else {
+      setError(r.error ?? 'Failed')
+    }
+  }
+
+  async function deleteAccount() {
+    await window.hamidsDeutsch.warp.deleteAccount()
+    setAccount(null)
+    setStatus(null)
+  }
+
+  async function connect() {
+    setConnecting(true)
+    setError(null)
+    const r = await window.hamidsDeutsch.warp.connect({ directDomains })
+    setConnecting(false)
+    if (!r.success) setError(r.error ?? 'Failed')
+  }
+
+  if (loading) return null
+
+  return (
+    <div className="settings-section">
+      <div className="section-kicker">{t('tools.warp.kicker')}</div>
+      <h3 className="section-title">{t('tools.warp.title')}</h3>
+      <p className="section-desc">{t('tools.warp.desc')}</p>
+      {!account ? (
+        <button className="action-btn" type="button" onClick={createAccount} disabled={creating}>
+          {creating ? t('tools.warp.creating') : t('tools.warp.createBtn')}
+        </button>
+      ) : (
+        <>
+          <div className="warp-account-info">
+            <div className="warp-info-row">
+              <span className="warp-label">{t('tools.warp.endpoint')}</span>
+              <span className="warp-value">{account.endpointHost}:{account.endpointPort}</span>
+            </div>
+            <div className="warp-info-row">
+              <span className="warp-label">{t('tools.warp.addresses')}</span>
+              <span className="warp-value">{account.localAddresses.join(', ')}</span>
+            </div>
+            <div className="warp-info-row">
+              <span className="warp-label">Created</span>
+              <span className="warp-value">{new Date(account.createdAt).toLocaleDateString()}</span>
+            </div>
+          </div>
+          <div className="warp-actions">
+            <button className="action-btn" type="button" onClick={connect} disabled={connecting}>
+              {connecting ? '...' : t('tools.warp.connectBtn')}
+            </button>
+            <button className="secondary-btn" type="button" onClick={deleteAccount}>
+              {t('tools.warp.deleteBtn')}
+            </button>
+          </div>
+        </>
+      )}
+      {status && <p className="success-text">{status}</p>}
+      {error && <p className="error-text">{error}</p>}
+    </div>
+  )
+}
+
+// ── Subscription Converter Section ────────────────────────────────────────────
+
+function SubscriptionConverterSection({ onNavigateToSubscriptions: _onNavigateToSubscriptions }: { onNavigateToSubscriptions: () => void }) {
+  const t = useT()
+  const [backends, setBackends] = useState<ConverterBackend[]>([])
+  const [targets, setTargets] = useState<ConverterTarget[]>([])
+  const [subUrl, setSubUrl] = useState('')
+  const [backendId, setBackendId] = useState('')
+  const [targetId, setTargetId] = useState('')
+  const [converting, setConverting] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    window.hamidsDeutsch.tools.getConverterBackends().then((r) => {
+      setBackends(r.backends)
+      setTargets(r.targets)
+      if (r.backends.length > 0) setBackendId(r.backends[0].id)
+      if (r.targets.length > 0) setTargetId(r.targets[0].id)
+    }).catch(() => {})
+  }, [])
+
+  async function convert() {
+    if (!subUrl.trim()) return
+    setConverting(true)
+    setResult(null)
+    setError(null)
+    const r = await window.hamidsDeutsch.tools.convertSubscription({ subscriptionUrl: subUrl.trim(), backendId, targetId })
+    setConverting(false)
+    if (r.success && r.convertUrl) {
+      setResult(r.convertUrl)
+    } else {
+      setError(r.error ?? 'Failed')
+    }
+  }
+
+  function copyResult() {
+    if (!result) return
+    navigator.clipboard.writeText(result).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <div className="settings-section">
+      <div className="section-kicker">{t('tools.converter.kicker')}</div>
+      <h3 className="section-title">{t('tools.converter.title')}</h3>
+      <p className="section-desc">{t('tools.converter.desc')}</p>
+      <div className="field-stack">
+        <label className="field-label">{t('tools.converter.urlLabel')}</label>
+        <input
+          className="text-input full-width"
+          type="url"
+          value={subUrl}
+          onChange={(e) => setSubUrl(e.target.value)}
+          placeholder="https://..."
+          disabled={converting}
+        />
+      </div>
+      <div className="field-row field-row-gap">
+        <div className="field-stack">
+          <label className="field-label">{t('tools.converter.backend')}</label>
+          <select
+            className="select-input"
+            value={backendId}
+            onChange={(e) => setBackendId(e.target.value)}
+            disabled={converting}
+          >
+            {backends.map((b) => (
+              <option key={b.id} value={b.id}>{b.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field-stack">
+          <label className="field-label">{t('tools.converter.target')}</label>
+          <select
+            className="select-input"
+            value={targetId}
+            onChange={(e) => setTargetId(e.target.value)}
+            disabled={converting}
+          >
+            {targets.map((t2) => (
+              <option key={t2.id} value={t2.id}>{t2.label}</option>
+            ))}
+          </select>
+        </div>
+        <button className="action-btn" type="button" onClick={convert} disabled={converting || !subUrl.trim()}>
+          {converting ? t('tools.converter.converting') : t('tools.converter.convertBtn')}
+        </button>
+      </div>
+      {result && (
+        <div className="field-stack">
+          <label className="field-label">{t('tools.converter.result')}</label>
+          <div className="result-row">
+            <input className="text-input full-width" readOnly value={result} />
+            <button className="copy-btn" type="button" onClick={copyResult}>
+              {copied ? '✓' : t('tools.cfscanner.copy')}
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <p className="error-text">{error}</p>}
+    </div>
+  )
+}
+
+// ── Upstream Proxy Section ────────────────────────────────────────────────────
+
+function UpstreamProxySection() {
+  const t = useT()
+  const [settings, setSettings] = useState<UpstreamProxySettings>({
+    enabled: false,
+    type: 'socks5',
+    host: '',
+    port: 1080,
+  })
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    window.hamidsDeutsch.tools.getUpstreamProxy().then((r) => {
+      if (r.success) setSettings(r.settings)
+    }).catch(() => {})
+  }, [])
+
+  async function save() {
+    setSaving(true)
+    const r = await window.hamidsDeutsch.tools.setUpstreamProxy(settings)
+    setSaving(false)
+    if (r.success) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    }
+  }
+
+  return (
+    <div className="settings-section">
+      <div className="section-kicker">{t('tools.upstreamProxy.kicker')}</div>
+      <h3 className="section-title">{t('tools.upstreamProxy.title')}</h3>
+      <p className="section-desc">{t('tools.upstreamProxy.desc')}</p>
+      <div className="toggle-row">
+        <span className="toggle-label">{t('tools.upstreamProxy.enabled')}</span>
+        <label className="switch">
+          <input
+            type="checkbox"
+            checked={settings.enabled}
+            onChange={(e) => setSettings((s) => ({ ...s, enabled: e.target.checked }))}
+          />
+          <span className="switch-track" />
+        </label>
+      </div>
+      {settings.enabled && (
+        <div className="field-row field-row-gap" style={{ marginTop: 12 }}>
+          <div className="field-stack">
+            <label className="field-label">{t('tools.upstreamProxy.type')}</label>
+            <select
+              className="select-input"
+              value={settings.type}
+              onChange={(e) => setSettings((s) => ({ ...s, type: e.target.value as 'socks5' | 'http' }))}
+            >
+              <option value="socks5">SOCKS5</option>
+              <option value="http">HTTP</option>
+            </select>
+          </div>
+          <div className="field-stack">
+            <label className="field-label">{t('tools.upstreamProxy.host')}</label>
+            <input
+              className="text-input"
+              type="text"
+              value={settings.host}
+              onChange={(e) => setSettings((s) => ({ ...s, host: e.target.value }))}
+              placeholder="127.0.0.1"
+              style={{ width: 160 }}
+            />
+          </div>
+          <div className="field-stack">
+            <label className="field-label">{t('tools.upstreamProxy.port')}</label>
+            <input
+              className="text-input"
+              type="number"
+              min={1}
+              max={65535}
+              value={settings.port}
+              onChange={(e) => setSettings((s) => ({ ...s, port: Number(e.target.value) || 1080 }))}
+              style={{ width: 90 }}
+            />
+          </div>
+        </div>
+      )}
+      <button className="action-btn" type="button" onClick={save} disabled={saving} style={{ marginTop: 12 }}>
+        {saved ? '✓' : saving ? '...' : t('tools.upstreamProxy.saveBtn')}
+      </button>
+    </div>
+  )
+}
+
+// ── uTLS / ECH Section ────────────────────────────────────────────────────────
+
+function UTlsSection() {
+  const t = useT()
+  const [settings, setSettings] = useState<UTlsSettings>({
+    globalFingerprint: 'auto',
+    echEnabled: false,
+  })
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    window.hamidsDeutsch.tools.getUTlsSettings().then((r) => {
+      if (r.success) setSettings(r.settings)
+    }).catch(() => {})
+  }, [])
+
+  async function save() {
+    setSaving(true)
+    const r = await window.hamidsDeutsch.tools.setUTlsSettings(settings)
+    setSaving(false)
+    if (r.success) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    }
+  }
+
+  return (
+    <div className="settings-section">
+      <div className="section-kicker">{t('tools.utls.kicker')}</div>
+      <h3 className="section-title">{t('tools.utls.title')}</h3>
+      <div className="field-stack" style={{ marginBottom: 14 }}>
+        <label className="field-label">{t('tools.utls.fpLabel')}</label>
+        <select
+          className="select-input"
+          value={settings.globalFingerprint}
+          onChange={(e) => setSettings((s) => ({ ...s, globalFingerprint: e.target.value as UTlsSettings['globalFingerprint'] }))}
+        >
+          <option value="auto">{t('tools.utls.fpAuto')}</option>
+          <option value="chrome">Chrome</option>
+          <option value="firefox">Firefox</option>
+          <option value="safari">Safari</option>
+          <option value="ios">iOS</option>
+          <option value="android">Android</option>
+          <option value="randomized">Randomized</option>
+        </select>
+      </div>
+      <div className="toggle-row" style={{ marginBottom: 14 }}>
+        <div>
+          <span className="toggle-label">{t('tools.utls.echLabel')}</span>
+          <p className="section-desc" style={{ margin: '2px 0 0' }}>{t('tools.utls.echDesc')}</p>
+        </div>
+        <label className="switch">
+          <input
+            type="checkbox"
+            checked={settings.echEnabled}
+            onChange={(e) => setSettings((s) => ({ ...s, echEnabled: e.target.checked }))}
+          />
+          <span className="switch-track" />
+        </label>
+      </div>
+      <button className="action-btn" type="button" onClick={save} disabled={saving}>
+        {saved ? '✓' : saving ? '...' : t('tools.utls.saveBtn')}
+      </button>
     </div>
   )
 }

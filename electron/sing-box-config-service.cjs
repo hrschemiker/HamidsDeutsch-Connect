@@ -38,6 +38,8 @@ async function createAndCheckConfig({
   localPort = 2080,
   setSystemProxy = false,
   proxyDoH = false,
+  upstreamProxy = null,
+  utlsSettings = null,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -76,8 +78,9 @@ async function createAndCheckConfig({
 
   const outbound =
     applyRescueOptions(
-      buildOutboundFromUri(
-        resolvedUri,
+      applyUtlsSettings(
+        buildOutboundFromUri(resolvedUri),
+        utlsSettings,
       ),
       rescueOptions,
     )
@@ -93,6 +96,7 @@ async function createAndCheckConfig({
     localPort,
     setSystemProxy,
     proxyDoH,
+    upstreamProxy,
   )
 
   const runtimeDirectory = path.join(
@@ -147,6 +151,7 @@ async function createAndCheckTunConfig({
   configFileName = 'tun-config.json',
   localPort = 2080,
   setSystemProxy = false,
+  utlsSettings = null,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -185,8 +190,9 @@ async function createAndCheckTunConfig({
 
   const outbound =
     applyRescueOptions(
-      buildOutboundFromUri(
-        resolvedUri,
+      applyUtlsSettings(
+        buildOutboundFromUri(resolvedUri),
+        utlsSettings,
       ),
       rescueOptions,
     )
@@ -1031,6 +1037,11 @@ function buildTlsConfig(
     }
   }
 
+  // ECH — hides SNI from DPI; sing-box fetches ECH config via DNS when not provided
+  if (parseBoolean(params.get('ech'))) {
+    tls.ech = { enabled: true }
+  }
+
   if (security === 'reality') {
     const publicKey =
       params.get('pbk')
@@ -1218,8 +1229,26 @@ function buildConfig(
   localPort = 2080,
   setSystemProxy = false,
   proxyDoH = false,
+  upstreamProxy = null,
 ) {
   const rules = buildDirectRules(directDomains)
+  const outbounds = []
+
+  // If upstream proxy chaining is enabled, route the main proxy outbound through it
+  const resolvedProxyOutbound = upstreamProxy?.enabled && upstreamProxy?.host
+    ? { ...(proxyDoH ? { ...proxyOutbound, domain_resolver: 'dns-direct' } : proxyOutbound), detour: 'upstream-proxy' }
+    : (proxyDoH ? { ...proxyOutbound, domain_resolver: 'dns-direct' } : proxyOutbound)
+
+  outbounds.push(resolvedProxyOutbound)
+  outbounds.push(
+    proxyDoH
+      ? { type: 'direct', tag: 'direct', domain_resolver: 'dns-direct' }
+      : { type: 'direct', tag: 'direct' },
+  )
+
+  if (upstreamProxy?.enabled && upstreamProxy?.host) {
+    outbounds.push(buildUpstreamProxyOutbound(upstreamProxy))
+  }
 
   const config = {
     log: {
@@ -1238,14 +1267,7 @@ function buildConfig(
       },
     ],
 
-    outbounds: [
-      proxyDoH
-        ? { ...proxyOutbound, domain_resolver: 'dns-direct' }
-        : proxyOutbound,
-      proxyDoH
-        ? { type: 'direct', tag: 'direct', domain_resolver: 'dns-direct' }
-        : { type: 'direct', tag: 'direct' },
-    ],
+    outbounds,
 
     route: {
       rules,
@@ -1259,6 +1281,20 @@ function buildConfig(
   }
 
   return config
+}
+
+function buildUpstreamProxyOutbound(upstreamProxy) {
+  const type = upstreamProxy.type === 'http' ? 'http' : 'socks'
+  const outbound = {
+    type,
+    tag: 'upstream-proxy',
+    server: upstreamProxy.host,
+    server_port: upstreamProxy.port,
+  }
+  if (type === 'socks') {
+    outbound.version = '5'
+  }
+  return outbound
 }
 
 function buildTunConfig(
@@ -1322,6 +1358,81 @@ function buildTunConfig(
   }
 }
 
+function applyUtlsSettings(outbound, utlsSettings) {
+  if (!utlsSettings || !outbound?.tls?.enabled) return outbound
+  const { globalFingerprint, echEnabled } = utlsSettings
+  if (!globalFingerprint || globalFingerprint === 'auto') {
+    if (!echEnabled) return outbound
+    // Only ECH, no fingerprint override
+    return { ...outbound, tls: { ...outbound.tls, ech: { enabled: true } } }
+  }
+  const tls = { ...outbound.tls }
+  if (tls.utls) {
+    tls.utls = { ...tls.utls, fingerprint: globalFingerprint }
+  } else {
+    tls.utls = { enabled: true, fingerprint: globalFingerprint }
+  }
+  if (echEnabled) {
+    tls.ech = { enabled: true }
+  }
+  return { ...outbound, tls }
+}
+
+function buildWarpConfig(warpOutbound, directDomains, localPort = 2080, setSystemProxy = false) {
+  const rules = buildDirectRules(directDomains)
+  return {
+    log: { level: 'warn', timestamp: true },
+    inbounds: [
+      {
+        type: 'mixed',
+        tag: 'mixed-in',
+        listen: '127.0.0.1',
+        listen_port: localPort,
+        set_system_proxy: setSystemProxy,
+      },
+    ],
+    outbounds: [
+      warpOutbound,
+      { type: 'direct', tag: 'direct' },
+    ],
+    route: {
+      rules,
+      final: 'proxy',
+      auto_detect_interface: true,
+    },
+  }
+}
+
+async function createAndCheckWarpConfig({
+  warpOutbound,
+  enginePath,
+  userDataPath,
+  directDomains,
+  runtimeDirectoryName = 'runtime',
+  configFileName = 'config.json',
+  localPort = 2080,
+  setSystemProxy = false,
+}) {
+  const normalizedDirectDomains = normalizeDirectDomains(directDomains)
+  const config = buildWarpConfig(warpOutbound, normalizedDirectDomains, localPort, setSystemProxy)
+
+  const runtimeDirectory = path.join(userDataPath, 'HamidsDeutsch-Connect', runtimeDirectoryName)
+  const configPath = path.join(runtimeDirectory, configFileName)
+
+  await writeConfigAtomically(runtimeDirectory, configPath, config)
+  const checkResult = await checkConfig(enginePath, configPath)
+
+  return {
+    success: checkResult.success,
+    checkedAt: new Date().toISOString(),
+    protocol: 'wireguard',
+    configPath,
+    directDomainCount: normalizedDirectDomains.length,
+    stdout: checkResult.stdout,
+    error: checkResult.error,
+  }
+}
+
 function applyRescueOptions(
   outbound,
   rescueOptions,
@@ -1360,6 +1471,10 @@ function applyRescueOptions(
       // Even light rescue enables randomized uTLS
       tls.utls = { enabled: true, fingerprint: 'randomized' }
     }
+  }
+
+  if (options.echEnabled) {
+    tls.ech = { enabled: true }
   }
 
   return {
@@ -1406,6 +1521,9 @@ function normalizeRescueOptions(
     dpiBypass:
       enabled &&
       Boolean(value?.dpiBypass),
+    echEnabled:
+      enabled &&
+      Boolean(value?.echEnabled),
   }
 }
 
@@ -2021,4 +2139,5 @@ function splitList(value) {
 module.exports = {
   createAndCheckConfig,
   createAndCheckTunConfig,
+  createAndCheckWarpConfig,
 }
