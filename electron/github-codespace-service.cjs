@@ -18,22 +18,22 @@ RUN chmod +x /usr/local/bin/setup.sh /usr/local/bin/start.sh
 const SETUP_SH = `#!/bin/bash
 set -e
 echo "[hd-proxy] Installing xray..."
-XRAY_VERSION=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest \\
-  | grep -Po '"tag_name": "\\K[^"]+' 2>/dev/null || echo "v26.3.27")
+XRAY_VERSION=$(curl -sf https://api.github.com/repos/XTLS/Xray-core/releases/latest \\
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['tag_name'])" 2>/dev/null || echo "v26.3.27")
 curl -fsSL -o /tmp/xray.zip \\
   "https://github.com/XTLS/Xray-core/releases/download/\${XRAY_VERSION}/Xray-linux-64.zip"
 unzip -o /tmp/xray.zip xray -d /tmp/xray-bin
-install -m 755 /tmp/xray-bin/xray /usr/local/bin/xray
+sudo install -m 755 /tmp/xray-bin/xray /usr/local/bin/xray
 rm -rf /tmp/xray.zip /tmp/xray-bin
-echo "[hd-proxy] Done: $(xray version 2>/dev/null | head -1)"
+echo "[hd-proxy] Done: $(/usr/local/bin/xray version 2>/dev/null | head -1)"
 `
 
 const START_SH = `#!/bin/bash
 # Copy latest config from workspace (in case it was updated for a new UUID)
 WORKSPACE_CONFIG=$(find /workspaces -name config.json -path "*/.devcontainer/*" 2>/dev/null | head -1)
 if [ -n "$WORKSPACE_CONFIG" ]; then
-  mkdir -p /etc/xray
-  cp "$WORKSPACE_CONFIG" /etc/xray/config.json
+  sudo mkdir -p /etc/xray
+  sudo cp "$WORKSPACE_CONFIG" /etc/xray/config.json
 fi
 
 if [ ! -f /etc/xray/config.json ]; then
@@ -43,7 +43,12 @@ fi
 
 tmux kill-session -t hd-proxy 2>/dev/null || true
 tmux new-session -d -s hd-proxy "sudo /usr/local/bin/xray run -c /etc/xray/config.json &>/tmp/xray.log"
-sleep 1
+sleep 2
+if ! tmux has-session -t hd-proxy 2>/dev/null; then
+  echo "[hd-proxy] ERROR: xray failed to start, check /tmp/xray.log" >&2
+  cat /tmp/xray.log >&2 || true
+  exit 1
+fi
 echo "[hd-proxy] Xray running on port 443"
 `
 

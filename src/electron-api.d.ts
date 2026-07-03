@@ -753,6 +753,16 @@ declare global {
         removeManualNode: (
           nodeId: string,
         ) => Promise<{ success: boolean; error?: string }>
+
+        hideNode: (
+          compositeId: string,
+        ) => Promise<{ success: boolean; error?: string }>
+
+        unhideNode: (
+          compositeId: string,
+        ) => Promise<{ success: boolean; error?: string }>
+
+        getHiddenNodes: () => Promise<string[]>
       }
 
       free: {
@@ -812,6 +822,12 @@ declare global {
         get: () => Promise<{ success: boolean; entries: ConnectionHistoryEntry[] }>
         append: (entry: Omit<ConnectionHistoryEntry, 'id'>) => Promise<{ success: boolean; error?: string }>
         clear: () => Promise<{ success: boolean; error?: string }>
+      }
+
+      updater: {
+        onUpdateAvailable: (callback: (payload: { version: string; releaseNotes: string | null }) => void) => () => void
+        onUpdateDownloaded: (callback: (payload: { version: string }) => void) => () => void
+        installUpdate: () => Promise<void>
       }
 
       startup: {

@@ -231,6 +231,23 @@ contextBridge.exposeInMainWorld(
           'servers:remove-manual-node',
           nodeId,
         ),
+
+      hideNode: (compositeId) =>
+        ipcRenderer.invoke(
+          'servers:hide-node',
+          compositeId,
+        ),
+
+      unhideNode: (compositeId) =>
+        ipcRenderer.invoke(
+          'servers:unhide-node',
+          compositeId,
+        ),
+
+      getHiddenNodes: () =>
+        ipcRenderer.invoke(
+          'servers:get-hidden-nodes',
+        ),
     },
 
     free: {
@@ -289,6 +306,20 @@ contextBridge.exposeInMainWorld(
       get: () => ipcRenderer.invoke('history:get'),
       append: (entry) => ipcRenderer.invoke('history:append', entry),
       clear: () => ipcRenderer.invoke('history:clear'),
+    },
+
+    updater: {
+      onUpdateAvailable: (callback) => {
+        const listener = (_event, payload) => callback(payload)
+        ipcRenderer.on('app:update-available', listener)
+        return () => ipcRenderer.removeListener('app:update-available', listener)
+      },
+      onUpdateDownloaded: (callback) => {
+        const listener = (_event, payload) => callback(payload)
+        ipcRenderer.on('app:update-downloaded', listener)
+        return () => ipcRenderer.removeListener('app:update-downloaded', listener)
+      },
+      installUpdate: () => ipcRenderer.invoke('app:install-update'),
     },
 
     startup: {

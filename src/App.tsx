@@ -311,6 +311,25 @@ function App() {
   const connectionSettings = useConnectionSettings()
   const diagnostics = useConnectionDiagnostics()
 
+  const [hiddenNodeIds, setHiddenNodeIds] = useState<string[]>([])
+
+  useEffect(() => {
+    window.hamidsDeutsch.servers.getHiddenNodes().then(setHiddenNodeIds).catch(() => {})
+  }, [])
+
+  const [updateInfo, setUpdateInfo] = useState<{ version: string; ready: boolean } | null>(null)
+
+  useEffect(() => {
+    if (!window.hamidsDeutsch.updater) return
+    const unsubAvail = window.hamidsDeutsch.updater.onUpdateAvailable(({ version }) => {
+      setUpdateInfo({ version, ready: false })
+    })
+    const unsubDownloaded = window.hamidsDeutsch.updater.onUpdateDownloaded(({ version }) => {
+      setUpdateInfo({ version, ready: true })
+    })
+    return () => { unsubAvail(); unsubDownloaded() }
+  }, [])
+
   const connectionVerified =
     engineProcess.status.connectionMode === 'tun'
       ? tunVerified &&
@@ -1874,16 +1893,21 @@ function App() {
               onAddManualNode={async (uri) => {
                 const result = await window.hamidsDeutsch.servers.addManualNode(uri)
                 if (result.success) {
-                  await serverNodes.loadAll()
+                  await subscriptions.refresh()
                 }
                 return result
               }}
               onRemoveManualNode={async (nodeId) => {
                 const result = await window.hamidsDeutsch.servers.removeManualNode(nodeId)
                 if (result.success) {
-                  await serverNodes.loadAll()
+                  await subscriptions.refresh()
                 }
                 return result
+              }}
+              hiddenNodeIds={hiddenNodeIds}
+              onHideNode={async (compositeId) => {
+                await window.hamidsDeutsch.servers.hideNode(compositeId)
+                setHiddenNodeIds((prev) => [...prev, compositeId])
               }}
             />
           )}
@@ -1894,6 +1918,13 @@ function App() {
               subscriptions={subscriptions.subscriptions}
               loadError={subscriptions.error}
               onAddSubscription={subscriptions.addSubscription}
+              onAddManualNodeFromSub={async (uri) => {
+                const result = await window.hamidsDeutsch.servers.addManualNode(uri)
+                if (result.success) {
+                  await subscriptions.refresh()
+                }
+                return result
+              }}
               onRemoveSubscription={subscriptions.removeSubscription}
               onInspectSubscription={subscriptions.inspectSubscription}
               onLoadServers={async (subscriptionId) => {
@@ -2072,6 +2103,28 @@ function App() {
         <div className="toast" role="status" aria-live="polite">
           <span className="toast-icon">✓</span>
           <span>{toastMessage}</span>
+        </div>
+      )}
+      {updateInfo && (
+        <div className="update-banner" role="status">
+          {updateInfo.ready ? (
+            <>
+              <span>نسخه {updateInfo.version} آماده نصب است</span>
+              <button
+                type="button"
+                className="update-banner-btn"
+                onClick={() => window.hamidsDeutsch.updater.installUpdate()}
+              >
+                نصب و ری‌استارت
+              </button>
+              <button type="button" className="update-banner-dismiss" onClick={() => setUpdateInfo(null)}>✕</button>
+            </>
+          ) : (
+            <>
+              <span>نسخه {updateInfo.version} در حال دانلود...</span>
+              <button type="button" className="update-banner-dismiss" onClick={() => setUpdateInfo(null)}>✕</button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -3184,6 +3237,10 @@ type SubscriptionsPageProps = {
       }
   >
 
+  onAddManualNodeFromSub: (
+    uri: string,
+  ) => Promise<{ success: boolean; error?: string }>
+
   onRemoveSubscription: (
     subscriptionId: string,
   ) => Promise<
@@ -3224,6 +3281,7 @@ function SubscriptionsPage({
   subscriptions,
   loadError,
   onAddSubscription,
+  onAddManualNodeFromSub,
   onRemoveSubscription,
   onInspectSubscription,
   onLoadServers,
@@ -3265,6 +3323,13 @@ function SubscriptionsPage({
       text: string
     } | null>(null)
 
+  const SERVER_URI_PREFIXES = ['vless://', 'vmess://', 'ss://', 'trojan://', 'hysteria2://', 'hy2://', 'tuic://', 'anytls://']
+
+  function isServerUri(text: string) {
+    const trimmed = text.trim()
+    return SERVER_URI_PREFIXES.some((prefix) => trimmed.toLowerCase().startsWith(prefix))
+  }
+
   async function handleAddSubscription() {
     if (submitting) {
       return
@@ -3272,6 +3337,32 @@ function SubscriptionsPage({
 
     setSubmitting(true)
     setMessage(null)
+
+    // If the URL field contains a server URI (not a subscription URL), add it as a manual node
+    if (isServerUri(urlInput)) {
+      const lines = urlInput.split('\n').map((l) => l.trim()).filter(Boolean)
+      let addedCount = 0
+      let lastError: string | null = null
+      for (const line of lines) {
+        if (isServerUri(line)) {
+          const result = await onAddManualNodeFromSub(line)
+          if (result.success) {
+            addedCount++
+          } else {
+            lastError = result.error ?? 'خطا'
+          }
+        }
+      }
+      setSubmitting(false)
+      setUrlInput('')
+      setNameInput('')
+      if (addedCount > 0) {
+        setMessage({ type: 'success', text: `${addedCount} سرور به لیست سرورها اضافه شد.` })
+      } else {
+        setMessage({ type: 'error', text: lastError ?? 'افزودن سرور ناموفق بود.' })
+      }
+      return
+    }
 
     const result =
       await onAddSubscription(
@@ -3695,6 +3786,8 @@ function ServersPage({
   subConnectingStep,
   onAddManualNode,
   onRemoveManualNode,
+  onHideNode,
+  hiddenNodeIds,
 }: {
   loading: boolean
   nodes: SafeServerNode[]
@@ -3740,6 +3833,8 @@ function ServersPage({
   subConnectingStep: string | null
   onAddManualNode: (uri: string) => Promise<{ success: boolean; error?: string }>
   onRemoveManualNode: (nodeId: string) => Promise<{ success: boolean; error?: string }>
+  onHideNode: (compositeId: string) => Promise<void>
+  hiddenNodeIds: string[]
 }) {
   const t = useT()
   const [expandedServerId, setExpandedServerId] =
@@ -3812,7 +3907,8 @@ function ServersPage({
     (node) => node.valid,
   )
 
-  const sortedNodes = [...nodes].sort((a, b) => {
+  const visibleNodes = nodes.filter((n) => !hiddenNodeIds.includes(n.id))
+  const sortedNodes = [...visibleNodes].sort((a, b) => {
     if (sortMode === 'name') return a.name.localeCompare(b.name)
     if (sortMode === 'protocol') return a.protocol.localeCompare(b.protocol)
     if (sortMode === 'reality') {
@@ -4242,17 +4338,19 @@ function ServersPage({
                       </button>
                     )}
 
-                    {isManual && (
-                      <button
-                        className="text-button manual-server-remove"
-                        type="button"
-                        onClick={async () => {
+                    <button
+                      className="text-button manual-server-remove"
+                      type="button"
+                      onClick={async () => {
+                        if (isManual) {
                           await onRemoveManualNode(node.nodeId)
-                        }}
-                      >
-                        حذف سرور
-                      </button>
-                    )}
+                        } else {
+                          await onHideNode(node.id)
+                        }
+                      }}
+                    >
+                      حذف سرور
+                    </button>
                   </div>
                 </div>
               )}

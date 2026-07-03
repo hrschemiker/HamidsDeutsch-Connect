@@ -269,7 +269,7 @@ async function attemptConnect(userDataPath, settings, directDomains, forceNew) {
 
   // Wait for xray startup (postStartCommand runs after Available)
   emitProgress('xray', 'در حال انتظار برای راه‌اندازی پروکسی...')
-  await sleep(20000)
+  await sleep(30000)
 
   // Save state
   await saveCodespaceSettings(userDataPath, {

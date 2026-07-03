@@ -5997,3 +5997,51 @@ button {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+
+.update-banner {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 30, 35, 0.97);
+  border: 1px solid rgba(201, 168, 76, 0.5);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: #e8d89a;
+  z-index: 9999;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  white-space: nowrap;
+}
+
+.update-banner-btn {
+  background: var(--gold, #c9a84c);
+  color: #1a1a1e;
+  border: none;
+  border-radius: 5px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.update-banner-btn:hover {
+  background: #d4b460;
+}
+
+.update-banner-dismiss {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+  margin-left: 0.25rem;
+}
+
+.update-banner-dismiss:hover {
+  color: rgba(255,255,255,0.8);
+}

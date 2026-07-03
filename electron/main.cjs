@@ -46,6 +46,12 @@ const {
 } = require('./manual-node-store.cjs')
 
 const {
+  hideNode,
+  unhideNode,
+  getHiddenNodes,
+} = require('./hidden-nodes-store.cjs')
+
+const {
   inspectSubscriptionUrl,
   loadSubscriptionNodeRecords,
 } = require('./subscription-inspector.cjs')
@@ -3198,6 +3204,37 @@ function registerIpcHandlers() {
   )
 
   ipcMain.handle(
+    'servers:hide-node',
+    async (_event, compositeId) => {
+      try {
+        await hideNode(compositeId)
+        return { success: true }
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'خطا در مخفی کردن سرور' }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'servers:unhide-node',
+    async (_event, compositeId) => {
+      try {
+        await unhideNode(compositeId)
+        return { success: true }
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'خطا' }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'servers:get-hidden-nodes',
+    async () => {
+      return getHiddenNodes()
+    },
+  )
+
+  ipcMain.handle(
     'subscriptions:add',
     async (_event, input) => {
       try {
@@ -4127,6 +4164,14 @@ function registerIpcHandlers() {
     return { success: true, proxyDoHEnabled, error: null }
   })
 
+  ipcMain.handle('app:install-update', () => {
+    try {
+      autoUpdater.quitAndInstall()
+    } catch (err) {
+      console.error('[Updater] quitAndInstall error:', err?.message)
+    }
+  })
+
   ipcMain.handle('system:get-login-item', () => {
     try {
       const settings = app.getLoginItemSettings()
@@ -4388,6 +4433,19 @@ function createMainWindow() {
       event.preventDefault()
     },
   )
+
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    if (params.isEditable) {
+      const menu = Menu.buildFromTemplate([
+        { role: 'cut', label: 'برش', enabled: params.editFlags.canCut },
+        { role: 'copy', label: 'کپی', enabled: params.editFlags.canCopy },
+        { role: 'paste', label: 'جای‌گذاری', enabled: params.editFlags.canPaste },
+        { type: 'separator' },
+        { role: 'selectAll', label: 'انتخاب همه' },
+      ])
+      menu.popup({ window: mainWindow })
+    }
+  })
 
   if (isDevelopment) {
     const developmentUrl =
