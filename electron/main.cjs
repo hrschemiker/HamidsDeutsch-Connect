@@ -37,6 +37,15 @@ const {
 } = require('./subscription-store.cjs')
 
 const {
+  MANUAL_SUBSCRIPTION_ID,
+  MANUAL_SUBSCRIPTION_NAME,
+  listManualNodes,
+  addManualNode,
+  removeManualNode,
+  getManualNodeUri,
+} = require('./manual-node-store.cjs')
+
+const {
   inspectSubscriptionUrl,
   loadSubscriptionNodeRecords,
 } = require('./subscription-inspector.cjs')
@@ -3142,7 +3151,49 @@ function registerIpcHandlers() {
   ipcMain.handle(
     'subscriptions:list',
     async () => {
-      return listSubscriptions()
+      const subs = await listSubscriptions()
+      const manualNodes = await listManualNodes().catch(() => [])
+      if (manualNodes.length > 0) {
+        return [
+          { id: MANUAL_SUBSCRIPTION_ID, name: MANUAL_SUBSCRIPTION_NAME, host: 'دستی', createdAt: '2000-01-01T00:00:00.000Z', updatedAt: '2000-01-01T00:00:00.000Z' },
+          ...subs,
+        ]
+      }
+      return subs
+    },
+  )
+
+  ipcMain.handle(
+    'servers:add-manual-node',
+    async (_event, uri) => {
+      try {
+        const { parseSubscriptionNodeRecords } = require('./subscription-parser.cjs')
+        const records = parseSubscriptionNodeRecords(typeof uri === 'string' ? uri : '')
+        if (records.length === 0) {
+          return { success: false, error: 'لینک سرور معتبر نیست. vless://, vmess://, trojan://, ss:// پشتیبانی می‌شوند.' }
+        }
+        const node = await addManualNode(records[0].uri)
+        replaceSubscriptionNodes(MANUAL_SUBSCRIPTION_ID, [
+          ...(await listManualNodes()),
+        ])
+        return { success: true, node, parsedNode: records[0].node }
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'خطا در افزودن سرور' }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'servers:remove-manual-node',
+    async (_event, nodeId) => {
+      try {
+        await removeManualNode(nodeId)
+        const remaining = await listManualNodes()
+        replaceSubscriptionNodes(MANUAL_SUBSCRIPTION_ID, remaining)
+        return { success: true }
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'خطا در حذف سرور' }
+      }
     },
   )
 
@@ -3277,6 +3328,21 @@ function registerIpcHandlers() {
       subscriptionId,
     ) => {
       try {
+        // Virtual manual subscription — load from disk store, not URL
+        if (subscriptionId === MANUAL_SUBSCRIPTION_ID) {
+          const { parseSubscriptionNodeRecords } = require('./subscription-parser.cjs')
+          const manualNodes = await listManualNodes()
+          const allContent = manualNodes.map((n) => n.uri).join('\n')
+          const records = parseSubscriptionNodeRecords(allContent)
+          replaceSubscriptionNodes(MANUAL_SUBSCRIPTION_ID, records)
+          return {
+            success: true,
+            checkedAt: new Date().toISOString(),
+            nodes: records.map((r) => r.node),
+            error: null,
+          }
+        }
+
         const subscriptionUrl =
           await getSubscriptionUrl(
             subscriptionId,
@@ -3406,18 +3472,26 @@ function registerIpcHandlers() {
             ? input.rescueOptions
             : null
 
-        const subscriptionUrl =
-          await getSubscriptionUrl(
-            subscriptionId,
-          )
+        // Manual nodes: look up URI directly from disk store, skip URL fetch
+        let subscriptionUrl = 'manual://'
+        if (subscriptionId !== MANUAL_SUBSCRIPTION_ID) {
+          subscriptionUrl = await getSubscriptionUrl(subscriptionId)
+        }
 
-        const cachedNodeUri =
+        let cachedNodeUri =
           getSubscriptionNodeUri(
             subscriptionId,
             nodeId,
           )
 
-        if (!cachedNodeUri) {
+        if (!cachedNodeUri && subscriptionId === MANUAL_SUBSCRIPTION_ID) {
+          // Load from manual store into cache
+          const uri = await getManualNodeUri(nodeId)
+          if (uri) {
+            replaceSubscriptionNodes(MANUAL_SUBSCRIPTION_ID, [{ id: nodeId, uri }])
+            cachedNodeUri = uri
+          }
+        } else if (!cachedNodeUri) {
           const refreshed =
             await loadSubscriptionNodeRecords(
               subscriptionUrl,

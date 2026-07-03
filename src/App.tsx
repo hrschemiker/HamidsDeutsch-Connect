@@ -254,6 +254,10 @@ function App() {
   // Geo-block auto-run trigger
   const [geoBlockTrigger, setGeoBlockTrigger] = useState(0)
 
+  // Subscription server connection progress (shown inline in servers list)
+  const [subConnectingNodeId, setSubConnectingNodeId] = useState<string | null>(null)
+  const [subConnectingStep, setSubConnectingStep] = useState<string | null>(null)
+
   // Last connection for one-tap reconnect
   const [lastConnectionType, setLastConnectionType] = useState<'free' | 'subscription' | 'bpb' | 'codespace' | null>(null)
   const [showReconnectBar, setShowReconnectBar] = useState(false)
@@ -662,6 +666,7 @@ function App() {
 
   async function attemptServerConnection(
     node: SafeServerNode,
+    onStep?: (step: string) => void,
   ) {
     if (
       !node.subscriptionId ||
@@ -679,6 +684,7 @@ function App() {
     setTunBaselineIp(null)
     setTunCurrentIp(null)
 
+    onStep?.('بررسی کانفیگ سرور...')
     const checkResult = await configCheck.checkConfig({
       subscriptionId:
         node.subscriptionId,
@@ -702,6 +708,7 @@ function App() {
       }
     }
 
+    onStep?.('راه‌اندازی پروکسی...')
     const startResult = await engineProcess.start()
 
     if (!startResult.success) {
@@ -712,6 +719,7 @@ function App() {
       }
     }
 
+    onStep?.('تایید تغییر IP...')
     let localVerification =
       await ipVerification.verify()
 
@@ -1041,6 +1049,8 @@ function App() {
     node: SafeServerNode,
   ) {
     setConnectionActionError(null)
+    setSubConnectingNodeId(node.id)
+    setSubConnectingStep('در حال قطع اتصال قبلی...')
 
     if (engineProcess.status.running) {
       await engineProcess.stop()
@@ -1049,12 +1059,17 @@ function App() {
     recordAttempt(node)
 
     const result =
-      await attemptServerConnection(node)
+      await attemptServerConnection(node, (step) => {
+        setSubConnectingStep(step)
+      })
 
     recordResult(
       node,
       result,
     )
+
+    setSubConnectingNodeId(null)
+    setSubConnectingStep(null)
 
     if (!result.success) {
       setConnectionActionError(
@@ -1854,6 +1869,22 @@ function App() {
                 }
               }}
               onConnectSubNode={(node) => void prepareAndStart(node)}
+              subConnectingNodeId={subConnectingNodeId}
+              subConnectingStep={subConnectingStep}
+              onAddManualNode={async (uri) => {
+                const result = await window.hamidsDeutsch.servers.addManualNode(uri)
+                if (result.success) {
+                  await serverNodes.loadAll()
+                }
+                return result
+              }}
+              onRemoveManualNode={async (nodeId) => {
+                const result = await window.hamidsDeutsch.servers.removeManualNode(nodeId)
+                if (result.success) {
+                  await serverNodes.loadAll()
+                }
+                return result
+              }}
             />
           )}
 
@@ -3634,6 +3665,8 @@ function SubscriptionsPage({
   )
 }
 
+const MANUAL_SUBSCRIPTION_ID = '__manual__'
+
 function ServersPage({
   loading,
   nodes,
@@ -3658,6 +3691,10 @@ function ServersPage({
   onConnectFreeNode,
   onRefreshFreePool,
   onConnectSubNode,
+  subConnectingNodeId,
+  subConnectingStep,
+  onAddManualNode,
+  onRemoveManualNode,
 }: {
   loading: boolean
   nodes: SafeServerNode[]
@@ -3691,18 +3728,18 @@ function ServersPage({
   freePool: FreePoolServer[]
   freePoolMeta: { total: number; displaying: number; lastRefreshedAt: string | null; poolRefreshing: boolean } | null
   freePhase: FreeConfigPhase
-  onCheckConfig: (
-    node: SafeServerNode,
-  ) => void
+  onCheckConfig: (node: SafeServerNode) => void
   onTestLatency: () => void
-  onSelectServer: (
-    server: PublicServer,
-  ) => void
+  onSelectServer: (server: PublicServer) => void
   onClearSelectedServer: () => void
   onOpenSubscriptions: () => void
   onConnectFreeNode: (server: FreePoolServer) => void
   onRefreshFreePool: () => void
   onConnectSubNode: (node: SafeServerNode) => void
+  subConnectingNodeId: string | null
+  subConnectingStep: string | null
+  onAddManualNode: (uri: string) => Promise<{ success: boolean; error?: string }>
+  onRemoveManualNode: (nodeId: string) => Promise<{ success: boolean; error?: string }>
 }) {
   const t = useT()
   const [expandedServerId, setExpandedServerId] =
@@ -3710,6 +3747,11 @@ function ServersPage({
 
   const [switchConfirm, setSwitchConfirm] =
     useState<{ server: PublicServer } | null>(null)
+
+  const [manualInput, setManualInput] = useState('')
+  const [manualAdding, setManualAdding] = useState(false)
+  const [manualError, setManualError] = useState<string | null>(null)
+  const [showManualInput, setShowManualInput] = useState(false)
 
   type SortMode = 'ping' | 'name' | 'protocol' | 'reality'
   const [sortMode, setSortMode] = useState<SortMode>(() => {
@@ -3895,6 +3937,67 @@ function ServersPage({
             {latencyError}
           </div>
         )}
+
+        {/* ── Manual server add ── */}
+        <div className="manual-server-add">
+          {!showManualInput ? (
+            <button
+              className="text-button manual-server-toggle"
+              type="button"
+              onClick={() => { setShowManualInput(true); setManualError(null) }}
+            >
+              + افزودن سرور دستی (vless, vmess, ss, ...)
+            </button>
+          ) : (
+            <div className="manual-server-form">
+              <textarea
+                className="manual-server-input"
+                placeholder="لینک سرور را اینجا بچسبانید&#10;vless://...&#10;vmess://...&#10;ss://..."
+                value={manualInput}
+                rows={3}
+                onChange={(e) => { setManualInput(e.target.value); setManualError(null) }}
+                dir="ltr"
+                autoFocus
+              />
+              {manualError && (
+                <div className="form-message form-message-error">{manualError}</div>
+              )}
+              <div className="manual-server-form-actions">
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={manualAdding || !manualInput.trim()}
+                  onClick={async () => {
+                    const lines = manualInput.trim().split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+                    setManualAdding(true)
+                    setManualError(null)
+                    let lastError: string | null = null
+                    for (const line of lines) {
+                      const result = await onAddManualNode(line)
+                      if (!result.success) lastError = result.error ?? 'خطا'
+                    }
+                    setManualAdding(false)
+                    if (lastError) {
+                      setManualError(lastError)
+                    } else {
+                      setManualInput('')
+                      setShowManualInput(false)
+                    }
+                  }}
+                >
+                  {manualAdding ? 'در حال افزودن...' : 'افزودن'}
+                </button>
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => { setShowManualInput(false); setManualInput(''); setManualError(null) }}
+                >
+                  انصراف
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </section>
 
       <div className="server-sort-bar">
@@ -3927,6 +4030,8 @@ function ServersPage({
           const latencyBarPct = latencyResult?.reachable && latencyResult.latencyMs != null
             ? Math.min(latencyResult.latencyMs / 400 * 100, 100)
             : 0
+          const isConnecting = subConnectingNodeId === node.id
+          const isManual = node.subscriptionId === MANUAL_SUBSCRIPTION_ID
 
           return (
             <article
@@ -3937,6 +4042,9 @@ function ServersPage({
                   : '',
                 isSelected
                   ? 'server-list-item-selected'
+                  : '',
+                isConnecting
+                  ? 'server-list-item-connecting'
                   : '',
                 !node.valid
                   ? 'server-list-item-invalid'
@@ -3997,9 +4105,9 @@ function ServersPage({
                   </span>
                 </button>
                 <button
-                  className={`server-list-connect-btn${isSelected && processRunning ? ' server-list-connect-btn-active' : ''}`}
+                  className={`server-list-connect-btn${isSelected && processRunning ? ' server-list-connect-btn-active' : ''}${isConnecting ? ' server-list-connect-btn-connecting' : ''}`}
                   type="button"
-                  disabled={!node.valid}
+                  disabled={!node.valid || (subConnectingNodeId !== null && !isConnecting)}
                   title={t('servers.selectThis')}
                   onClick={() => {
                     if (processRunning && !isSelected) {
@@ -4009,9 +4117,17 @@ function ServersPage({
                     }
                   }}
                 >
-                  {isSelected && processRunning ? '■' : '▶'}
+                  {isConnecting ? '◌' : isSelected && processRunning ? '■' : '▶'}
                 </button>
               </div>
+
+              {/* Connection progress inline */}
+              {isConnecting && subConnectingStep && (
+                <div className="server-connecting-progress">
+                  <span className="server-connecting-spinner">◌</span>
+                  <span className="server-connecting-text">{subConnectingStep}</span>
+                </div>
+              )}
 
               {isExpanded && (
                 <div className="server-list-details">
@@ -4123,6 +4239,18 @@ function ServersPage({
                         {configCheckingNodeId === node.id
                           ? t('servers.checking')
                           : t('servers.checkBtn')}
+                      </button>
+                    )}
+
+                    {isManual && (
+                      <button
+                        className="text-button manual-server-remove"
+                        type="button"
+                        onClick={async () => {
+                          await onRemoveManualNode(node.nodeId)
+                        }}
+                      >
+                        حذف سرور
                       </button>
                     )}
                   </div>

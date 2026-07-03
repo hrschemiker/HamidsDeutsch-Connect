@@ -219,6 +219,18 @@ contextBridge.exposeInMainWorld(
           'servers:check-tun-config',
           input,
         ),
+
+      addManualNode: (uri) =>
+        ipcRenderer.invoke(
+          'servers:add-manual-node',
+          uri,
+        ),
+
+      removeManualNode: (nodeId) =>
+        ipcRenderer.invoke(
+          'servers:remove-manual-node',
+          nodeId,
+        ),
     },
 
     free: {

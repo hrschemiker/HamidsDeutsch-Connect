@@ -730,6 +730,29 @@ declare global {
         ) => Promise<
           CheckTunConfigResult
         >
+
+        addManualNode: (
+          uri: string,
+        ) => Promise<{
+          success: boolean
+          node?: { id: string; uri: string; addedAt: string }
+          parsedNode?: {
+            id: string
+            name: string
+            protocol: string
+            host: string | null
+            port: number | null
+            transport: string | null
+            tls: boolean
+            security: string | null
+            valid: boolean
+          }
+          error?: string
+        }>
+
+        removeManualNode: (
+          nodeId: string,
+        ) => Promise<{ success: boolean; error?: string }>
       }
 
       free: {

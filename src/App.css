@@ -5892,3 +5892,108 @@ button {
   background: rgba(224,85,85,0.18);
   color: var(--red);
 }
+
+/* ── Manual server add ──────────────────────────────────────────── */
+
+.manual-server-add {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.07));
+}
+
+.manual-server-toggle {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  letter-spacing: 0.01em;
+}
+
+.manual-server-toggle:hover {
+  opacity: 1;
+}
+
+.manual-server-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.manual-server-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--surface-2, rgba(255,255,255,0.04));
+  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+  padding: 10px 12px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.manual-server-input:focus {
+  outline: none;
+  border-color: var(--gold, #c9a84c);
+}
+
+.manual-server-form-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.manual-server-remove {
+  color: var(--red, #e05555);
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.manual-server-remove:hover {
+  opacity: 1;
+}
+
+/* ── Connection progress inline ─────────────────────────────────── */
+
+.server-list-item-connecting {
+  border-color: var(--gold, #c9a84c) !important;
+}
+
+.server-connecting-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px 9px;
+  background: rgba(201,168,76,0.07);
+  border-radius: 0 0 8px 8px;
+  font-size: 0.78rem;
+  color: var(--gold, #c9a84c);
+  border-top: 1px solid rgba(201,168,76,0.15);
+}
+
+.server-connecting-spinner {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.server-connecting-text {
+  opacity: 0.9;
+  font-family: var(--font-fa, inherit);
+}
+
+.server-list-connect-btn-connecting {
+  color: var(--gold, #c9a84c);
+  background: rgba(201,168,76,0.12);
+  animation: pulse-gold 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-gold {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
