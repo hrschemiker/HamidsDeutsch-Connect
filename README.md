@@ -1,3 +1,5 @@
+<div dir="rtl" align="right">
+
 <div align="center">
 
 <img src="public/logo.png" alt="HamidsDeutsch Connect" width="100" height="100">
@@ -10,304 +12,318 @@
 [![Electron](https://img.shields.io/badge/Electron-v42-47848F?logo=electron&logoColor=white)](https://electronjs.org)
 [![sing‑box](https://img.shields.io/badge/sing--box-v1.13-FF6B35)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.0-f2c055)](../../releases/latest)
+[![Version](https://img.shields.io/badge/Version-2.0.0-f2c055)](../../releases/latest)
 
-[🇬🇧 English](#english) · [⬇ دانلود آخرین نسخه](../../releases/latest)
+[🇬🇧 English](#-english) · [⬇ دانلود آخرین نسخه](../../releases/latest)
 
 </div>
 
 ---
 
-## 🇮🇷 توضیحات فارسی
+## ✨ ویژگی‌ها
 
-**HamidsDeutsch Connect** یک نرم‌افزار دسکتاپ ویندوزی است که اتصال به اینترنت آزاد را از چند روش مختلف، به شکل ساده و بدون نیاز به دانش فنی فراهم می‌کند.
-هسته اصلی نرم‌افزار از موتور حرفه‌ای **sing-box** استفاده می‌کند و تمام تنظیمات پروکسی سیستم را به صورت خودکار مدیریت می‌کند — بدون اینکه چیزی روی سیستم شما باقی بماند.
-
----
-
-### ✨ امکانات
-
-| امکان | توضیح |
-|-------|-------|
-| 🆓 **سرور رایگان** | دریافت خودکار بهترین کانفیگ از مخازن عمومی و اتصال یک‌کلیکی |
+| روش اتصال | توضیح |
+|-----------|-------|
+| 📋 **اشتراک V2Ray** | وارد کردن لینک اشتراک، تست سرعت خودکار، اتصال مستقیم با یک کلیک |
+| 🆓 **سرور رایگان** | دریافت خودکار بهترین کانفیگ از مخازن عمومی |
 | 🐙 **GitHub Codespace** | پروکسی خصوصی داخل GitHub — بدون نیاز به سرور شخصی |
 | ☁️ **پنل BPB** | پشتیبانی کامل از BPB Panel مبتنی بر Cloudflare Workers |
-| 📋 **اشتراک V2Ray** | وارد کردن لینک اشتراک و اتصال به سریع‌ترین سرور با دکمه مستقیم کنار هر سرور |
-| 🔄 **اتصال مجدد هوشمند** | در صورت قطع، سرور جایگزین پیدا می‌کند و دوباره متصل می‌شود |
-| 🛡️ **هسته sing-box** | موتور پروکسی با پشتیبانی از VLESS · VMess · Trojan · Shadowsocks |
-| 🌐 **مدیریت خودکار Proxy** | تنظیمات پروکسی ویندوز پس از قطع اتصال به حالت اول بازمی‌گردد |
+| 🌀 **Cloudflare WARP** | اتصال WireGuard مستقیم به شبکه Cloudflare |
 
-
-
-### 🚀 نصب و راه‌اندازی
-
-#### ۱. دانلود نصب‌کننده
-
-1. از [صفحه Releases](../../releases/latest) آخرین فایل `HamidsDeutsch-Connect-Setup-x64.exe` را دانلود کنید
-2. فایل نصب‌کننده را اجرا کنید
-3. پس از نصب، برنامه به صورت خودکار اجرا می‌شود
+| قابلیت | توضیح |
+|--------|-------|
+| 🔍 **اسکن خودکار IP کلودفلر** | در پس‌زمینه IP‌های تمیز CF پیدا می‌کند و برای همه اتصال‌ها اعمال می‌کند |
+| 🎭 **uTLS + ECH** | انگشت‌نگاری TLS اثر انگشت Chrome/Firefox برای دور زدن DPI |
+| 🔗 **پروکسی بالادستی** | زنجیر کردن به SOCKS5/HTTP موجود |
+| 🔄 **اتصال مجدد هوشمند** | در صورت قطع، سرور جایگزین پیدا می‌کند |
+| 🛡️ **تأیید IP** | بعد از اتصال، تغییر IP را تأیید می‌کند |
+| 🌐 **مدیریت خودکار Proxy** | تنظیمات پروکسی ویندوز پس از قطع به حالت اول بازمی‌گردد |
+| 🔧 **TUN Mode** | حالت شبکه‌سطح سیستم (نیاز به دسترسی مدیر) |
 
 ---
 
-### 📡 روش‌های اتصال
+## 🚀 نصب
+
+1. از [صفحه Releases](../../releases/latest) آخرین فایل `HamidsDeutsch-Connect-Setup-x64.exe` را دانلود کنید
+2. فایل نصب‌کننده را اجرا کنید و مراحل را دنبال کنید
+3. برنامه به صورت خودکار اجرا می‌شود
+
+> برای قطع کامل فایروال برنامه باید **با دسترسی مدیر (Run as Administrator)** اجرا شود.
+
+---
+
+## 📡 روش‌های اتصال
 
 <details>
-<summary><b>🆓 روش اول — سرور رایگان (آسان‌ترین روش، بدون نیاز به حساب کاربری)</b></summary>
+<summary><b>📋 روش اول — اشتراک V2Ray (پایدارترین روش)</b></summary>
 
-این روش کاملاً خودکار است و نیازی به ثبت‌نام یا تنظیم ندارد.
+۱. به تب **«اشتراک‌ها»** بروید و لینک اشتراک خود را وارد کنید  
+۲. سرورها بارگذاری می‌شوند — روی دکمه **▶** کنار هر سرور کلیک کنید  
+۳. یا در صفحه اصلی روی دکمه **«اتصال به بهترین سرور»** بزنید
 
-1. برنامه را باز کنید
-2. روی دکمه اصلی **«اتصال»** در صفحه اصلی کلیک کنید
-3. برنامه به طور خودکار:
-   - لیستی از سرورهای رایگان دریافت می‌کند
-   - سرعت همه را آزمایش می‌کند
-   - به سریع‌ترین سرور متصل می‌شود
-4. پس از اتصال، تغییر IP در همان صفحه تأیید می‌شود
-
-> **نکته:** اگر سرور اصلی قطع شود، برنامه به صورت خودکار سرور جدیدی پیدا می‌کند.
+> برنامه به صورت خودکار بهترین IP کلودفلر را شناسایی می‌کند و برای سرورهای `workers.dev` اعمال می‌کند.
 
 </details>
 
 <details>
-<summary><b>📋 روش دوم — لینک اشتراک V2Ray (پیشنهادی برای کاربران با اشتراک)</b></summary>
+<summary><b>🆓 روش دوم — سرور رایگان (بدون نیاز به حساب کاربری)</b></summary>
 
-اگر لینک اشتراک V2Ray دارید، این روش پایدارترین اتصال را می‌دهد.
+در صفحه اصلی روی دکمه **«سرور رایگان»** کلیک کنید. برنامه به صورت خودکار سریع‌ترین سرور رایگان را پیدا و متصل می‌شود.
 
-1. به تب **«اشتراک‌ها»** بروید
-2. روی **«افزودن اشتراک»** کلیک کنید
-3. لینک اشتراک خود را وارد کنید (معمولاً با `https://` یا `vmess://` شروع می‌شود)
-4. روی **«بارگذاری»** کلیک کنید تا لیست سرورها دریافت شود
-5. به تب **«سرورها»** بروید — روی دکمه **▶** کنار هر سرور کلیک کنید تا مستقیماً متصل شوید
+> در صورت قطع، برنامه به صورت خودکار سرور جایگزین پیدا می‌کند.
 
 </details>
 
 <details>
-<summary><b>🐙 روش سوم — GitHub Codespace (پروکسی خصوصی با حساب GitHub)</b></summary>
+<summary><b>🌀 روش سوم — Cloudflare WARP (جدید در v2.0.0)</b></summary>
 
-این روش یک پروکسی کاملاً خصوصی ایجاد می‌کند که فقط برای شماست.
+۱. به تب **«ابزارها»** بروید  
+۲. در بخش **WARP** روی **«ساخت حساب WARP»** کلیک کنید (یک‌بار کافی است)  
+۳. در صفحه اصلی روی دکمه **«Cloudflare WARP»** کلیک کنید
+
+این روش یک تونل WireGuard مستقیم به شبکه Cloudflare ایجاد می‌کند و نیازی به تنظیمات اضافه ندارد.
+
+</details>
+
+<details>
+<summary><b>🐙 روش چهارم — GitHub Codespace</b></summary>
 
 **پیش‌نیاز:** حساب GitHub (رایگان کافی است)
 
 #### ساخت Personal Access Token
 
-1. وارد [github.com](https://github.com) شوید
-2. از بالا-راست روی تصویر پروفایل خود کلیک کنید → **Settings**
-3. از منوی چپ تا پایین بروید → **Developer settings**
-4. **Personal access tokens** → **Tokens (classic)**
-5. روی **Generate new token (classic)** کلیک کنید
-6. یک نام دلخواه وارد کنید (مثلاً: `HamidsDeutsch`)
-7. تاریخ انقضا را روی **No expiration** یا ۱ سال تنظیم کنید
-8. تیک این دسترسی‌ها را بزنید:
-   - ✅ `repo` — دسترسی کامل به مخازن
-   - ✅ `codespace` — مدیریت Codespace
-9. روی **Generate token** کلیک کنید
-10. توکن را **همین‌جا کپی کنید** — دیگر نمایش داده نمی‌شود
+۱. وارد [github.com](https://github.com) شوید  
+۲. **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**  
+۳. روی **Generate new token (classic)** کلیک کنید  
+۴. تیک `repo` و `codespace` را بزنید و توکن را ذخیره کنید
 
 #### اتصال در نرم‌افزار
 
-1. به تب **«تنظیمات»** → **GitHub** بروید
-2. توکن کپی‌شده را در فیلد **Personal Access Token** جای‌گذاری کنید
-3. روی **«ذخیره»** کلیک کنید
-4. به صفحه اصلی برگردید و روی دکمه **«اتصال از طریق GitHub»** کلیک کنید
-5. اولین بار ممکن است ۲–۳ دقیقه طول بکشد (ساخت Codespace جدید)
-6. پس از اتصال، IP خروجی تأیید می‌شود
+۱. به تب **«تنظیمات»** → بخش **GitHub** بروید  
+۲. توکن را وارد کنید و ذخیره کنید  
+۳. در صفحه اصلی روی **«GitHub Codespace»** کلیک کنید
 
-> **نکته:** Codespace رایگان GitHub ماهانه ۱۲۰ ساعت استفاده دارد. برای استفاده بیشتر باید اشتراک GitHub Pro تهیه کنید.
+> Codespace رایگان GitHub ماهانه ۱۲۰ ساعت استفاده دارد.
 
 </details>
 
 <details>
-<summary><b>☁️ روش چهارم — پنل BPB روی Cloudflare (پیشرفته)</b></summary>
+<summary><b>☁️ روش پنجم — پنل BPB</b></summary>
 
 BPB یک پنل پروکسی رایگان است که روی Cloudflare Workers اجرا می‌شود.
 
 **پیش‌نیاز:** حساب Cloudflare (رایگان)
 
-#### راه‌اندازی Cloudflare
-
-1. در [cloudflare.com](https://cloudflare.com) ثبت‌نام کنید
-2. به تب **«BPB Panel»** در نرم‌افزار بروید
-3. روی **«ورود به Cloudflare»** کلیک کنید و مجوز دسترسی دهید
-4. روی **«استقرار پنل BPB»** کلیک کنید
-5. پس از اتمام، آدرس پنل به صورت خودکار ذخیره می‌شود
-6. از تب BPB روی **«اتصال»** کلیک کنید
-
-> **نکته:** Cloudflare Workers روزانه ۱۰۰,۰۰۰ درخواست رایگان دارد که برای استفاده معمول کافی است.
+۱. به تب **«BPB Panel»** بروید  
+۲. روی **«ورود به Cloudflare»** کلیک کنید  
+۳. پس از ورود، روی **«استقرار پنل»** کلیک کنید  
+۴. پس از استقرار می‌توانید مستقیماً از همین تب متصل شوید
 
 </details>
 
 ---
 
-### ⚙️ پیش‌نیازها
+## 🔧 قابلیت‌های پیشرفته
 
-- ویندوز ۱۰ یا ۱۱ (نسخه ۶۴ بیتی)
-- اتصال اینترنت (برای دریافت موتور sing-box در اولین اجرا)
-- حساب GitHub (فقط برای روش GitHub Codespace)
-- حساب Cloudflare (فقط برای روش BPB)
+<details>
+<summary><b>🔍 اسکن خودکار IP کلودفلر</b></summary>
+
+برنامه هنگام باز شدن به صورت خودکار در پس‌زمینه IP‌های تمیز Cloudflare را اسکن می‌کند و بهترین نتیجه را ذخیره می‌کند. وقتی به سرورهای `workers.dev` یا `pages.dev` متصل می‌شوید، برنامه به صورت خودکار این IP را به جای آدرس اصلی استفاده می‌کند تا سرعت و پایداری بهتری داشته باشید.
+
+می‌توانید از تب **«ابزارها»** اسکن دستی انجام دهید یا اسکن خودکار را غیرفعال کنید.
+
+</details>
+
+<details>
+<summary><b>🎭 uTLS و ECH</b></summary>
+
+از تب **«ابزارها»** می‌توانید انگشت‌نگاری TLS را برای دور زدن فیلترینگ عمیق بسته (DPI) تنظیم کنید:
+
+- **uTLS Fingerprint:** شبیه‌سازی ترافیک Chrome، Firefox یا سایر مرورگرها
+- **ECH:** رمزگذاری نام سرور در دست دادن TLS
+
+</details>
+
+<details>
+<summary><b>🔗 پروکسی بالادستی (Upstream Proxy)</b></summary>
+
+اگر از قبل یک پروکسی SOCKS5 یا HTTP دارید، می‌توانید از تب **«ابزارها»** آدرس آن را وارد کنید تا تمام اتصال‌های نرم‌افزار از طریق آن عبور کند.
+
+</details>
 
 ---
 
-<a name="english"></a>
+## 🛠️ نیازمندی‌ها
+
+- **ویندوز** 10 یا 11 (64 بیتی)
+- **دسترسی مدیر** برای TUN Mode
+
+---
+
+## 📄 مجوز
+
+این پروژه تحت [مجوز MIT](LICENSE) منتشر شده است.
+
+</div>
 
 ---
 
 ## 🇬🇧 English
 
-**HamidsDeutsch Connect** is a Windows desktop application that provides easy, one-click access to the free internet through multiple connection methods — with no technical knowledge required.
+<div align="center">
 
-The core engine is **sing-box**, a professional-grade proxy runtime. All Windows proxy settings are managed automatically and fully restored when you disconnect.
+<img src="public/logo.png" alt="HamidsDeutsch Connect" width="80" height="80">
 
----
+**HamidsDeutsch Connect** is a Windows desktop app for free internet access, powered by [sing-box](https://github.com/SagerNet/sing-box).
+
+</div>
 
 ### ✨ Features
 
+| Connection Method | Description |
+|-------------------|-------------|
+| 📋 **V2Ray Subscription** | Import subscription links, auto latency test, one-click connect |
+| 🆓 **Free Servers** | Auto-fetch best configs from public repositories |
+| 🐙 **GitHub Codespace** | Private proxy inside GitHub — no VPS required |
+| ☁️ **BPB Panel** | Full BPB Panel support via Cloudflare Workers |
+| 🌀 **Cloudflare WARP** | WireGuard tunnel directly to Cloudflare's network |
+
 | Feature | Description |
 |---------|-------------|
-| 🆓 **Free Config** | Automatically fetches and connects to the fastest free proxy server |
-| 🐙 **GitHub Codespace** | Private VLESS+WebSocket proxy inside a GitHub Codespace — no personal server |
-| ☁️ **BPB Panel** | Full support for BPB Panel (Cloudflare Workers-based proxy) |
-| 📋 **V2Ray Subscription** | Import subscription links — connect directly from each server row with one click |
-| 🔄 **Auto-Reconnect** | Automatically finds and switches to a new server if the connection drops |
-| 🛡️ **sing-box Core** | Supports VLESS · VMess · Trojan · Shadowsocks · Hysteria2 and more |
-| 🌐 **Windows Proxy Manager** | Proxy settings are automatically restored after disconnect |
-| 🔘 **Instant Stop** | Clicking a connect button again during connection immediately aborts it |
-| 🗂️ **System Tray** | Closing the window minimizes to tray instead of quitting |
-| 🎨 **Premium Dark Mode** | Best-in-class visual design — vivid gold, teal, and green on deep indigo-black |
+| 🔍 **Auto CF IP Scan** | Background scan for clean Cloudflare IPs, auto-applied to all connections |
+| 🎭 **uTLS + ECH** | TLS fingerprint mimicry (Chrome/Firefox) to bypass DPI |
+| 🔗 **Upstream Proxy** | Chain through an existing SOCKS5/HTTP proxy |
+| 🔄 **Smart Reconnect** | Automatically finds a replacement server on disconnect |
+| 🛡️ **IP Verification** | Confirms IP change after every connection |
+| 🌐 **Auto Proxy Management** | Windows proxy settings restored automatically on disconnect |
+| 🔧 **TUN Mode** | System-level network routing (requires administrator) |
 
 ---
 
 ### 🚀 Installation
 
 1. Download the latest `HamidsDeutsch-Connect-Setup-x64.exe` from [Releases](../../releases/latest)
-2. Run the installer
-3. The app launches automatically after installation
+2. Run the installer and follow the steps
+3. The app launches automatically
+
+> For complete firewall control, run the app **as Administrator**.
 
 ---
 
 ### 📡 Connection Methods
 
 <details>
-<summary><b>🆓 Method 1 — Free Config (Easiest, no account needed)</b></summary>
+<summary><b>📋 Method 1 — V2Ray Subscription (recommended)</b></summary>
 
-This method is fully automatic — no registration or configuration required.
+1. Go to the **Subscriptions** tab and add your subscription URL
+2. Servers load automatically — click **▶** next to any server
+3. Or click **Connect to Best Server** on the home screen
 
-1. Open the app
-2. Click the main **Connect** button on the home screen
-3. The app automatically:
-   - Downloads a list of free proxy servers from public repositories
-   - Tests latency on all servers
-   - Connects to the fastest one
-4. IP change is verified and shown in the app
-
-> If the connected server drops, the app automatically reconnects to another one.
+> The app automatically detects Cloudflare-hosted nodes (`workers.dev`) and replaces the server IP with the fastest clean CF IP from the background scan.
 
 </details>
 
 <details>
-<summary><b>📋 Method 2 — V2Ray Subscription (Recommended for subscription users)</b></summary>
+<summary><b>🆓 Method 2 — Free Servers (no account needed)</b></summary>
 
-If you have a V2Ray subscription link, this method gives the most stable connection.
+Click the **Free Server** button on the home screen. The app automatically fetches, tests, and connects to the fastest available free server.
 
-1. Go to the **Subscriptions** tab
-2. Click **Add Subscription** and paste your subscription URL
-3. Click **Load** to fetch the server list
-4. Go to the **Servers** tab — click the **▶** button next to any server to connect directly
+> On disconnect, it automatically finds a replacement server.
 
 </details>
 
 <details>
-<summary><b>🐙 Method 3 — GitHub Codespace (Private proxy with your GitHub account)</b></summary>
+<summary><b>🌀 Method 3 — Cloudflare WARP (new in v2.0.0)</b></summary>
 
-This method creates a fully private proxy that only you can use.
+1. Go to the **Tools** tab
+2. Under **WARP**, click **Create WARP Account** (only needed once)
+3. On the home screen, click the **Cloudflare WARP** button
 
-**Requirement:** A GitHub account (free tier is sufficient)
+This creates a WireGuard tunnel directly to Cloudflare's network with no additional configuration.
+
+</details>
+
+<details>
+<summary><b>🐙 Method 4 — GitHub Codespace</b></summary>
+
+**Prerequisite:** A GitHub account (free tier works)
 
 #### Create a Personal Access Token
 
-1. Sign in at [github.com](https://github.com)
-2. Click your profile picture (top right) → **Settings**
-3. Scroll to the bottom of the left sidebar → **Developer settings**
-4. **Personal access tokens** → **Tokens (classic)**
-5. Click **Generate new token (classic)**
-6. Enter a note (e.g. `HamidsDeutsch`)
-7. Set expiration to **No expiration** or 1 year
-8. Check these scopes:
-   - ✅ `repo` — Full control of private repositories
-   - ✅ `codespace` — Manage Codespaces
-9. Click **Generate token**
-10. **Copy the token immediately** — it will not be shown again
+1. Go to [github.com](https://github.com) → **Settings** → **Developer settings** → **Personal access tokens (classic)**
+2. Click **Generate new token**
+3. Select `repo` and `codespace` scopes
+4. Copy the token immediately (it won't be shown again)
 
 #### Connect in the app
 
-1. Go to **Settings → GitHub** in the app
-2. Paste your token in the **Personal Access Token** field and save
-3. Return to the home screen and click **Connect via GitHub**
-4. The first connection may take 2–3 minutes (creating a new Codespace)
-5. IP verification is shown after a successful connection
+1. Go to **Settings** → **GitHub** section
+2. Enter your token and save
+3. Click **GitHub Codespace** on the home screen
 
-> GitHub Free includes 120 core-hours/month for Codespaces. Upgrade to GitHub Pro for more.
+> Free GitHub accounts get 120 hours/month of Codespace usage.
 
 </details>
 
 <details>
-<summary><b>☁️ Method 4 — BPB Panel on Cloudflare (Advanced)</b></summary>
+<summary><b>☁️ Method 5 — BPB Panel</b></summary>
 
-BPB is a free proxy panel that runs on Cloudflare Workers infrastructure.
+BPB is a free proxy panel running on Cloudflare Workers.
 
-**Requirement:** A free Cloudflare account
+**Prerequisite:** A free Cloudflare account
 
-1. Sign up at [cloudflare.com](https://cloudflare.com)
-2. Go to the **BPB Panel** tab in the app
-3. Click **Login with Cloudflare** and authorize
-4. Click **Deploy BPB Panel** — the app sets everything up automatically
-5. Once deployed, connect and disconnect exclusively from the BPB tab
-
-> Cloudflare Workers free tier includes 100,000 requests/day — sufficient for normal usage.
+1. Go to the **BPB Panel** tab
+2. Click **Login to Cloudflare**
+3. After login, click **Deploy Panel**
+4. Once deployed, connect directly from the same tab
 
 </details>
 
 ---
 
-### 🔧 Tech Stack
+### 🔧 Advanced Features
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19 + TypeScript |
-| Desktop shell | Electron v42 |
-| Build tool | Vite |
-| Proxy engine | sing-box v1.13 |
-| Packaging | electron-builder · NSIS installer |
+<details>
+<summary><b>🔍 Auto Cloudflare IP Scan</b></summary>
+
+On startup, the app silently scans Cloudflare IP ranges in the background and caches the fastest reachable IP. When you connect to any `workers.dev` or `pages.dev` node, this clean IP is automatically substituted as the server address while the original hostname is preserved as the TLS SNI.
+
+You can trigger a manual scan or disable auto-scan from the **Tools** tab.
+
+</details>
+
+<details>
+<summary><b>🎭 uTLS and ECH</b></summary>
+
+From the **Tools** tab you can configure global TLS settings to bypass deep packet inspection (DPI):
+
+- **uTLS Fingerprint** — mimics Chrome, Firefox, or other browser TLS handshakes
+- **ECH (Encrypted ClientHello)** — encrypts the server name in the TLS handshake
+
+</details>
+
+<details>
+<summary><b>🔗 Upstream Proxy</b></summary>
+
+If you already have a SOCKS5 or HTTP proxy, enter it in **Tools → Upstream Proxy** and all connections will be chained through it.
+
+</details>
 
 ---
 
-### 🛠 Development
+### 🛠️ Requirements
 
-```bash
-# Install dependencies
-npm install
-
-# Start in development mode (hot reload)
-npm run start
-
-# Build Windows installer (.exe)
-npm run dist:win
-
-# Build without installer (directory output)
-npm run pack:win
-```
-
-**Requirements for development:**
-- Node.js 18+
-- Windows 10/11 x64
+- **Windows** 10 or 11 (64-bit)
+- **Administrator** access for TUN Mode
 
 ---
 
 ### 📄 License
 
-[MIT](LICENSE) — Copyright (c) 2026 HamidReza (hrschemiker). Free to use, modify, and distribute.
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
 <div align="center">
-  <sub>Built with care for free internet access · HamidReza 2026</sub>
+  Made with ❤️ by <a href="https://github.com/hrschemiker">Hamidreza</a>
 </div>
