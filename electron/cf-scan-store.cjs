@@ -18,9 +18,12 @@ async function getCfAutoScanSettings(userDataPath) {
   try {
     const raw = await fs.readFile(path.join(getDir(userDataPath), 'cf-scan-settings.json'), 'utf8')
     const data = JSON.parse(raw)
-    return { enabled: data.enabled !== false } // default true
+    return {
+      enabled: data.enabled !== false,
+      intervalHours: typeof data.intervalHours === 'number' ? data.intervalHours : 0,
+    }
   } catch {
-    return { enabled: true }
+    return { enabled: true, intervalHours: 0 }
   }
 }
 
@@ -29,7 +32,10 @@ async function setCfAutoScanSettings(userDataPath, settings) {
   await fs.mkdir(dir, { recursive: true })
   await fs.writeFile(
     path.join(dir, 'cf-scan-settings.json'),
-    JSON.stringify({ enabled: settings.enabled !== false }, null, 2),
+    JSON.stringify({
+      enabled: settings.enabled !== false,
+      intervalHours: typeof settings.intervalHours === 'number' ? settings.intervalHours : 0,
+    }, null, 2),
     'utf8',
   )
 }

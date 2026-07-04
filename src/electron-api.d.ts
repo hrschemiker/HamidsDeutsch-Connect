@@ -396,12 +396,14 @@ type LoadSubscriptionNodesResult =
       success: true
       checkedAt: string
       nodes: SafeServerNode[]
+      subscriptionInfo?: SubscriptionInfo | null
       error: null
     }
   | {
       success: false
       checkedAt: string
       nodes: []
+      subscriptionInfo?: null
       error: string
     }
 
@@ -626,6 +628,8 @@ declare global {
 
         getProcessStatus: () =>
           Promise<EngineProcessStatus>
+
+        getTraffic: () => Promise<{ up: number; down: number; connections: number }>
       }
 
       network: {
@@ -717,6 +721,8 @@ declare global {
         ) => Promise<
           ServerLatencyResult
         >
+
+        getNodeUri: (input: { subscriptionId: string; nodeId: string }) => Promise<{ success: boolean; uri: string | null }>
 
         checkConfig: (
           input:
@@ -840,14 +846,14 @@ declare global {
 
       doh: {
         getSettings: () => Promise<{
-          standaloneDoHServer: 'off' | 'cloudflare' | 'google'
+          standaloneDoHServer: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard'
           proxyDoHEnabled: boolean
           standaloneActive: boolean
           error: string | null
         }>
-        setStandalone: (server: 'off' | 'cloudflare' | 'google') => Promise<{
+        setStandalone: (server: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard') => Promise<{
           success: boolean
-          standaloneDoHServer: 'off' | 'cloudflare' | 'google'
+          standaloneDoHServer: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard'
           standaloneActive: boolean
           error: string | null
         }>
@@ -895,8 +901,8 @@ declare global {
 
       tools: {
         cfScan: (input?: { port?: number }) => Promise<CfScanResult>
-        getCfAutoScan: () => Promise<{ settings: { enabled: boolean }; cache: { bestIp: string | null; scannedAt: string } | null }>
-        setCfAutoScan: (input: { enabled: boolean }) => Promise<{ success: boolean }>
+        getCfAutoScan: () => Promise<{ settings: { enabled: boolean; intervalHours: number }; cache: { bestIp: string | null; scannedAt: string } | null }>
+        setCfAutoScan: (input: { enabled: boolean; intervalHours?: number }) => Promise<{ success: boolean }>
         getConverterBackends: () => Promise<{ backends: ConverterBackend[]; targets: ConverterTarget[] }>
         convertSubscription: (input: {
           subscriptionUrl: string
@@ -907,6 +913,15 @@ declare global {
         setUpstreamProxy: (settings: UpstreamProxySettings) => Promise<{ success: boolean; settings: UpstreamProxySettings; error?: string }>
         getUTlsSettings: () => Promise<{ success: boolean; settings: UTlsSettings }>
         setUTlsSettings: (settings: UTlsSettings) => Promise<{ success: boolean; settings: UTlsSettings; error?: string }>
+      }
+
+      settings: {
+        export: () => Promise<{ success: boolean; data?: SettingsBackup; error?: string }>
+        import: (backup: SettingsBackup) => Promise<{ success: boolean; error?: string }>
+      }
+
+      zeus: {
+        buildSubUrl: (input: { panelDomain: string; uuid: string }) => Promise<{ success: boolean; url?: string; error?: string }>
       }
     }
   }
@@ -955,6 +970,20 @@ declare global {
   type UTlsSettings = {
     globalFingerprint: 'auto' | 'chrome' | 'firefox' | 'safari' | 'ios' | 'android' | 'random' | 'randomized'
     echEnabled: boolean
+    fragmentEnabled?: boolean
+  }
+
+  type SubscriptionInfo = {
+    upload: number | null
+    download: number | null
+    total: number | null
+    expire: string | null
+  }
+
+  type SettingsBackup = {
+    version: number
+    exportedAt: string
+    files: Record<string, unknown>
   }
 }
 

@@ -33,6 +33,13 @@ type LoadResult = {
   error: string | null
 }
 
+type SubscriptionInfo = {
+  upload: number | null
+  download: number | null
+  total: number | null
+  expire: string | null
+}
+
 type HookState = {
   loading: boolean
   refreshingSubscriptionId: string | null
@@ -40,6 +47,7 @@ type HookState = {
   nodes: SafeServerNode[]
   error: string | null
   failedSubscriptionCount: number
+  subscriptionInfoMap: Record<string, SubscriptionInfo>
 }
 
 const INITIAL_STATE: HookState = {
@@ -49,6 +57,7 @@ const INITIAL_STATE: HookState = {
   nodes: [],
   error: null,
   failedSubscriptionCount: 0,
+  subscriptionInfoMap: {},
 }
 
 function createCompositeNode(
@@ -245,6 +254,13 @@ export function useServerNodes(
                 .join(' | ')
             : null
 
+        const subscriptionInfoMap: Record<string, SubscriptionInfo> = {}
+        for (const { subscription, result } of results) {
+          if (result.success && result.subscriptionInfo) {
+            subscriptionInfoMap[subscription.id] = result.subscriptionInfo
+          }
+        }
+
         if (
           requestVersion ===
           requestVersionRef.current
@@ -258,6 +274,7 @@ export function useServerNodes(
             error,
             failedSubscriptionCount:
               failures.length,
+            subscriptionInfoMap,
           })
         }
 

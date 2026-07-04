@@ -14,9 +14,10 @@ async function getUTlsSettings(userDataPath) {
     return {
       globalFingerprint: VALID_FINGERPRINTS.includes(parsed.globalFingerprint) ? parsed.globalFingerprint : 'auto',
       echEnabled: Boolean(parsed.echEnabled),
+      fragmentEnabled: Boolean(parsed.fragmentEnabled),
     }
   } catch {
-    return { globalFingerprint: 'auto', echEnabled: false }
+    return { globalFingerprint: 'auto', echEnabled: false, fragmentEnabled: false }
   }
 }
 
@@ -26,6 +27,7 @@ async function setUTlsSettings(userDataPath, settings) {
       ? settings.globalFingerprint
       : 'auto',
     echEnabled: Boolean(settings?.echEnabled),
+    fragmentEnabled: Boolean(settings?.fragmentEnabled),
   }
 
   const dir = path.join(userDataPath, 'HamidsDeutsch-Connect')

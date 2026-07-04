@@ -1285,6 +1285,8 @@ function buildConfig(
     config.dns = buildProxyDnsBlock()
   }
 
+  config.experimental = { clash_api: { external_controller: '127.0.0.1:9090' } }
+
   return config
 }
 
@@ -1360,6 +1362,8 @@ function buildTunConfig(
       final: 'proxy',
       auto_detect_interface: true,
     },
+
+    experimental: { clash_api: { external_controller: '127.0.0.1:9090' } },
   }
 }
 

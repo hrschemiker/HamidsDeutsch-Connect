@@ -6312,3 +6312,165 @@ button {
   gap: 10px;
   flex-wrap: wrap;
 }
+
+/* QR Modal */
+.qr-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.qr-modal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.qr-modal-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.qr-modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-soft);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+
+.qr-modal-img {
+  width: 200px;
+  height: 200px;
+  border-radius: 8px;
+}
+
+.qr-modal-loading {
+  width: 200px;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.qr-modal-uri {
+  font-size: 10px;
+  color: var(--text-muted);
+  word-break: break-all;
+  max-height: 60px;
+  overflow-y: auto;
+  text-align: center;
+  width: 100%;
+}
+
+/* Bandwidth bar */
+.bandwidth-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  background: var(--surface-soft);
+  border-radius: 20px;
+  font-size: 11px;
+  color: var(--text-soft);
+  margin-top: 6px;
+}
+
+.bw-up {
+  color: var(--teal);
+}
+
+.bw-down {
+  color: var(--blue, #60a5fa);
+}
+
+.bw-sep {
+  color: var(--border);
+}
+
+/* QR button on server row */
+.top-server-qr-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.top-server-qr-btn:hover {
+  color: var(--text);
+}
+
+/* Secondary action button */
+.action-btn-secondary {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.action-btn-secondary:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* Subscription info card */
+.sub-info-card {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sub-info-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.sub-info-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sub-info-bar-fill {
+  height: 100%;
+  background: var(--teal);
+  border-radius: 2px;
+  transition: width 0.3s;
+}

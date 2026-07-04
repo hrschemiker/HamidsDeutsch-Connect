@@ -75,7 +75,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'هسته برنامه',
-    'version': 'نسخه ۲.۰.۰',
+    'version': 'نسخه ۲.۱.۰',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'برای TUN دسترسی Administrator لازم است',
@@ -611,6 +611,8 @@ export const TR: Record<Lang, Record<string, string>> = {
     'tools.utls.fpAuto': 'خودکار (از URI)',
     'tools.utls.echLabel': 'ECH (مخفی‌سازی SNI)',
     'tools.utls.echDesc': 'اسم سرور مقصد را از DPI پنهان می‌کند.',
+    'tools.utls.fragmentLabel': 'Fragment (دور زدن DPI)',
+    'tools.utls.fragmentDesc': 'بسته‌های TLS را تکه‌تکه می‌کند تا فیلترینگ عمیق را دور بزند.',
     'tools.utls.saveBtn': 'ذخیره',
   },
 
@@ -678,7 +680,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'Engine Core',
-    'version': 'Version 2.0.0',
+    'version': 'Version 2.1.0',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'Administrator access required for TUN',
@@ -1214,6 +1216,8 @@ export const TR: Record<Lang, Record<string, string>> = {
     'tools.utls.fpAuto': 'Auto (from URI)',
     'tools.utls.echLabel': 'ECH (Hide SNI)',
     'tools.utls.echDesc': 'Hides the destination hostname from DPI inspection.',
+    'tools.utls.fragmentLabel': 'Fragment (DPI Bypass)',
+    'tools.utls.fragmentDesc': 'Splits TLS packets into fragments to bypass deep packet inspection.',
     'tools.utls.saveBtn': 'Save',
   },
 }
@@ -1283,7 +1287,7 @@ export const _UNUSED_DE_PLACEHOLDER = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'Programm-Kern',
-    'version': 'Version 2.0.0',
+    'version': 'Version 2.1.0',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'Administratorrechte für TUN erforderlich',

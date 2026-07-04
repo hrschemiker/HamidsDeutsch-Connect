@@ -119,6 +119,7 @@ async function loadSubscriptionNodeRecords(
           uri: record.uri,
         }),
       ),
+    subscriptionInfo: downloadResult.subscriptionInfo ?? null,
     error: null,
   }
 }
@@ -237,6 +238,9 @@ async function downloadSubscriptionContent(
       }
     }
 
+    const userInfoHeader = response.headers.get('subscription-userinfo') ?? response.headers.get('Subscription-Userinfo')
+    const subscriptionInfo = parseSubscriptionUserInfo(userInfoHeader)
+
     return {
       success: true,
       checkedAt:
@@ -251,6 +255,7 @@ async function downloadSubscriptionContent(
       responseSize:
         bodyBuffer.byteLength,
       content,
+      subscriptionInfo,
       error: null,
     }
   } catch (error) {
@@ -350,6 +355,23 @@ function validateSubscriptionUrl(value) {
     throw new Error(
       'پروتکل لینک اشتراک معتبر نیست.',
     )
+  }
+}
+
+// Parse subscription-userinfo header: "upload=X; download=Y; total=Z; expire=T"
+function parseSubscriptionUserInfo(header) {
+  if (!header) return null
+  const result = {}
+  for (const part of header.split(';')) {
+    const [key, val] = part.trim().split('=')
+    if (key && val) result[key.trim()] = parseInt(val.trim(), 10) || 0
+  }
+  if (Object.keys(result).length === 0) return null
+  return {
+    upload: result.upload ?? null,
+    download: result.download ?? null,
+    total: result.total ?? null,
+    expire: result.expire ? new Date(result.expire * 1000).toISOString() : null,
   }
 }
 

@@ -13,11 +13,23 @@ const DOH_SERVERS = {
     template: 'https://cloudflare-dns.com/dns-query',
     label: 'Cloudflare (1.1.1.1)',
   },
+  'cloudflare-family': {
+    primary: '1.1.1.3',
+    secondary: '1.0.0.3',
+    template: 'https://family.cloudflare-dns.com/dns-query',
+    label: 'Cloudflare Family (1.1.1.3)',
+  },
   google: {
     primary: '8.8.8.8',
     secondary: '8.8.4.4',
     template: 'https://dns.google/dns-query',
     label: 'Google (8.8.8.8)',
+  },
+  adguard: {
+    primary: '94.140.14.14',
+    secondary: '94.140.15.15',
+    template: 'https://dns.adguard-dns.com/dns-query',
+    label: 'AdGuard (94.140.14.14)',
   },
 }
 

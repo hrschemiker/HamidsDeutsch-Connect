@@ -103,6 +103,11 @@ const {
 } = require('./utls-settings-store.cjs')
 
 const {
+  exportSettings,
+  importSettings,
+} = require('./settings-backup.cjs')
+
+const {
   startLocalProxy,
   startTunMode,
   activateSystemProxy,
@@ -241,6 +246,28 @@ let appTray = null
 let activeConnectionParams = null
 let isQuitting = false
 let fatalCleanupStarted = false
+
+// CF auto-scan interval
+let cfScanIntervalTimer = null
+
+function scheduleCfScanInterval(intervalHours) {
+  if (cfScanIntervalTimer) {
+    clearInterval(cfScanIntervalTimer)
+    cfScanIntervalTimer = null
+  }
+  if (intervalHours > 0) {
+    cfScanIntervalTimer = setInterval(async () => {
+      try {
+        const settings = await getCfAutoScanSettings(app.getPath('userData'))
+        if (!settings.enabled) return
+        const scanResult = await scanCloudflareIps({ port: 443 })
+        if (scanResult.reachable > 0) {
+          await saveCfScanCache(app.getPath('userData'), scanResult.results ?? [])
+        }
+      } catch {}
+    }, intervalHours * 60 * 60 * 1000)
+  }
+}
 
 // ── App settings (close-to-tray + DoH) ───────────────────────────────────────
 let closeToTrayEnabled = true
@@ -656,6 +683,10 @@ async function tryConnectFreeNode(record, directDomains, rescueOptions) {
     getCfScanCache(userDataPath).catch(() => null),
   ])
 
+  const baseRescueOptions = utlsSettings?.fragmentEnabled
+    ? { ...(rescueOptions ?? {}), enabled: true, recordFragment: true }
+    : rescueOptions
+
   async function attempt(options) {
     try {
       const configResult = await createAndCheckConfig({
@@ -694,8 +725,8 @@ async function tryConnectFreeNode(record, directDomains, rescueOptions) {
     }
   }
 
-  // First attempt: with current rescue options (or none)
-  const firstResult = await attempt(rescueOptions ?? null)
+  // First attempt: with current rescue options (or none, plus fragment if enabled globally)
+  const firstResult = await attempt(baseRescueOptions ?? null)
   if (firstResult) return firstResult
 
   // Auto DPI bypass retry: if dpiBypassAuto is enabled and rescue is not already forcing dpiBypass
@@ -3456,6 +3487,8 @@ function registerIpcHandlers() {
             result.checkedAt,
           nodes:
             result.nodes,
+          subscriptionInfo:
+            result.subscriptionInfo ?? null,
           error:
             result.error,
         }
@@ -3527,6 +3560,23 @@ function registerIpcHandlers() {
               ? error.message
               : 'بررسی تأخیر سرورها ناموفق بود.',
         }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'servers:get-node-uri',
+    async (_event, { subscriptionId, nodeId }) => {
+      try {
+        let uri = null
+        if (subscriptionId === MANUAL_SUBSCRIPTION_ID) {
+          uri = await getManualNodeUri(nodeId)
+        } else {
+          uri = await getSubscriptionNodeUri(subscriptionId, nodeId)
+        }
+        return { success: true, uri }
+      } catch {
+        return { success: false, uri: null }
       }
     },
   )
@@ -3606,6 +3656,10 @@ function registerIpcHandlers() {
           getCfScanCache(app.getPath('userData')).catch(() => null),
         ])
 
+        const effectiveRescueOptions = utlsSettings?.fragmentEnabled
+          ? { ...(rescueOptions ?? {}), enabled: true, recordFragment: true }
+          : rescueOptions
+
         const configParams = {
           subscriptionUrl,
           nodeId,
@@ -3617,7 +3671,7 @@ function registerIpcHandlers() {
               'userData',
             ),
           directDomains,
-          rescueOptions,
+          rescueOptions: effectiveRescueOptions,
           proxyDoH: proxyDoHEnabled,
           upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
           utlsSettings,
@@ -4194,7 +4248,7 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('doh:set-standalone', async (_event, server) => {
-    // server: 'off' | 'cloudflare' | 'google'
+    // server: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard'
     const prev = standaloneDoHServer
     try {
       if (prev !== 'off') {
@@ -4279,8 +4333,13 @@ function registerIpcHandlers() {
     return { settings, cache }
   })
 
-  ipcMain.handle('tools:set-cf-auto-scan', async (_event, { enabled }) => {
-    await setCfAutoScanSettings(app.getPath('userData'), { enabled: enabled !== false })
+  ipcMain.handle('tools:set-cf-auto-scan', async (_event, { enabled, intervalHours }) => {
+    const newSettings = {
+      enabled: enabled !== false,
+      intervalHours: typeof intervalHours === 'number' ? intervalHours : 0,
+    }
+    await setCfAutoScanSettings(app.getPath('userData'), newSettings)
+    scheduleCfScanInterval(newSettings.intervalHours)
     return { success: true }
   })
 
@@ -4397,6 +4456,55 @@ function registerIpcHandlers() {
     } catch (err) {
       return { success: false, error: err?.message }
     }
+  })
+
+  // ── Settings Backup / Restore ───────────────────────────────────────────────
+
+  ipcMain.handle('settings:export', async () => {
+    try {
+      const data = await exportSettings(app.getPath('userData'))
+      return { success: true, data }
+    } catch (err) {
+      return { success: false, error: err?.message }
+    }
+  })
+
+  ipcMain.handle('settings:import', async (_event, backup) => {
+    try {
+      await importSettings(app.getPath('userData'), backup)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err?.message }
+    }
+  })
+
+  // ── Bandwidth Monitor (Clash API) ───────────────────────────────────────────
+
+  ipcMain.handle('engine:get-traffic', async () => {
+    try {
+      const { net } = require('electron')
+      const r = await net.fetch('http://127.0.0.1:9090/connections', {
+        signal: AbortSignal.timeout(1000),
+      })
+      if (!r.ok) return { up: 0, down: 0, connections: 0 }
+      const data = await r.json()
+      return {
+        up: data.uploadTotal ?? 0,
+        down: data.downloadTotal ?? 0,
+        connections: Array.isArray(data.connections) ? data.connections.length : 0,
+      }
+    } catch {
+      return { up: 0, down: 0, connections: 0 }
+    }
+  })
+
+  // ── Zeus Panel ──────────────────────────────────────────────────────────────
+
+  ipcMain.handle('zeus:build-sub-url', async (_event, { panelDomain, uuid }) => {
+    if (!panelDomain || !uuid) return { success: false, error: 'Domain and UUID required.' }
+    const domain = panelDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')
+    const url = `https://${domain}/sub/${uuid}`
+    return { success: true, url }
   })
 }
 
@@ -4973,6 +5081,7 @@ app.whenReady().then(async () => {
     } catch (err) {
       console.error('[CF-Scan] Auto-scan failed:', err?.message ?? err)
     }
+    scheduleCfScanInterval(settings.intervalHours ?? 0)
   }).catch(() => {})
 
   app.on(

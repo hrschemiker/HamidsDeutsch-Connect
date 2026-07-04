@@ -85,6 +85,8 @@ contextBridge.exposeInMainWorld(
         ipcRenderer.invoke(
           'engine:get-process-status',
         ),
+
+      getTraffic: () => ipcRenderer.invoke('engine:get-traffic'),
     },
 
     network: {
@@ -206,6 +208,12 @@ contextBridge.exposeInMainWorld(
         ipcRenderer.invoke(
           'servers:test-latency',
           servers,
+        ),
+
+      getNodeUri: (input) =>
+        ipcRenderer.invoke(
+          'servers:get-node-uri',
+          input,
         ),
 
       checkConfig: (input) =>
@@ -352,6 +360,15 @@ contextBridge.exposeInMainWorld(
       setUpstreamProxy: (settings) => ipcRenderer.invoke('tools:set-upstream-proxy', settings),
       getUTlsSettings: () => ipcRenderer.invoke('tools:get-utls-settings'),
       setUTlsSettings: (settings) => ipcRenderer.invoke('tools:set-utls-settings', settings),
+    },
+
+    settings: {
+      export: () => ipcRenderer.invoke('settings:export'),
+      import: (backup) => ipcRenderer.invoke('settings:import', backup),
+    },
+
+    zeus: {
+      buildSubUrl: (input) => ipcRenderer.invoke('zeus:build-sub-url', input),
     },
 
     codespace: {

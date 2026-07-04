@@ -265,6 +265,15 @@ function App() {
   const [warpConnecting, setWarpConnecting] = useState(false)
   const [warpError, setWarpError] = useState<string | null>(null)
 
+  // Bandwidth monitor
+  const [traffic, setTraffic] = useState<{ up: number; down: number } | null>(null)
+  const trafficIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const prevTrafficRef = useRef<{ up: number; down: number } | null>(null)
+  const [trafficSpeed, setTrafficSpeed] = useState<{ upSpeed: number; downSpeed: number } | null>(null)
+
+  // QR code modal
+  const [qrUri, setQrUri] = useState<string | null>(null)
+
   // Last connection for one-tap reconnect
   const [lastConnectionType, setLastConnectionType] = useState<'free' | 'subscription' | 'bpb' | 'codespace' | 'warp' | null>(null)
   const [showReconnectBar, setShowReconnectBar] = useState(false)
@@ -278,7 +287,7 @@ function App() {
     void window.hamidsDeutsch.startup.getCloseToTray().then((r) => { setCloseToTray(r.enabled) }).catch(() => {})
   }, [])
 
-  type DoHServer = 'off' | 'cloudflare' | 'google'
+  type DoHServer = 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard'
   const [standaloneDoH, setStandaloneDoH] = useState<DoHServer>('off')
   const [standaloneDoHLoading, setStandaloneDoHLoading] = useState(false)
   const [proxyDoH, setProxyDoH] = useState(false)
@@ -418,6 +427,40 @@ function App() {
       }
     }
   }, [appHeroConnected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Bandwidth monitor: poll Clash API while connected
+  useEffect(() => {
+    if (appHeroConnected) {
+      prevTrafficRef.current = null
+      trafficIntervalRef.current = setInterval(async () => {
+        try {
+          const r = await window.hamidsDeutsch.engine.getTraffic()
+          if (prevTrafficRef.current) {
+            setTrafficSpeed({
+              upSpeed: Math.max(0, r.up - prevTrafficRef.current.up),
+              downSpeed: Math.max(0, r.down - prevTrafficRef.current.down),
+            })
+          }
+          prevTrafficRef.current = { up: r.up, down: r.down }
+          setTraffic({ up: r.up, down: r.down })
+        } catch {}
+      }, 1000)
+    } else {
+      if (trafficIntervalRef.current) {
+        clearInterval(trafficIntervalRef.current)
+        trafficIntervalRef.current = null
+      }
+      setTraffic(null)
+      setTrafficSpeed(null)
+      prevTrafficRef.current = null
+    }
+    return () => {
+      if (trafficIntervalRef.current) {
+        clearInterval(trafficIntervalRef.current)
+        trafficIntervalRef.current = null
+      }
+    }
+  }, [appHeroConnected])
 
   useEffect(() => {
     void window.hamidsDeutsch.system.setVirtualLocationConnected(connectionVerified)
@@ -1220,10 +1263,40 @@ function App() {
         return
       }
 
+      // Race-dial: re-test top 3 latency-sorted candidates in parallel, connect to fastest
+      let orderedCandidates = candidates
+      if (candidates.length >= 2) {
+        const top3 = candidates.slice(0, 3)
+        try {
+          const freshLatencies = await Promise.all(
+            top3.map(async (node) => {
+              try {
+                const inputs = node.host && node.port
+                  ? [{ id: node.id, host: node.host, port: node.port }]
+                  : []
+                if (inputs.length === 0) return { node, ms: Number.MAX_SAFE_INTEGER }
+                const r = await window.hamidsDeutsch.servers.testLatency(inputs)
+                const ms = r.results[node.id]?.reachable ? (r.results[node.id]?.latencyMs ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER
+                return { node, ms }
+              } catch {
+                return { node, ms: Number.MAX_SAFE_INTEGER }
+              }
+            })
+          )
+          freshLatencies.sort((a, b) => a.ms - b.ms)
+          orderedCandidates = [
+            ...freshLatencies.map((x) => x.node),
+            ...candidates.slice(3),
+          ]
+        } catch {
+          // Keep original order on error
+        }
+      }
+
       let lastError =
         'هیچ‌کدام از سرورها اتصال واقعی برقرار نکردند.'
 
-      for (const node of candidates) {
+      for (const node of orderedCandidates) {
         recordAttempt(node)
 
         const result =
@@ -1803,6 +1876,15 @@ function App() {
               onQuickReconnect={() => void quickReconnect()}
               geoBlockTrigger={geoBlockTrigger}
               dataLoading={serverNodes.loading || subscriptions.loading}
+              trafficSpeed={trafficSpeed}
+              onShowQr={async (compositeId: string) => {
+                const parts = compositeId.split('::')
+                const subscriptionId = parts[0]
+                const nodeId = parts.slice(1).join('::')
+                if (!subscriptionId || !nodeId) return
+                const r = await window.hamidsDeutsch.servers.getNodeUri({ subscriptionId, nodeId })
+                if (r.uri) setQrUri(r.uri)
+              }}
               topSubServers={(() => {
                 return serverNodes.nodes
                   .filter((n) => n.valid && latency.results[n.id]?.reachable)
@@ -1995,6 +2077,7 @@ function App() {
               loadingServerSubscriptionId={
                 serverNodes.refreshingSubscriptionId
               }
+              subscriptionInfoMap={serverNodes.subscriptionInfoMap}
             />
           )}
 
@@ -2140,7 +2223,14 @@ function App() {
             />
           )}
           {activePage === 'tools' && (
-            <ToolsPage directDomains={directDomains.domains} onNavigateToSubscriptions={() => setActivePage('subscriptions')} />
+            <ToolsPage
+              directDomains={directDomains.domains}
+              onNavigateToSubscriptions={() => setActivePage('subscriptions')}
+              onAddZeusSubscription={async (url, name) => {
+                await window.hamidsDeutsch.subscriptions.add(url, name)
+                setActivePage('subscriptions')
+              }}
+            />
           )}
         </main>
       </section>
@@ -2173,6 +2263,7 @@ function App() {
         </div>
       )}
     </div>
+      {qrUri && <QrModal uri={qrUri} onClose={() => setQrUri(null)} />}
       </LangCtx.Provider>
     </ThemeCtx.Provider>
   )
@@ -2296,6 +2387,8 @@ type HomePageProps = {
   onQuickReconnect: () => void
   geoBlockTrigger: number
   dataLoading: boolean
+  trafficSpeed: { upSpeed: number; downSpeed: number } | null
+  onShowQr: (compositeId: string) => void
 }
 
 function HomePage({
@@ -2359,6 +2452,8 @@ function HomePage({
   topFreeServers,
   onConnectSubServer,
   onConnectFreeServer,
+  trafficSpeed,
+  onShowQr,
 }: HomePageProps) {
   const t = useT()
 
@@ -2427,6 +2522,12 @@ function HomePage({
     const sec = s % 60
     const pad = (n: number) => String(n).padStart(2, '0')
     return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`
+  }
+
+  function formatBytes(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
   }
 
   const [switchConfirm, setSwitchConfirm] = useState<{
@@ -2620,6 +2721,14 @@ function HomePage({
               <span className="session-timer" dir="ltr">{formatElapsed(elapsedSecs)}</span>
             )}
           </div>
+
+          {heroConnected && trafficSpeed && (trafficSpeed.upSpeed > 0 || trafficSpeed.downSpeed > 0) && (
+            <div className="bandwidth-bar" dir="ltr">
+              <span className="bw-up">↑ {formatBytes(trafficSpeed.upSpeed)}/s</span>
+              <span className="bw-sep">·</span>
+              <span className="bw-down">↓ {formatBytes(trafficSpeed.downSpeed)}/s</span>
+            </div>
+          )}
 
           {elevationError && (
             <div className="inline-error">
@@ -2950,6 +3059,12 @@ function HomePage({
                 <li key={s.id} className="top-server-row">
                   <span className="top-server-name">{s.name}</span>
                   <span className="top-server-latency" dir="ltr">{s.latencyMs != null ? `${s.latencyMs} ms` : '—'}</span>
+                  <button
+                    className="top-server-qr-btn"
+                    type="button"
+                    title="QR Code"
+                    onClick={() => onShowQr(s.id)}
+                  >⬡</button>
                   <button
                     className="top-server-connect-btn"
                     type="button"
@@ -3343,6 +3458,12 @@ type SubscriptionsPageProps = {
   loadingServerSubscriptionId:
     | string
     | null
+  subscriptionInfoMap?: Record<string, {
+    upload: number | null
+    download: number | null
+    total: number | null
+    expire: string | null
+  }>
 }
 
 function SubscriptionsPage({
@@ -3355,6 +3476,7 @@ function SubscriptionsPage({
   onInspectSubscription,
   onLoadServers,
   loadingServerSubscriptionId,
+  subscriptionInfoMap,
 }: SubscriptionsPageProps) {
   const t = useT()
   const [nameInput, setNameInput] =
@@ -3785,6 +3907,9 @@ function SubscriptionsPage({
                     </button>
                   </div>
 
+                  {subscriptionInfoMap?.[subscription.id] && (
+                    <SubInfoCard info={subscriptionInfoMap[subscription.id]} />
+                  )}
                   {inspectionResults[
                     subscription.id
                   ] && (
@@ -4564,6 +4689,37 @@ type DirectSitesPageProps = {
     domain: string,
   ) => void
   onResetDomains: () => void
+}
+
+function SubInfoCard({ info }: {
+  info: { upload: number | null; download: number | null; total: number | null; expire: string | null }
+}) {
+  const { lang } = useLang()
+  const used = (info.upload ?? 0) + (info.download ?? 0)
+  const total = info.total ?? 0
+  const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : null
+  function fmtGb(b: number | null) {
+    if (b == null) return '—'
+    if (b < 1e9) return `${(b / 1e6).toFixed(0)} MB`
+    return `${(b / 1e9).toFixed(2)} GB`
+  }
+  const expireDate = info.expire ? new Date(info.expire) : null
+  const daysLeft = expireDate ? Math.ceil((expireDate.getTime() - Date.now()) / 86400000) : null
+  return (
+    <div className="sub-info-card">
+      {pct !== null && (
+        <div className="sub-info-row">
+          <span>{lang === 'fa' ? 'مصرف' : 'Usage'}: {fmtGb(used)} / {fmtGb(total)} ({pct}%)</span>
+          <div className="sub-info-bar"><div className="sub-info-bar-fill" style={{ width: `${pct}%` }} /></div>
+        </div>
+      )}
+      {daysLeft !== null && (
+        <div className="sub-info-row">
+          <span>{lang === 'fa' ? 'انقضا' : 'Expiry'}: {daysLeft > 0 ? (lang === 'fa' ? `${daysLeft} روز` : `${daysLeft} days`) : (lang === 'fa' ? 'منقضی' : 'Expired')}</span>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function SubscriptionInspectionPanel({
@@ -5902,9 +6058,9 @@ function SettingsPage({
   onCtrlEnterToggle: (v: boolean) => void
   closeToTray: boolean
   onCloseToTrayToggle: (v: boolean) => Promise<void>
-  standaloneDoH: 'off' | 'cloudflare' | 'google'
+  standaloneDoH: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard'
   standaloneDoHLoading: boolean
-  onStandaloneDoHChange: (server: 'off' | 'cloudflare' | 'google') => Promise<void>
+  onStandaloneDoHChange: (server: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard') => Promise<void>
   proxyDoH: boolean
   onProxyDoHToggle: (v: boolean) => Promise<void>
 }) {
@@ -6272,11 +6428,13 @@ function SettingsPage({
             className="doh-server-select"
             value={standaloneDoH}
             disabled={standaloneDoHLoading}
-            onChange={(e) => void onStandaloneDoHChange(e.target.value as 'off' | 'cloudflare' | 'google')}
+            onChange={(e) => void onStandaloneDoHChange(e.target.value as 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard')}
           >
             <option value="off">{lang === 'fa' ? 'غیرفعال' : 'Off'}</option>
             <option value="cloudflare">Cloudflare (1.1.1.1)</option>
+            <option value="cloudflare-family">Cloudflare Family (1.1.1.3)</option>
             <option value="google">Google (8.8.8.8)</option>
+            <option value="adguard">AdGuard (94.140.14.14)</option>
           </select>
         </div>
 
@@ -7165,17 +7323,21 @@ function SettingRow({
 function ToolsPage({
   directDomains,
   onNavigateToSubscriptions,
+  onAddZeusSubscription,
 }: {
   directDomains: string[]
   onNavigateToSubscriptions: () => void
+  onAddZeusSubscription: (url: string, name: string) => void
 }) {
   return (
     <div className="page-content tools-page">
       <CfScannerSection />
       <WarpSection directDomains={directDomains} />
+      <ZeusPanelSection onAddSubscription={onAddZeusSubscription} />
       <SubscriptionConverterSection onNavigateToSubscriptions={onNavigateToSubscriptions} />
       <UpstreamProxySection />
       <UTlsSection />
+      <BackupRestoreSection />
     </div>
   )
 }
@@ -7189,12 +7351,14 @@ function CfScannerSection() {
   const [result, setResult] = useState<CfScanResult | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [autoScanEnabled, setAutoScanEnabled] = useState(true)
+  const [scanIntervalHours, setScanIntervalHours] = useState(0)
   const [cachedIp, setCachedIp] = useState<string | null>(null)
   const [cacheDate, setCacheDate] = useState<string | null>(null)
 
   useEffect(() => {
     void window.hamidsDeutsch.tools.getCfAutoScan().then((r) => {
       setAutoScanEnabled(r.settings.enabled)
+      setScanIntervalHours(r.settings.intervalHours ?? 0)
       setCachedIp(r.cache?.bestIp ?? null)
       setCacheDate(r.cache?.scannedAt ?? null)
     }).catch(() => {})
@@ -7202,7 +7366,12 @@ function CfScannerSection() {
 
   async function toggleAutoScan(enabled: boolean) {
     setAutoScanEnabled(enabled)
-    await window.hamidsDeutsch.tools.setCfAutoScan({ enabled }).catch(() => {})
+    await window.hamidsDeutsch.tools.setCfAutoScan({ enabled, intervalHours: scanIntervalHours }).catch(() => {})
+  }
+
+  async function changeInterval(hours: number) {
+    setScanIntervalHours(hours)
+    await window.hamidsDeutsch.tools.setCfAutoScan({ enabled: autoScanEnabled, intervalHours: hours }).catch(() => {})
   }
 
   async function startScan() {
@@ -7240,6 +7409,20 @@ function CfScannerSection() {
           />
           <span>اسکن خودکار هنگام راه‌اندازی</span>
         </label>
+      </div>
+      <div className="field-row" style={{ marginTop: 10 }}>
+        <label className="field-label">تناوب اسکن خودکار</label>
+        <select
+          className="select-input"
+          value={scanIntervalHours}
+          onChange={(e) => void changeInterval(Number(e.target.value))}
+        >
+          <option value={0}>غیرفعال</option>
+          <option value={3}>هر ۳ ساعت</option>
+          <option value={6}>هر ۶ ساعت</option>
+          <option value={12}>هر ۱۲ ساعت</option>
+          <option value={24}>هر ۲۴ ساعت</option>
+        </select>
       </div>
       {cachedIp && (
         <div className="cf-cached-ip">
@@ -7592,6 +7775,7 @@ function UTlsSection() {
   const [settings, setSettings] = useState<UTlsSettings>({
     globalFingerprint: 'auto',
     echEnabled: false,
+    fragmentEnabled: false,
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -7646,9 +7830,175 @@ function UTlsSection() {
           <span className="switch-track" />
         </label>
       </div>
+      <div className="toggle-row" style={{ marginBottom: 14 }}>
+        <div>
+          <span className="toggle-label">{t('tools.utls.fragmentLabel')}</span>
+          <p className="section-desc" style={{ margin: '2px 0 0' }}>{t('tools.utls.fragmentDesc')}</p>
+        </div>
+        <label className="switch">
+          <input
+            type="checkbox"
+            checked={settings.fragmentEnabled ?? false}
+            onChange={(e) => setSettings((s) => ({ ...s, fragmentEnabled: e.target.checked }))}
+          />
+          <span className="switch-track" />
+        </label>
+      </div>
       <button className="action-btn" type="button" onClick={save} disabled={saving}>
         {saved ? '✓' : saving ? '...' : t('tools.utls.saveBtn')}
       </button>
+    </div>
+  )
+}
+
+// ── QR Code Modal ─────────────────────────────────────────────────────────────
+
+function QrModal({ uri, onClose }: { uri: string; onClose: () => void }) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    import('qrcode').then((QRCode) => {
+      QRCode.default.toDataURL(uri, { width: 280, margin: 2 })
+        .then((url) => setDataUrl(url))
+        .catch(() => {})
+    }).catch(() => {})
+  }, [uri])
+
+  return (
+    <div className="qr-modal-backdrop" onClick={onClose}>
+      <div className="qr-modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="qr-modal-header">
+          <span>QR Code</span>
+          <button className="qr-modal-close" onClick={onClose}>✕</button>
+        </div>
+        {dataUrl
+          ? <img src={dataUrl} alt="QR Code" className="qr-modal-img" />
+          : <div className="qr-modal-loading">...</div>
+        }
+        <div className="qr-modal-uri">{uri.slice(0, 60)}{uri.length > 60 ? '…' : ''}</div>
+      </div>
+    </div>
+  )
+}
+
+// ── Settings Backup / Restore Section ────────────────────────────────────────
+
+function BackupRestoreSection() {
+  const { lang } = useLang()
+  const [status, setStatus] = useState<string | null>(null)
+
+  async function handleExport() {
+    const r = await window.hamidsDeutsch.settings.export()
+    if (!r.success || !r.data) { setStatus(lang === 'fa' ? 'خطا در صدور' : 'Export failed'); return }
+    const json = JSON.stringify(r.data, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `hamidsdeutsch-settings-backup.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    setStatus(lang === 'fa' ? 'پشتیبان ذخیره شد' : 'Backup saved')
+    setTimeout(() => setStatus(null), 3000)
+  }
+
+  function handleImport() {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      try {
+        const text = await file.text()
+        const backup = JSON.parse(text)
+        const r = await window.hamidsDeutsch.settings.import(backup)
+        setStatus(r.success ? (lang === 'fa' ? 'بازیابی انجام شد — برنامه را ری‌استارت کنید' : 'Restored — restart the app') : (r.error ?? 'Import failed'))
+      } catch {
+        setStatus(lang === 'fa' ? 'فایل نامعتبر' : 'Invalid file')
+      }
+      setTimeout(() => setStatus(null), 5000)
+    }
+    input.click()
+  }
+
+  return (
+    <div className="settings-section">
+      <div className="section-kicker">{lang === 'fa' ? 'پشتیبان‌گیری' : 'Backup'}</div>
+      <h3 className="section-title">{lang === 'fa' ? 'پشتیبان تنظیمات' : 'Settings Backup & Restore'}</h3>
+      <p className="section-desc" style={{ marginBottom: 14 }}>
+        {lang === 'fa'
+          ? 'تمام تنظیمات برنامه (اشتراک‌ها، سرورها، پروکسی، DNS و...) را به فایل JSON صادر یا وارد کنید.'
+          : 'Export or import all app settings (subscriptions, servers, proxy, DNS, etc.) as a JSON file.'
+        }
+      </p>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button className="action-btn" type="button" onClick={handleExport}>
+          {lang === 'fa' ? 'صدور پشتیبان' : 'Export Backup'}
+        </button>
+        <button className="action-btn action-btn-secondary" type="button" onClick={handleImport}>
+          {lang === 'fa' ? 'بازیابی از فایل' : 'Import from File'}
+        </button>
+      </div>
+      {status && <p className="section-desc" style={{ marginTop: 10, color: 'var(--c-accent)' }}>{status}</p>}
+    </div>
+  )
+}
+
+// ── Zeus Panel Section ────────────────────────────────────────────────────────
+
+function ZeusPanelSection({ onAddSubscription }: { onAddSubscription: (url: string, name: string) => void }) {
+  const { lang } = useLang()
+  const [domain, setDomain] = useState('')
+  const [uuid, setUuid] = useState('')
+  const [status, setStatus] = useState<string | null>(null)
+
+  async function handleAdd() {
+    if (!domain.trim() || !uuid.trim()) {
+      setStatus(lang === 'fa' ? 'دامنه و UUID را وارد کنید' : 'Enter domain and UUID')
+      return
+    }
+    const r = await window.hamidsDeutsch.zeus.buildSubUrl({ panelDomain: domain.trim(), uuid: uuid.trim() })
+    if (!r.success || !r.url) { setStatus(r.error ?? 'Error'); return }
+    onAddSubscription(r.url, `Zeus Panel (${domain.trim().slice(0, 20)})`)
+    setStatus(lang === 'fa' ? 'اشتراک Zeus اضافه شد' : 'Zeus subscription added')
+    setDomain('')
+    setUuid('')
+    setTimeout(() => setStatus(null), 3000)
+  }
+
+  return (
+    <div className="settings-section">
+      <div className="section-kicker">Zeus Panel</div>
+      <h3 className="section-title">{lang === 'fa' ? 'اتصال پنل Zeus' : 'Connect to Zeus Panel'}</h3>
+      <p className="section-desc" style={{ marginBottom: 12 }}>
+        {lang === 'fa'
+          ? 'اگر پنل Zeus دارید، دامنه و UUID حساب خود را وارد کنید تا به عنوان اشتراک اضافه شود.'
+          : 'If you have a Zeus panel deployed, enter the panel domain and your account UUID to add it as a subscription.'
+        }
+      </p>
+      <div className="field-stack" style={{ marginBottom: 10 }}>
+        <label className="field-label">{lang === 'fa' ? 'دامنه پنل' : 'Panel Domain'}</label>
+        <input
+          className="text-input"
+          placeholder="mypanel.workers.dev"
+          value={domain}
+          onChange={(e) => setDomain(e.target.value)}
+        />
+      </div>
+      <div className="field-stack" style={{ marginBottom: 14 }}>
+        <label className="field-label">UUID</label>
+        <input
+          className="text-input"
+          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+          value={uuid}
+          onChange={(e) => setUuid(e.target.value)}
+        />
+      </div>
+      <button className="action-btn" type="button" onClick={handleAdd}>
+        {lang === 'fa' ? 'افزودن اشتراک Zeus' : 'Add Zeus Subscription'}
+      </button>
+      {status && <p className="section-desc" style={{ marginTop: 10, color: 'var(--c-accent)' }}>{status}</p>}
     </div>
   )
 }
