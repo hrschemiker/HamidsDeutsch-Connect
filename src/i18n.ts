@@ -75,7 +75,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'هسته برنامه',
-    'version': 'نسخه ۲.۱.۰',
+    'version': 'نسخه ۲.۲.۰',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'برای TUN دسترسی Administrator لازم است',
@@ -565,6 +565,35 @@ export const TR: Record<Lang, Record<string, string>> = {
     'guide.shortcut.title': 'میانبر Ctrl+Enter',
     'guide.shortcut.desc': 'در هر جایی از برنامه، Ctrl+Enter را فشار دهید تا اتصال برقرار یا قطع شود. این میانبر را می‌توان در تنظیمات غیرفعال کرد.',
 
+    // ── Guide WARP ────────────────────────────────────────────────────────────
+    'guide.warp.kicker': 'Cloudflare WARP',
+    'guide.warp.title': 'اتصال با Cloudflare WARP',
+    'guide.warp.badge': 'رایگان · WireGuard',
+    'guide.warp.desc': 'WARP یک تونل WireGuard رایگان از Cloudflare است که بدون نیاز به پنل یا اشتراک کار می‌کند. فقط یک بار حساب بسازید.',
+    'guide.warp.step1': 'به صفحه اصلی بروید و روی «Cloudflare WARP» کلیک کنید.',
+    'guide.warp.step2': 'اگر حساب ندارید، در قسمت WARP (ابزارها) روی «ساخت حساب» کلیک کنید.',
+    'guide.warp.step3': 'بعد از ساخت حساب، دوباره دکمه WARP را در خانه بزنید تا متصل شوید.',
+    'guide.warp.note': 'اتصال WARP پراکسی سیستم را فعال می‌کند. برای قطع اتصال، دوباره همان دکمه را بزنید.',
+
+    // ── Guide Zeus ────────────────────────────────────────────────────────────
+    'guide.zeus.kicker': 'Zeus Panel',
+    'guide.zeus.title': 'اتصال با پنل Zeus',
+    'guide.zeus.badge': 'رایگان · Cloudflare Workers',
+    'guide.zeus.desc': 'Zeus یک پنل VLESS روی Cloudflare Workers است که می‌توانید رایگان راه‌اندازی کنید و با لینک اشتراکش به این برنامه وصل شوید.',
+    'guide.zeus.step1': 'یک اکانت رایگان در Cloudflare بسازید (cloudflare.com).',
+    'guide.zeus.step2': 'مخزن Zeus را از GitHub fork یا clone کنید.',
+    'guide.zeus.step3': 'یک Worker جدید در Cloudflare بسازید و کد Zeus را در آن Deploy کنید.',
+    'guide.zeus.step4': 'آدرس Worker خود را (مثلاً your-zeus.workers.dev) و UUID حسابتان را بردارید.',
+    'guide.zeus.step5': 'در برنامه → ابزارها → بخش Zeus Panel، آدرس و UUID را وارد کنید.',
+    'guide.zeus.step6': 'روی «افزودن اشتراک Zeus» کلیک کنید.',
+    'guide.zeus.step7': 'حالا از خانه روی دکمه «Zeus Panel» بزنید تا به سریع‌ترین سرور متصل شوید.',
+    'guide.zeus.note': 'لینک اشتراک Zeus به صورت خودکار ساخته می‌شود: https://your-domain/sub/UUID',
+
+    // ── Home Zeus button ──────────────────────────────────────────────────────
+    'home.zeus.setup': 'تنظیم پنل Zeus',
+    'home.zeus.goTools': 'برو ابزارها ← Zeus',
+    'home.freeTag': 'رایگان',
+
     // ── Tools page ────────────────────────────────────────────────────────────
     'nav.tools': 'ابزارها',
     'page.tools': 'ابزارهای پیشرفته',
@@ -680,7 +709,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'Engine Core',
-    'version': 'Version 2.1.0',
+    'version': 'Version 2.2.0',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'Administrator access required for TUN',
@@ -1121,6 +1150,35 @@ export const TR: Record<Lang, Record<string, string>> = {
     'guide.method4.how3': 'Deactivates automatically when VPN disconnects.',
     'guide.method4.howTitle': 'How it works',
 
+    // ── Guide WARP ────────────────────────────────────────────────────────────
+    'guide.warp.kicker': 'Cloudflare WARP',
+    'guide.warp.title': 'Connect with Cloudflare WARP',
+    'guide.warp.badge': 'Free · WireGuard',
+    'guide.warp.desc': 'WARP is a free WireGuard tunnel from Cloudflare. No panel or subscription needed — just create an account once.',
+    'guide.warp.step1': 'Go to Home and click "Cloudflare WARP".',
+    'guide.warp.step2': 'If you don\'t have an account, go to Tools → WARP and click "Create Account".',
+    'guide.warp.step3': 'Once the account is created, click the WARP button on the Home screen to connect.',
+    'guide.warp.note': 'WARP enables system proxy when connected. Click the same button again to disconnect.',
+
+    // ── Guide Zeus ────────────────────────────────────────────────────────────
+    'guide.zeus.kicker': 'Zeus Panel',
+    'guide.zeus.title': 'Connect with Zeus Panel',
+    'guide.zeus.badge': 'Free · Cloudflare Workers',
+    'guide.zeus.desc': 'Zeus is a free VLESS panel running on Cloudflare Workers. Deploy it once and connect via its subscription URL.',
+    'guide.zeus.step1': 'Create a free Cloudflare account at cloudflare.com.',
+    'guide.zeus.step2': 'Fork or clone the Zeus repository from GitHub.',
+    'guide.zeus.step3': 'Create a new Cloudflare Worker and deploy the Zeus code.',
+    'guide.zeus.step4': 'Note your Worker address (e.g. your-zeus.workers.dev) and your UUID.',
+    'guide.zeus.step5': 'In HamidsDeutsch → Tools → Zeus Panel section, enter the domain and UUID.',
+    'guide.zeus.step6': 'Click "Add Zeus Subscription".',
+    'guide.zeus.step7': 'From Home, click the "Zeus Panel" button to connect to the fastest server.',
+    'guide.zeus.note': 'The subscription URL is built automatically: https://your-domain/sub/UUID',
+
+    // ── Home Zeus button ──────────────────────────────────────────────────────
+    'home.zeus.setup': 'Setup Zeus Panel',
+    'home.zeus.goTools': 'Go to Tools ← Zeus',
+    'home.freeTag': 'Free',
+
     // ── History date groups ──────────────────────────────────────────────────
     'history.today': 'Today',
     'history.yesterday': 'Yesterday',
@@ -1287,7 +1345,7 @@ export const _UNUSED_DE_PLACEHOLDER = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'Programm-Kern',
-    'version': 'Version 2.1.0',
+    'version': 'Version 2.2.0',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'Administratorrechte für TUN erforderlich',

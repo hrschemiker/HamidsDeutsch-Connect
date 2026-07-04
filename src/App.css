@@ -5423,6 +5423,7 @@ button {
 }
 
 .method-btn {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -6473,4 +6474,43 @@ button {
   background: var(--teal);
   border-radius: 2px;
   transition: width 0.3s;
+}
+
+/* Zeus button — Indigo */
+.method-btn-zeus {
+  background: linear-gradient(145deg, rgba(99,102,241,0.18), rgba(99,102,241,0.08));
+  border-color: rgba(99,102,241,0.35);
+  color: var(--text);
+  box-shadow: 0 4px 20px rgba(99,102,241,0.14);
+}
+.method-btn-zeus:hover:not(:disabled) {
+  background: linear-gradient(145deg, rgba(99,102,241,0.26), rgba(99,102,241,0.14));
+  box-shadow: 0 8px 28px rgba(99,102,241,0.22);
+}
+.method-btn-zeus.method-btn-active {
+  background: linear-gradient(145deg, rgba(99,102,241,0.3), rgba(99,102,241,0.18));
+  border-color: rgba(99,102,241,0.55);
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.16), 0 8px 28px rgba(99,102,241,0.22);
+}
+.method-btn-zeus .method-btn-icon {
+  background: rgba(99,102,241,0.2);
+  color: #818cf8;
+}
+.method-btn-zeus.method-btn-active::before { border-color: #818cf8; }
+
+/* Free tag badge on method buttons */
+.method-btn-free-tag {
+  position: absolute;
+  top: 6px;
+  inset-inline-end: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(52, 211, 153, 0.18);
+  color: var(--green, #34d399);
+  border: 1px solid rgba(52, 211, 153, 0.32);
+  pointer-events: none;
+  line-height: 1;
 }

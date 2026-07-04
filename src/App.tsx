@@ -264,9 +264,10 @@ function App() {
   // WARP connection state
   const [warpConnecting, setWarpConnecting] = useState(false)
   const [warpError, setWarpError] = useState<string | null>(null)
+  const [zeusConnecting, setZeusConnecting] = useState(false)
 
   // Bandwidth monitor
-  const [traffic, setTraffic] = useState<{ up: number; down: number } | null>(null)
+  const [_traffic, setTraffic] = useState<{ up: number; down: number } | null>(null)
   const trafficIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const prevTrafficRef = useRef<{ up: number; down: number } | null>(null)
   const [trafficSpeed, setTrafficSpeed] = useState<{ upSpeed: number; downSpeed: number } | null>(null)
@@ -595,6 +596,56 @@ function App() {
     if (!proxyResult.success) {
       setWarpError(proxyResult.error ?? 'خطا در فعال‌سازی پراکسی سیستم')
       void stopLocalProxy()
+    }
+  }
+
+  async function connectZeus() {
+    if (zeusConnecting) return
+    const zeusSub = subscriptions.subscriptions.find((s) => s.name.startsWith('Zeus Panel'))
+    if (!zeusSub) {
+      setActivePage('tools')
+      return
+    }
+    setZeusConnecting(true)
+    setConnectionActionError(null)
+    ipVerification.reset()
+    try {
+      if (engineProcess.status.running) await engineProcess.stop()
+      const result = await window.hamidsDeutsch.subscriptions.loadNodes(zeusSub.id)
+      if (!result.success || result.nodes.length === 0) {
+        setZeusConnecting(false)
+        setConnectionActionError(result.error ?? 'هیچ سروری در اشتراک Zeus یافت نشد.')
+        return
+      }
+      const validNodes = result.nodes.filter((n) => n.valid)
+      if (validNodes.length === 0) {
+        setZeusConnecting(false)
+        setConnectionActionError('هیچ سرور معتبری یافت نشد.')
+        return
+      }
+      const top3 = validNodes.slice(0, 3)
+      const tested = await Promise.all(top3.map(async (n) => {
+        if (!n.host || !n.port) return { node: n, ms: Number.MAX_SAFE_INTEGER }
+        try {
+          const r = await window.hamidsDeutsch.servers.testLatency([{ id: n.id, host: n.host, port: n.port }])
+          const item = r.results.find((x) => x.id === n.id)
+          return { node: n, ms: item?.reachable ? (item.latencyMs ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER }
+        } catch { return { node: n, ms: Number.MAX_SAFE_INTEGER } }
+      }))
+      tested.sort((a, b) => a.ms - b.ms)
+      const best = tested[0].node
+      const compositeId = `${zeusSub.id}::${best.id}`
+      const found = serverNodes.nodes.find((n) => n.id === compositeId)
+      if (found) {
+        setZeusConnecting(false)
+        void prepareAndStart(found)
+      } else {
+        setZeusConnecting(false)
+        setActivePage('subscriptions')
+      }
+    } catch {
+      setZeusConnecting(false)
+      setConnectionActionError('خطا در اتصال به سرور Zeus.')
     }
   }
 
@@ -1276,7 +1327,8 @@ function App() {
                   : []
                 if (inputs.length === 0) return { node, ms: Number.MAX_SAFE_INTEGER }
                 const r = await window.hamidsDeutsch.servers.testLatency(inputs)
-                const ms = r.results[node.id]?.reachable ? (r.results[node.id]?.latencyMs ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER
+                const item = r.results.find((x) => x.id === node.id)
+                const ms = item?.reachable ? (item.latencyMs ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER
                 return { node, ms }
               } catch {
                 return { node, ms: Number.MAX_SAFE_INTEGER }
@@ -1877,6 +1929,10 @@ function App() {
               geoBlockTrigger={geoBlockTrigger}
               dataLoading={serverNodes.loading || subscriptions.loading}
               trafficSpeed={trafficSpeed}
+              onZeusConnect={() => void connectZeus()}
+              onNavigateToTools={() => setActivePage('tools')}
+              zeusConfigured={subscriptions.subscriptions.some((s) => s.name.startsWith('Zeus Panel'))}
+              zeusConnecting={zeusConnecting}
               onShowQr={async (compositeId: string) => {
                 const parts = compositeId.split('::')
                 const subscriptionId = parts[0]
@@ -2227,7 +2283,7 @@ function App() {
               directDomains={directDomains.domains}
               onNavigateToSubscriptions={() => setActivePage('subscriptions')}
               onAddZeusSubscription={async (url, name) => {
-                await window.hamidsDeutsch.subscriptions.add(url, name)
+                await window.hamidsDeutsch.subscriptions.add({ url, name })
                 setActivePage('subscriptions')
               }}
             />
@@ -2389,6 +2445,10 @@ type HomePageProps = {
   dataLoading: boolean
   trafficSpeed: { upSpeed: number; downSpeed: number } | null
   onShowQr: (compositeId: string) => void
+  onZeusConnect: () => void
+  onNavigateToTools: () => void
+  zeusConfigured: boolean
+  zeusConnecting: boolean
 }
 
 function HomePage({
@@ -2454,6 +2514,10 @@ function HomePage({
   onConnectFreeServer,
   trafficSpeed,
   onShowQr,
+  onZeusConnect,
+  onNavigateToTools,
+  zeusConfigured,
+  zeusConnecting,
 }: HomePageProps) {
   const t = useT()
 
@@ -2767,8 +2831,9 @@ function HomePage({
               </span>
               <span className="method-btn-label">
                 <strong>{codespaceConnected ? t('hero.disconnectGithub') : codespaceConnecting ? '■ توقف' : t('home.codespace.connect')}</strong>
-                <small>{codespaceConnected && codespaceHost ? codespaceHost : 'GitHub Codespace'}</small>
+                <small>GitHub Codespace</small>
               </span>
+              {!(codespaceConnected || codespaceConnecting) && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
             </button>
 
             {/* ── BPB Subscription — Gold ── */}
@@ -2784,6 +2849,7 @@ function HomePage({
                 <strong>{activeMethod === 'bpb' ? 'BPB متصل است' : (bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup'))}</strong>
                 <small>BPB Panel</small>
               </span>
+              {activeMethod !== 'bpb' && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
             </button>
 
             {/* ── Free Subscription — Teal ── */}
@@ -2808,6 +2874,7 @@ function HomePage({
                 </strong>
                 <small>{freeConnected && freeNodeName ? freeNodeName : 'V2ray Collector'}</small>
               </span>
+              {!isFreeActive && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
             </button>
 
             {/* ── Cloudflare WARP — Purple ── */}
@@ -2824,6 +2891,24 @@ function HomePage({
                 <strong>{activeMethod === 'warp' ? 'WARP متصل است' : warpConnecting ? '■ توقف' : 'Cloudflare WARP'}</strong>
                 <small>WireGuard · CF</small>
               </span>
+              {activeMethod !== 'warp' && !warpConnecting && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
+            </button>
+
+            {/* ── Zeus Panel — Indigo ── */}
+            <button
+              className={`method-btn method-btn-zeus${zeusConnecting ? ' method-btn-active' : ''}`}
+              type="button"
+              onClick={onZeusConnect}
+              disabled={zeusConnecting}
+            >
+              <span className="method-btn-icon">
+                {zeusConnecting ? <span className="connection-stage-spinner">◌</span> : zeusConfigured ? '⬡' : '＋'}
+              </span>
+              <span className="method-btn-label">
+                <strong>{zeusConnecting ? '■ در حال اتصال' : zeusConfigured ? 'Zeus Panel' : t('home.zeus.setup')}</strong>
+                <small>{zeusConfigured ? 'اتصال سریع‌ترین سرور' : t('home.zeus.goTools')}</small>
+              </span>
+              {!zeusConnecting && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
             </button>
           </div>
 
@@ -4694,7 +4779,7 @@ type DirectSitesPageProps = {
 function SubInfoCard({ info }: {
   info: { upload: number | null; download: number | null; total: number | null; expire: string | null }
 }) {
-  const { lang } = useLang()
+  const { lang } = useContext(LangCtx)
   const used = (info.upload ?? 0) + (info.download ?? 0)
   const total = info.total ?? 0
   const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : null
@@ -7238,6 +7323,46 @@ function GuidePage() {
         <div className="guide-note">{t('guide.method3.note')}</div>
       </section>
 
+      {/* ── Method: Cloudflare WARP ────────────────────────────────── */}
+      <section className="panel-card guide-section">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">{t('guide.warp.kicker')}</span>
+            <h3>{t('guide.warp.title')}</h3>
+          </div>
+          <span className="guide-badge guide-badge-free">{t('guide.warp.badge')}</span>
+        </div>
+        <p className="guide-desc">{t('guide.warp.desc')}</p>
+        <ol className="guide-steps">
+          <li>{t('guide.warp.step1')}</li>
+          <li>{t('guide.warp.step2')}</li>
+          <li>{t('guide.warp.step3')}</li>
+        </ol>
+        <div className="guide-note">{t('guide.warp.note')}</div>
+      </section>
+
+      {/* ── Method: Zeus Panel ─────────────────────────────────────── */}
+      <section className="panel-card guide-section">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">{t('guide.zeus.kicker')}</span>
+            <h3>{t('guide.zeus.title')}</h3>
+          </div>
+          <span className="guide-badge guide-badge-cf">{t('guide.zeus.badge')}</span>
+        </div>
+        <p className="guide-desc">{t('guide.zeus.desc')}</p>
+        <ol className="guide-steps">
+          <li>{t('guide.zeus.step1')}</li>
+          <li>{t('guide.zeus.step2')}</li>
+          <li>{t('guide.zeus.step3')}</li>
+          <li>{t('guide.zeus.step4')}</li>
+          <li>{t('guide.zeus.step5')}</li>
+          <li>{t('guide.zeus.step6')}</li>
+          <li>{t('guide.zeus.step7')}</li>
+        </ol>
+        <div className="guide-note">{t('guide.zeus.note')}</div>
+      </section>
+
       {/* ── Keyboard Shortcut ──────────────────────────────────────── */}
       <section className="panel-card guide-section">
         <div className="panel-heading">
@@ -7884,7 +8009,7 @@ function QrModal({ uri, onClose }: { uri: string; onClose: () => void }) {
 // ── Settings Backup / Restore Section ────────────────────────────────────────
 
 function BackupRestoreSection() {
-  const { lang } = useLang()
+  const { lang } = useContext(LangCtx)
   const [status, setStatus] = useState<string | null>(null)
 
   async function handleExport() {
@@ -7948,7 +8073,7 @@ function BackupRestoreSection() {
 // ── Zeus Panel Section ────────────────────────────────────────────────────────
 
 function ZeusPanelSection({ onAddSubscription }: { onAddSubscription: (url: string, name: string) => void }) {
-  const { lang } = useLang()
+  const { lang } = useContext(LangCtx)
   const [domain, setDomain] = useState('')
   const [uuid, setUuid] = useState('')
   const [status, setStatus] = useState<string | null>(null)
