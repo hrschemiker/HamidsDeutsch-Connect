@@ -5,7 +5,7 @@ const fs = require('node:fs/promises')
 const { shell, safeStorage } = require('electron')
 
 const CLIENT_ID = '54d11594-84e4-41aa-b438-e81b8fa78ee7'
-const REDIRECT_PORT = 8977
+const REDIRECT_PORT = 8976
 const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}/oauth/callback`
 const AUTH_URL = 'https://dash.cloudflare.com/oauth2/auth'
 const TOKEN_URL = 'https://dash.cloudflare.com/oauth2/token'
@@ -13,7 +13,7 @@ const API_BASE = 'https://api.cloudflare.com/client/v4'
 const ZEUS_JS_URL = 'https://raw.githubusercontent.com/IR-NETLIFY/zeus/main/zeus.js'
 const SCOPES = [
   'account:read', 'user:read', 'workers:write', 'workers_kv:write',
-  'workers_routes:write', 'workers_scripts:write', 'd1:write', 'offline_access',
+  'workers_routes:write', 'workers_scripts:write', 'offline_access',
 ]
 
 let progressListener = null
