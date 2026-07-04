@@ -26,6 +26,7 @@ import { useRescueSettings } from './rescue/use-rescue-settings'
 import { useConnectionSettings } from './settings/use-connection-settings'
 import { useConnectionDiagnostics } from './diagnostics/use-connection-diagnostics'
 import { BpbPage } from './bpb/BpbPage'
+import { ZeusPage } from './zeus/ZeusPage'
 import './App.css'
 
 // ── Free Config types ────────────────────────────────────────────────────────
@@ -126,6 +127,7 @@ type PageId =
   | 'subscriptions'
   | 'direct-sites'
   | 'bpb'
+  | 'zeus'
   | 'rescue'
   | 'statistics'
   | 'logs'
@@ -203,6 +205,7 @@ function App() {
     servers: t('page.servers'),
     subscriptions: t('page.subscriptions'),
     bpb: t('page.bpb'),
+    zeus: t('zeus.title'),
     'direct-sites': t('page.directSites'),
     rescue: t('page.rescue'),
     statistics: t('page.statistics'),
@@ -601,9 +604,24 @@ function App() {
 
   async function connectZeus() {
     if (zeusConnecting) return
+    const zeusStatus = await window.hamidsDeutsch.zeus.getStatus()
+    if (!zeusStatus.deployed || !zeusStatus.subUrl) {
+      setActivePage('zeus')
+      return
+    }
+    // Zeus is deployed — use its subscription URL directly
+    // First ensure it's in our subscriptions list
+    const subUrl = zeusStatus.subUrl
+    const existingSub = subscriptions.subscriptions.find((s) => s.name.startsWith('Zeus Panel'))
+    if (!existingSub) {
+      // Add the Zeus subscription so we can use it
+      await window.hamidsDeutsch.subscriptions.add({ url: subUrl, name: 'Zeus Panel' })
+      await subscriptions.refresh()
+    }
+    // Find subscription and connect via race-dial
     const zeusSub = subscriptions.subscriptions.find((s) => s.name.startsWith('Zeus Panel'))
     if (!zeusSub) {
-      setActivePage('tools')
+      setActivePage('zeus')
       return
     }
     setZeusConnecting(true)
@@ -636,12 +654,13 @@ function App() {
       const best = tested[0].node
       const compositeId = `${zeusSub.id}::${best.id}`
       const found = serverNodes.nodes.find((n) => n.id === compositeId)
+        ?? serverNodes.nodes.find((n) => n.nodeId === best.id && n.subscriptionId === zeusSub.id)
       if (found) {
         setZeusConnecting(false)
         void prepareAndStart(found)
       } else {
         setZeusConnecting(false)
-        setActivePage('subscriptions')
+        void connectToFirstHealthyServer()
       }
     } catch {
       setZeusConnecting(false)
@@ -2154,6 +2173,12 @@ function App() {
             />
           )}
 
+          {activePage === 'zeus' && (
+            <ZeusPage
+              onZeusConnect={() => void connectZeus()}
+            />
+          )}
+
           {activePage === 'direct-sites' && (
             <DirectSitesPage
               domains={directDomains.domains}
@@ -2282,10 +2307,7 @@ function App() {
             <ToolsPage
               directDomains={directDomains.domains}
               onNavigateToSubscriptions={() => setActivePage('subscriptions')}
-              onAddZeusSubscription={async (url, name) => {
-                await window.hamidsDeutsch.subscriptions.add({ url, name })
-                setActivePage('subscriptions')
-              }}
+              onNavigateToZeus={() => setActivePage('zeus')}
             />
           )}
         </main>
@@ -7448,17 +7470,17 @@ function SettingRow({
 function ToolsPage({
   directDomains,
   onNavigateToSubscriptions,
-  onAddZeusSubscription,
+  onNavigateToZeus,
 }: {
   directDomains: string[]
   onNavigateToSubscriptions: () => void
-  onAddZeusSubscription: (url: string, name: string) => void
+  onNavigateToZeus: () => void
 }) {
   return (
     <div className="page-content tools-page">
       <CfScannerSection />
       <WarpSection directDomains={directDomains} />
-      <ZeusPanelSection onAddSubscription={onAddZeusSubscription} />
+      <ZeusPanelSection onNavigateToZeus={onNavigateToZeus} />
       <SubscriptionConverterSection onNavigateToSubscriptions={onNavigateToSubscriptions} />
       <UpstreamProxySection />
       <UTlsSection />
@@ -8072,58 +8094,20 @@ function BackupRestoreSection() {
 
 // ── Zeus Panel Section ────────────────────────────────────────────────────────
 
-function ZeusPanelSection({ onAddSubscription }: { onAddSubscription: (url: string, name: string) => void }) {
+function ZeusPanelSection({ onNavigateToZeus }: { onNavigateToZeus: () => void }) {
   const { lang } = useContext(LangCtx)
-  const [domain, setDomain] = useState('')
-  const [uuid, setUuid] = useState('')
-  const [status, setStatus] = useState<string | null>(null)
-
-  async function handleAdd() {
-    if (!domain.trim() || !uuid.trim()) {
-      setStatus(lang === 'fa' ? 'دامنه و UUID را وارد کنید' : 'Enter domain and UUID')
-      return
-    }
-    const r = await window.hamidsDeutsch.zeus.buildSubUrl({ panelDomain: domain.trim(), uuid: uuid.trim() })
-    if (!r.success || !r.url) { setStatus(r.error ?? 'Error'); return }
-    onAddSubscription(r.url, `Zeus Panel (${domain.trim().slice(0, 20)})`)
-    setStatus(lang === 'fa' ? 'اشتراک Zeus اضافه شد' : 'Zeus subscription added')
-    setDomain('')
-    setUuid('')
-    setTimeout(() => setStatus(null), 3000)
-  }
-
   return (
     <div className="settings-section">
       <div className="section-kicker">Zeus Panel</div>
-      <h3 className="section-title">{lang === 'fa' ? 'اتصال پنل Zeus' : 'Connect to Zeus Panel'}</h3>
-      <p className="section-desc" style={{ marginBottom: 12 }}>
+      <h3 className="section-title">{lang === 'fa' ? 'پنل Zeus' : 'Zeus Panel'}</h3>
+      <p className="section-desc" style={{ marginBottom: 14 }}>
         {lang === 'fa'
-          ? 'اگر پنل Zeus دارید، دامنه و UUID حساب خود را وارد کنید تا به عنوان اشتراک اضافه شود.'
-          : 'If you have a Zeus panel deployed, enter the panel domain and your account UUID to add it as a subscription.'
-        }
+          ? 'پنل VLESS رایگان روی Cloudflare Workers. با یک کلیک وارد Cloudflare شوید و پنل به صورت خودکار راه‌اندازی می‌شود.'
+          : 'Free VLESS panel on Cloudflare Workers. Log in to Cloudflare with one click and the panel deploys automatically.'}
       </p>
-      <div className="field-stack" style={{ marginBottom: 10 }}>
-        <label className="field-label">{lang === 'fa' ? 'دامنه پنل' : 'Panel Domain'}</label>
-        <input
-          className="text-input"
-          placeholder="mypanel.workers.dev"
-          value={domain}
-          onChange={(e) => setDomain(e.target.value)}
-        />
-      </div>
-      <div className="field-stack" style={{ marginBottom: 14 }}>
-        <label className="field-label">UUID</label>
-        <input
-          className="text-input"
-          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-          value={uuid}
-          onChange={(e) => setUuid(e.target.value)}
-        />
-      </div>
-      <button className="action-btn" type="button" onClick={handleAdd}>
-        {lang === 'fa' ? 'افزودن اشتراک Zeus' : 'Add Zeus Subscription'}
+      <button className="action-btn" type="button" onClick={onNavigateToZeus}>
+        {lang === 'fa' ? 'رفتن به پنل Zeus ←' : 'Open Zeus Panel →'}
       </button>
-      {status && <p className="section-desc" style={{ marginTop: 10, color: 'var(--c-accent)' }}>{status}</p>}
     </div>
   )
 }

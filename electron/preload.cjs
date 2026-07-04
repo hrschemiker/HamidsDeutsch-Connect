@@ -369,6 +369,15 @@ contextBridge.exposeInMainWorld(
 
     zeus: {
       buildSubUrl: (input) => ipcRenderer.invoke('zeus:build-sub-url', input),
+      getStatus: () => ipcRenderer.invoke('zeus:get-status'),
+      login: () => ipcRenderer.invoke('zeus:login'),
+      deploy: () => ipcRenderer.invoke('zeus:deploy'),
+      updatePanel: () => ipcRenderer.invoke('zeus:update-panel'),
+      onProgress: (callback) => {
+        const listener = (_event, payload) => callback(payload)
+        ipcRenderer.on('zeus:progress', listener)
+        return () => ipcRenderer.removeListener('zeus:progress', listener)
+      },
     },
 
     codespace: {

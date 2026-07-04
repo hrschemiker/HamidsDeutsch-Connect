@@ -219,6 +219,14 @@ const {
 } = require('./cloudflare-bpb-manager.cjs')
 
 const {
+  loginCloudflareZeus,
+  deployZeusPanel,
+  updateZeusPanel,
+  getZeusStatus,
+  setZeusProgressListener,
+} = require('./cloudflare-zeus-manager.cjs')
+
+const {
   setupGitHub,
   connectViaCodespace,
   disconnectCodespace,
@@ -2434,6 +2442,33 @@ function registerIpcHandlers() {
       }
     },
   )
+
+  // ── Zeus Cloudflare auto-deploy ──────────────────────────────────────────
+  ipcMain.handle('zeus:get-status', async () => getZeusStatus({ userDataPath: app.getPath('userData') }))
+
+  ipcMain.handle('zeus:login', async () => {
+    try {
+      return await loginCloudflareZeus({ userDataPath: app.getPath('userData') })
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'اتصال Cloudflare ناموفق بود.' }
+    }
+  })
+
+  ipcMain.handle('zeus:deploy', async () => {
+    try {
+      return await deployZeusPanel({ userDataPath: app.getPath('userData') })
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'استقرار پنل Zeus ناموفق بود.' }
+    }
+  })
+
+  ipcMain.handle('zeus:update-panel', async () => {
+    try {
+      return await updateZeusPanel({ userDataPath: app.getPath('userData') })
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'بروزرسانی پنل Zeus ناموفق بود.' }
+    }
+  })
 
   ipcMain.handle(
     'bpb-optimizer:get-state',
@@ -5041,6 +5076,14 @@ app.whenReady().then(async () => {
     (progress) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('bpb-cloudflare:progress', progress)
+      }
+    },
+  )
+
+  setZeusProgressListener(
+    (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('zeus:progress', progress)
       }
     },
   )

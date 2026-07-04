@@ -75,7 +75,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'هسته برنامه',
-    'version': 'نسخه ۲.۲.۰',
+    'version': 'نسخه ۲.۳.۰',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'برای TUN دسترسی Administrator لازم است',
@@ -579,19 +579,42 @@ export const TR: Record<Lang, Record<string, string>> = {
     'guide.zeus.kicker': 'Zeus Panel',
     'guide.zeus.title': 'اتصال با پنل Zeus',
     'guide.zeus.badge': 'رایگان · Cloudflare Workers',
-    'guide.zeus.desc': 'Zeus یک پنل VLESS روی Cloudflare Workers است که می‌توانید رایگان راه‌اندازی کنید و با لینک اشتراکش به این برنامه وصل شوید.',
+    'guide.zeus.desc': 'Zeus یک پنل VLESS رایگان روی Cloudflare Workers است. برنامه همه کارها را خودکار انجام می‌دهد — فقط یک اکانت Cloudflare نیاز دارید.',
     'guide.zeus.step1': 'یک اکانت رایگان در Cloudflare بسازید (cloudflare.com).',
-    'guide.zeus.step2': 'مخزن Zeus را از GitHub fork یا clone کنید.',
-    'guide.zeus.step3': 'یک Worker جدید در Cloudflare بسازید و کد Zeus را در آن Deploy کنید.',
-    'guide.zeus.step4': 'آدرس Worker خود را (مثلاً your-zeus.workers.dev) و UUID حسابتان را بردارید.',
-    'guide.zeus.step5': 'در برنامه → ابزارها → بخش Zeus Panel، آدرس و UUID را وارد کنید.',
-    'guide.zeus.step6': 'روی «افزودن اشتراک Zeus» کلیک کنید.',
-    'guide.zeus.step7': 'حالا از خانه روی دکمه «Zeus Panel» بزنید تا به سریع‌ترین سرور متصل شوید.',
-    'guide.zeus.note': 'لینک اشتراک Zeus به صورت خودکار ساخته می‌شود: https://your-domain/sub/UUID',
+    'guide.zeus.step2': 'روی دکمه Zeus Panel در صفحه خانه بزنید.',
+    'guide.zeus.step3': 'روی «ورود به Cloudflare و راه‌اندازی پنل» کلیک کنید.',
+    'guide.zeus.step4': 'در مرورگر باز شده وارد Cloudflare شوید.',
+    'guide.zeus.step5': 'برنامه به صورت خودکار: دیتابیس می‌سازد، کد را Deploy می‌کند و حساب کاربری ایجاد می‌کند.',
+    'guide.zeus.step6': 'بعد از اتمام، روی «اتصال به Zeus» کلیک کنید.',
+    'guide.zeus.step7': 'همین! برنامه به سریع‌ترین سرور Zeus وصل می‌شود.',
+    'guide.zeus.note': 'فقط یک اکانت Cloudflare رایگان نیاز دارید. همه چیز دیگر به صورت خودکار توسط برنامه انجام می‌شود.',
+
+    // ── Zeus page ─────────────────────────────────────────────────────────────
+    'zeus.loading': 'در حال بارگذاری...',
+    'zeus.title': 'پنل Zeus',
+    'zeus.subtitle': 'پنل VLESS رایگان روی Cloudflare Workers',
+    'zeus.cfConnected': 'متصل به Cloudflare',
+    'zeus.cfNotConnected': 'متصل نیست به Cloudflare',
+    'zeus.loginAndDeploy': '⚡ ورود به Cloudflare و راه‌اندازی پنل',
+    'zeus.deployPanel': '⚡ راه‌اندازی پنل Zeus',
+    'zeus.deploying': 'در حال راه‌اندازی...',
+    'zeus.connect': 'اتصال به Zeus',
+    'zeus.updatePanel': 'بروزرسانی پنل',
+    'zeus.updating': 'در حال بروزرسانی...',
+    'zeus.workerUrl': 'آدرس Worker',
+    'zeus.username': 'نام کاربری',
+    'zeus.subUrl': 'لینک اشتراک',
+    'zeus.infoNote': 'با یک کلیک وارد Cloudflare شوید. برنامه بقیه کارها را خودکار انجام می‌دهد: ساخت دیتابیس، Deploy کد، ساخت حساب و آماده‌سازی لینک اشتراک.',
+    'zeus.msg.cfLoginPrompt': 'در حال باز کردن مرورگر برای ورود به Cloudflare...',
+    'zeus.msg.cfLoginFailed': 'ورود به Cloudflare ناموفق بود.',
+    'zeus.msg.deployFailed': 'راه‌اندازی پنل Zeus ناموفق بود.',
+    'zeus.msg.updateFailed': 'بروزرسانی پنل ناموفق بود.',
+    'zeus.msg.updateDone': 'پنل Zeus با موفقیت بروزرسانی شد.',
+    'zeus.msg.panelReady': '✓ پنل Zeus آماده است! روی دکمه اتصال بزنید.',
 
     // ── Home Zeus button ──────────────────────────────────────────────────────
-    'home.zeus.setup': 'تنظیم پنل Zeus',
-    'home.zeus.goTools': 'برو ابزارها ← Zeus',
+    'home.zeus.setup': 'راه‌اندازی پنل Zeus',
+    'home.zeus.goTools': 'برو و راه‌اندازی کن',
     'home.freeTag': 'رایگان',
 
     // ── Tools page ────────────────────────────────────────────────────────────
@@ -709,7 +732,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'Engine Core',
-    'version': 'Version 2.2.0',
+    'version': 'Version 2.3.0',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'Administrator access required for TUN',
@@ -1164,19 +1187,42 @@ export const TR: Record<Lang, Record<string, string>> = {
     'guide.zeus.kicker': 'Zeus Panel',
     'guide.zeus.title': 'Connect with Zeus Panel',
     'guide.zeus.badge': 'Free · Cloudflare Workers',
-    'guide.zeus.desc': 'Zeus is a free VLESS panel running on Cloudflare Workers. Deploy it once and connect via its subscription URL.',
+    'guide.zeus.desc': 'Zeus is a free VLESS panel on Cloudflare Workers. The app handles everything automatically — you only need a free Cloudflare account.',
     'guide.zeus.step1': 'Create a free Cloudflare account at cloudflare.com.',
-    'guide.zeus.step2': 'Fork or clone the Zeus repository from GitHub.',
-    'guide.zeus.step3': 'Create a new Cloudflare Worker and deploy the Zeus code.',
-    'guide.zeus.step4': 'Note your Worker address (e.g. your-zeus.workers.dev) and your UUID.',
-    'guide.zeus.step5': 'In HamidsDeutsch → Tools → Zeus Panel section, enter the domain and UUID.',
-    'guide.zeus.step6': 'Click "Add Zeus Subscription".',
-    'guide.zeus.step7': 'From Home, click the "Zeus Panel" button to connect to the fastest server.',
-    'guide.zeus.note': 'The subscription URL is built automatically: https://your-domain/sub/UUID',
+    'guide.zeus.step2': 'Click the Zeus Panel button on the home screen.',
+    'guide.zeus.step3': 'Click "Login to Cloudflare & Deploy Panel".',
+    'guide.zeus.step4': 'Log in to Cloudflare in the browser that opens.',
+    'guide.zeus.step5': 'The app automatically creates a database, deploys the code, and sets up your account.',
+    'guide.zeus.step6': 'Once done, click "Connect to Zeus".',
+    'guide.zeus.step7': 'Done! The app connects to the fastest Zeus server.',
+    'guide.zeus.note': 'You only need a free Cloudflare account. Everything else is handled automatically by the app.',
+
+    // ── Zeus page ─────────────────────────────────────────────────────────────
+    'zeus.loading': 'Loading...',
+    'zeus.title': 'Zeus Panel',
+    'zeus.subtitle': 'Free VLESS panel on Cloudflare Workers',
+    'zeus.cfConnected': 'Connected to Cloudflare',
+    'zeus.cfNotConnected': 'Not connected to Cloudflare',
+    'zeus.loginAndDeploy': '⚡ Login to Cloudflare & Deploy Panel',
+    'zeus.deployPanel': '⚡ Deploy Zeus Panel',
+    'zeus.deploying': 'Deploying...',
+    'zeus.connect': 'Connect to Zeus',
+    'zeus.updatePanel': 'Update Panel',
+    'zeus.updating': 'Updating...',
+    'zeus.workerUrl': 'Worker URL',
+    'zeus.username': 'Username',
+    'zeus.subUrl': 'Subscription URL',
+    'zeus.infoNote': 'Click once to log into Cloudflare. The app handles the rest automatically: creates a database, deploys the code, creates your account, and prepares the subscription link.',
+    'zeus.msg.cfLoginPrompt': 'Opening browser to log into Cloudflare...',
+    'zeus.msg.cfLoginFailed': 'Cloudflare login failed.',
+    'zeus.msg.deployFailed': 'Zeus panel deployment failed.',
+    'zeus.msg.updateFailed': 'Panel update failed.',
+    'zeus.msg.updateDone': 'Zeus panel updated successfully.',
+    'zeus.msg.panelReady': '✓ Zeus panel is ready! Click the connect button.',
 
     // ── Home Zeus button ──────────────────────────────────────────────────────
     'home.zeus.setup': 'Setup Zeus Panel',
-    'home.zeus.goTools': 'Go to Tools ← Zeus',
+    'home.zeus.goTools': 'Go and Setup',
     'home.freeTag': 'Free',
 
     // ── History date groups ──────────────────────────────────────────────────
@@ -1345,7 +1391,7 @@ export const _UNUSED_DE_PLACEHOLDER = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'Programm-Kern',
-    'version': 'Version 2.2.0',
+    'version': 'Version 2.3.0',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'Administratorrechte für TUN erforderlich',
