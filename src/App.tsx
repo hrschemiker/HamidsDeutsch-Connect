@@ -2515,7 +2515,7 @@ function HomePage({
   trafficSpeed,
   onShowQr,
   onZeusConnect,
-  onNavigateToTools,
+  onNavigateToTools: _onNavigateToTools,
   zeusConfigured,
   zeusConnecting,
 }: HomePageProps) {
