@@ -12,7 +12,7 @@
 [![Electron](https://img.shields.io/badge/Electron-v42-47848F?logo=electron&logoColor=white)](https://electronjs.org)
 [![sing‑box](https://img.shields.io/badge/sing--box-v1.13-FF6B35)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.0.0-f2c055)](../../releases/latest)
+[![Version](https://img.shields.io/badge/Version-2.2.0-f2c055)](../../releases/latest)
 
 [🇬🇧 English](#-english) · [⬇ دانلود آخرین نسخه](../../releases/latest)
 
@@ -29,22 +29,26 @@
 | 🐙 **GitHub Codespace** | پروکسی خصوصی داخل GitHub — بدون نیاز به سرور شخصی |
 | ☁️ **پنل BPB** | پشتیبانی کامل از BPB Panel مبتنی بر Cloudflare Workers |
 | 🌀 **Cloudflare WARP** | اتصال WireGuard مستقیم به شبکه Cloudflare |
+| ⚡ **Zeus Panel** | پنل VLESS رایگان روی Cloudflare Workers با اتصال یک‌کلیکه |
 
 | قابلیت | توضیح |
 |--------|-------|
 | 🔍 **اسکن خودکار IP کلودفلر** | در پس‌زمینه IP‌های تمیز CF پیدا می‌کند و برای همه اتصال‌ها اعمال می‌کند |
-| 🎭 **uTLS + ECH** | انگشت‌نگاری TLS اثر انگشت Chrome/Firefox برای دور زدن DPI |
+| 🎭 **uTLS + ECH + Fragment** | دور زدن DPI با انگشت‌نگاری TLS و تکه‌تکه کردن بسته‌ها |
+| 📊 **مانیتور پهنای باند** | نمایش آنی سرعت آپلود و دانلود در حین اتصال |
+| 🏁 **Race-dial** | اتصال به سریع‌ترین از ۳ سرور برتر به صورت موازی |
+| 📱 **QR Code سرور** | نمایش QR Code هر سرور برای اشتراک‌گذاری |
+| 💾 **پشتیبان‌گیری تنظیمات** | خروجی و ورودی JSON تمام تنظیمات |
 | 🔗 **پروکسی بالادستی** | زنجیر کردن به SOCKS5/HTTP موجود |
 | 🔄 **اتصال مجدد هوشمند** | در صورت قطع، سرور جایگزین پیدا می‌کند |
 | 🛡️ **تأیید IP** | بعد از اتصال، تغییر IP را تأیید می‌کند |
-| 🌐 **مدیریت خودکار Proxy** | تنظیمات پروکسی ویندوز پس از قطع به حالت اول بازمی‌گردد |
 | 🔧 **TUN Mode** | حالت شبکه‌سطح سیستم (نیاز به دسترسی مدیر) |
 
 ---
 
 ## 🚀 نصب
 
-1. از [صفحه Releases](../../releases/latest) آخرین فایل `HamidsDeutsch-Connect-Setup-x64.exe` را دانلود کنید
+1. از [صفحه Releases](../../releases/latest) آخرین فایل `HamidsDeutsch-Connect-Setup-2.2.0-x64.exe` را دانلود کنید
 2. فایل نصب‌کننده را اجرا کنید و مراحل را دنبال کنید
 3. برنامه به صورت خودکار اجرا می‌شود
 
@@ -75,7 +79,7 @@
 </details>
 
 <details>
-<summary><b>🌀 روش سوم — Cloudflare WARP (جدید در v2.0.0)</b></summary>
+<summary><b>🌀 روش سوم — Cloudflare WARP</b></summary>
 
 ۱. به تب **«ابزارها»** بروید  
 ۲. در بخش **WARP** روی **«ساخت حساب WARP»** کلیک کنید (یک‌بار کافی است)  
@@ -121,6 +125,23 @@ BPB یک پنل پروکسی رایگان است که روی Cloudflare Workers 
 
 </details>
 
+<details>
+<summary><b>⚡ روش ششم — Zeus Panel (جدید در v2.1.0)</b></summary>
+
+Zeus یک پنل VLESS رایگان است که روی Cloudflare Workers اجرا می‌شود.
+
+**پیش‌نیاز:** حساب Cloudflare (رایگان)
+
+۱. یک حساب Cloudflare رایگان بسازید  
+۲. مخزن Zeus را از GitHub fork کنید  
+۳. یک Worker جدید بسازید و کد Zeus را Deploy کنید  
+۴. آدرس Worker (مثل `your-zeus.workers.dev`) و UUID حسابتان را بردارید  
+۵. در نرم‌افزار → **ابزارها** → بخش **Zeus Panel** → دامنه و UUID را وارد کنید  
+۶. روی **«افزودن اشتراک Zeus»** کلیک کنید  
+۷. در صفحه اصلی روی دکمه **«Zeus Panel»** بزنید تا به سریع‌ترین سرور وصل شوید
+
+</details>
+
 ---
 
 ## 🔧 قابلیت‌های پیشرفته
@@ -130,17 +151,32 @@ BPB یک پنل پروکسی رایگان است که روی Cloudflare Workers 
 
 برنامه هنگام باز شدن به صورت خودکار در پس‌زمینه IP‌های تمیز Cloudflare را اسکن می‌کند و بهترین نتیجه را ذخیره می‌کند. وقتی به سرورهای `workers.dev` یا `pages.dev` متصل می‌شوید، برنامه به صورت خودکار این IP را به جای آدرس اصلی استفاده می‌کند تا سرعت و پایداری بهتری داشته باشید.
 
-می‌توانید از تب **«ابزارها»** اسکن دستی انجام دهید یا اسکن خودکار را غیرفعال کنید.
+می‌توانید از تب **«ابزارها»** اسکن دستی انجام دهید، زمان‌بندی خودکار تنظیم کنید، یا اسکن خودکار را غیرفعال کنید.
 
 </details>
 
 <details>
-<summary><b>🎭 uTLS و ECH</b></summary>
+<summary><b>🎭 uTLS، ECH و Fragment</b></summary>
 
-از تب **«ابزارها»** می‌توانید انگشت‌نگاری TLS را برای دور زدن فیلترینگ عمیق بسته (DPI) تنظیم کنید:
+از تب **«ابزارها»** می‌توانید تنظیمات TLS پیشرفته را برای دور زدن فیلترینگ عمیق بسته (DPI) تنظیم کنید:
 
 - **uTLS Fingerprint:** شبیه‌سازی ترافیک Chrome، Firefox یا سایر مرورگرها
 - **ECH:** رمزگذاری نام سرور در دست دادن TLS
+- **Fragment:** تکه‌تکه کردن بسته‌های TLS برای دور زدن DPI (فعال‌سازی سراسری)
+
+</details>
+
+<details>
+<summary><b>📊 مانیتور پهنای باند</b></summary>
+
+در حین اتصال، نوار سرعت آنی آپلود و دانلود در صفحه اصلی نمایش داده می‌شود.
+
+</details>
+
+<details>
+<summary><b>💾 پشتیبان‌گیری از تنظیمات</b></summary>
+
+از تب **«ابزارها»** می‌توانید تمام تنظیمات برنامه (اشتراک‌ها، تنظیمات TLS، پروکسی بالادستی و ...) را به صورت یک فایل JSON خروجی بگیرید و در دستگاه دیگر بازگردانی کنید.
 
 </details>
 
@@ -187,11 +223,16 @@ BPB یک پنل پروکسی رایگان است که روی Cloudflare Workers 
 | 🐙 **GitHub Codespace** | Private proxy inside GitHub — no VPS required |
 | ☁️ **BPB Panel** | Full BPB Panel support via Cloudflare Workers |
 | 🌀 **Cloudflare WARP** | WireGuard tunnel directly to Cloudflare's network |
+| ⚡ **Zeus Panel** | Free VLESS panel on Cloudflare Workers with one-click connect |
 
 | Feature | Description |
 |---------|-------------|
 | 🔍 **Auto CF IP Scan** | Background scan for clean Cloudflare IPs, auto-applied to all connections |
-| 🎭 **uTLS + ECH** | TLS fingerprint mimicry (Chrome/Firefox) to bypass DPI |
+| 🎭 **uTLS + ECH + Fragment** | TLS fingerprint mimicry + packet fragmentation to bypass DPI |
+| 📊 **Bandwidth Monitor** | Real-time upload/download speed display while connected |
+| 🏁 **Race-dial** | Parallel latency pre-check, connects to fastest of top-3 servers |
+| 📱 **Server QR Code** | Show QR code for any server to share its URI |
+| 💾 **Settings Backup** | Export/import all settings as JSON |
 | 🔗 **Upstream Proxy** | Chain through an existing SOCKS5/HTTP proxy |
 | 🔄 **Smart Reconnect** | Automatically finds a replacement server on disconnect |
 | 🛡️ **IP Verification** | Confirms IP change after every connection |
@@ -202,7 +243,7 @@ BPB یک پنل پروکسی رایگان است که روی Cloudflare Workers 
 
 ### 🚀 Installation
 
-1. Download the latest `HamidsDeutsch-Connect-Setup-x64.exe` from [Releases](../../releases/latest)
+1. Download the latest `HamidsDeutsch-Connect-Setup-2.2.0-x64.exe` from [Releases](../../releases/latest)
 2. Run the installer and follow the steps
 3. The app launches automatically
 
@@ -233,7 +274,7 @@ Click the **Free Server** button on the home screen. The app automatically fetch
 </details>
 
 <details>
-<summary><b>🌀 Method 3 — Cloudflare WARP (new in v2.0.0)</b></summary>
+<summary><b>🌀 Method 3 — Cloudflare WARP</b></summary>
 
 1. Go to the **Tools** tab
 2. Under **WARP**, click **Create WARP Account** (only needed once)
@@ -279,6 +320,23 @@ BPB is a free proxy panel running on Cloudflare Workers.
 
 </details>
 
+<details>
+<summary><b>⚡ Method 6 — Zeus Panel (new in v2.1.0)</b></summary>
+
+Zeus is a free VLESS panel running on Cloudflare Workers.
+
+**Prerequisite:** A free Cloudflare account
+
+1. Create a free Cloudflare account
+2. Fork the Zeus repository from GitHub
+3. Create a new Cloudflare Worker and deploy the Zeus code
+4. Note your Worker address (e.g. `your-zeus.workers.dev`) and your UUID
+5. In HamidsDeutsch → **Tools** → **Zeus Panel** section — enter domain and UUID
+6. Click **Add Zeus Subscription**
+7. On the home screen, click **Zeus Panel** to connect to the fastest server
+
+</details>
+
 ---
 
 ### 🔧 Advanced Features
@@ -288,17 +346,25 @@ BPB is a free proxy panel running on Cloudflare Workers.
 
 On startup, the app silently scans Cloudflare IP ranges in the background and caches the fastest reachable IP. When you connect to any `workers.dev` or `pages.dev` node, this clean IP is automatically substituted as the server address while the original hostname is preserved as the TLS SNI.
 
-You can trigger a manual scan or disable auto-scan from the **Tools** tab.
+You can trigger a manual scan, set a recurring schedule, or disable auto-scan from the **Tools** tab.
 
 </details>
 
 <details>
-<summary><b>🎭 uTLS and ECH</b></summary>
+<summary><b>🎭 uTLS, ECH and Fragment</b></summary>
 
 From the **Tools** tab you can configure global TLS settings to bypass deep packet inspection (DPI):
 
 - **uTLS Fingerprint** — mimics Chrome, Firefox, or other browser TLS handshakes
 - **ECH (Encrypted ClientHello)** — encrypts the server name in the TLS handshake
+- **Fragment** — splits TLS packets into fragments to defeat stateful DPI filters
+
+</details>
+
+<details>
+<summary><b>💾 Settings Backup & Restore</b></summary>
+
+From **Tools**, export all your settings (subscriptions, TLS config, upstream proxy, etc.) as a JSON file and restore them on another device or after reinstalling.
 
 </details>
 
@@ -320,10 +386,4 @@ If you already have a SOCKS5 or HTTP proxy, enter it in **Tools → Upstream Pro
 
 ### 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
-
----
-
-<div align="center">
-  Made with ❤️ by <a href="https://github.com/hrschemiker">Hamidreza</a>
-</div>
+Released under the [MIT License](LICENSE).
