@@ -12,7 +12,7 @@
 [![Electron](https://img.shields.io/badge/Electron-v42-47848F?logo=electron&logoColor=white)](https://electronjs.org)
 [![sing‑box](https://img.shields.io/badge/sing--box-v1.13-FF6B35)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.2.0-f2c055)](../../releases/latest)
+[![Version](https://img.shields.io/badge/Version-2.3.0-f2c055)](../../releases/latest)
 
 [🇬🇧 English](#-english) · [⬇ دانلود آخرین نسخه](../../releases/latest)
 
@@ -48,7 +48,7 @@
 
 ## 🚀 نصب
 
-1. از [صفحه Releases](../../releases/latest) آخرین فایل `HamidsDeutsch-Connect-Setup-2.2.0-x64.exe` را دانلود کنید
+1. از [صفحه Releases](../../releases/latest) آخرین فایل `HamidsDeutsch-Connect-Setup-2.3.0-x64.exe` را دانلود کنید
 2. فایل نصب‌کننده را اجرا کنید و مراحل را دنبال کنید
 3. برنامه به صورت خودکار اجرا می‌شود
 
@@ -126,19 +126,18 @@ BPB یک پنل پروکسی رایگان است که روی Cloudflare Workers 
 </details>
 
 <details>
-<summary><b>⚡ روش ششم — Zeus Panel (جدید در v2.1.0)</b></summary>
+<summary><b>⚡ روش ششم — Zeus Panel (v2.3.0)</b></summary>
 
-Zeus یک پنل VLESS رایگان است که روی Cloudflare Workers اجرا می‌شود.
+Zeus یک پنل VLESS رایگان است که روی Cloudflare Workers اجرا می‌شود. برنامه همه چیز را به صورت خودکار انجام می‌دهد — فقط یک اکانت Cloudflare رایگان کافی است.
 
 **پیش‌نیاز:** حساب Cloudflare (رایگان)
 
 ۱. یک حساب Cloudflare رایگان بسازید  
-۲. مخزن Zeus را از GitHub fork کنید  
-۳. یک Worker جدید بسازید و کد Zeus را Deploy کنید  
-۴. آدرس Worker (مثل `your-zeus.workers.dev`) و UUID حسابتان را بردارید  
-۵. در نرم‌افزار → **ابزارها** → بخش **Zeus Panel** → دامنه و UUID را وارد کنید  
-۶. روی **«افزودن اشتراک Zeus»** کلیک کنید  
-۷. در صفحه اصلی روی دکمه **«Zeus Panel»** بزنید تا به سریع‌ترین سرور وصل شوید
+۲. در صفحه اصلی روی دکمه **«Zeus Panel»** کلیک کنید  
+۳. روی **«ورود به Cloudflare و راه‌اندازی پنل»** کلیک کنید  
+۴. در مرورگر باز شده وارد Cloudflare شوید  
+۵. برنامه به صورت خودکار: دیتابیس D1 می‌سازد، کد را Deploy می‌کند، حساب کاربری ایجاد می‌کند  
+۶. روی **«اتصال به Zeus»** کلیک کنید — همین!
 
 </details>
 
@@ -243,7 +242,7 @@ Zeus یک پنل VLESS رایگان است که روی Cloudflare Workers اجر
 
 ### 🚀 Installation
 
-1. Download the latest `HamidsDeutsch-Connect-Setup-2.2.0-x64.exe` from [Releases](../../releases/latest)
+1. Download the latest `HamidsDeutsch-Connect-Setup-2.3.0-x64.exe` from [Releases](../../releases/latest)
 2. Run the installer and follow the steps
 3. The app launches automatically
 
@@ -321,19 +320,18 @@ BPB is a free proxy panel running on Cloudflare Workers.
 </details>
 
 <details>
-<summary><b>⚡ Method 6 — Zeus Panel (new in v2.1.0)</b></summary>
+<summary><b>⚡ Method 6 — Zeus Panel (v2.3.0)</b></summary>
 
-Zeus is a free VLESS panel running on Cloudflare Workers.
+Zeus is a free VLESS panel running on Cloudflare Workers. The app handles everything automatically — you only need a free Cloudflare account.
 
 **Prerequisite:** A free Cloudflare account
 
-1. Create a free Cloudflare account
-2. Fork the Zeus repository from GitHub
-3. Create a new Cloudflare Worker and deploy the Zeus code
-4. Note your Worker address (e.g. `your-zeus.workers.dev`) and your UUID
-5. In HamidsDeutsch → **Tools** → **Zeus Panel** section — enter domain and UUID
-6. Click **Add Zeus Subscription**
-7. On the home screen, click **Zeus Panel** to connect to the fastest server
+1. Create a free Cloudflare account at cloudflare.com
+2. Click the **Zeus Panel** button on the home screen
+3. Click **Login to Cloudflare & Deploy Panel**
+4. Log into Cloudflare in the browser that opens
+5. The app automatically creates a D1 database, deploys the code, and sets up your account
+6. Click **Connect to Zeus** — done!
 
 </details>
 
