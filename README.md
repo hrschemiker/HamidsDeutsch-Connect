@@ -1,12 +1,10 @@
-<div dir="rtl" align="right">
-
 <div align="center">
 
-<img src="public/logo.png" alt="HamidsDeutsch Connect" width="100" height="100">
+<img src="public/logo.png" alt="HamidsDeutsch Connect" width="110" height="110">
 
 # HamidsDeutsch Connect
 
-**نرم‌افزار اتصال به اینترنت آزاد برای ویندوز**
+**Free Internet Access for Windows — One Click, Zero Configuration**
 
 [![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D4?logo=windows&logoColor=white)](https://microsoft.com/windows)
 [![Electron](https://img.shields.io/badge/Electron-v42-47848F?logo=electron&logoColor=white)](https://electronjs.org)
@@ -14,374 +12,181 @@
 [![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-2.3.0-f2c055)](../../releases/latest)
 
-[🇬🇧 English](#-english) · [⬇ دانلود آخرین نسخه](../../releases/latest)
+[**⬇ Download Latest Release**](../../releases/latest)
 
 </div>
 
 ---
 
-## ✨ ویژگی‌ها
+## What is it?
 
-| روش اتصال | توضیح |
-|-----------|-------|
-| 📋 **اشتراک V2Ray** | وارد کردن لینک اشتراک، تست سرعت خودکار، اتصال مستقیم با یک کلیک |
-| 🆓 **سرور رایگان** | دریافت خودکار بهترین کانفیگ از مخازن عمومی |
-| 🐙 **GitHub Codespace** | پروکسی خصوصی داخل GitHub — بدون نیاز به سرور شخصی |
-| ☁️ **پنل BPB** | پشتیبانی کامل از BPB Panel مبتنی بر Cloudflare Workers |
-| 🌀 **Cloudflare WARP** | اتصال WireGuard مستقیم به شبکه Cloudflare |
-| ⚡ **Zeus Panel** | پنل VLESS رایگان روی Cloudflare Workers با اتصال یک‌کلیکه |
-
-| قابلیت | توضیح |
-|--------|-------|
-| 🔍 **اسکن خودکار IP کلودفلر** | در پس‌زمینه IP‌های تمیز CF پیدا می‌کند و برای همه اتصال‌ها اعمال می‌کند |
-| 🎭 **uTLS + ECH + Fragment** | دور زدن DPI با انگشت‌نگاری TLS و تکه‌تکه کردن بسته‌ها |
-| 📊 **مانیتور پهنای باند** | نمایش آنی سرعت آپلود و دانلود در حین اتصال |
-| 🏁 **Race-dial** | اتصال به سریع‌ترین از ۳ سرور برتر به صورت موازی |
-| 📱 **QR Code سرور** | نمایش QR Code هر سرور برای اشتراک‌گذاری |
-| 💾 **پشتیبان‌گیری تنظیمات** | خروجی و ورودی JSON تمام تنظیمات |
-| 🔗 **پروکسی بالادستی** | زنجیر کردن به SOCKS5/HTTP موجود |
-| 🔄 **اتصال مجدد هوشمند** | در صورت قطع، سرور جایگزین پیدا می‌کند |
-| 🛡️ **تأیید IP** | بعد از اتصال، تغییر IP را تأیید می‌کند |
-| 🔧 **TUN Mode** | حالت شبکه‌سطح سیستم (نیاز به دسترسی مدیر) |
+HamidsDeutsch Connect is a Windows desktop application that gets you past internet censorship. It wraps [sing-box](https://github.com/SagerNet/sing-box) in a clean UI and supports six different connection methods — from free public servers to fully auto-deployed private panels on Cloudflare Workers — all manageable from a single window.
 
 ---
 
-## 🚀 نصب
+## Connection Methods
 
-1. از [صفحه Releases](../../releases/latest) آخرین فایل `HamidsDeutsch-Connect-Setup-2.3.0-x64.exe` را دانلود کنید
-2. فایل نصب‌کننده را اجرا کنید و مراحل را دنبال کنید
-3. برنامه به صورت خودکار اجرا می‌شود
-
-> برای قطع کامل فایروال برنامه باید **با دسترسی مدیر (Run as Administrator)** اجرا شود.
-
----
-
-## 📡 روش‌های اتصال
-
-<details>
-<summary><b>📋 روش اول — اشتراک V2Ray (پایدارترین روش)</b></summary>
-
-۱. به تب **«اشتراک‌ها»** بروید و لینک اشتراک خود را وارد کنید  
-۲. سرورها بارگذاری می‌شوند — روی دکمه **▶** کنار هر سرور کلیک کنید  
-۳. یا در صفحه اصلی روی دکمه **«اتصال به بهترین سرور»** بزنید
-
-> برنامه به صورت خودکار بهترین IP کلودفلر را شناسایی می‌کند و برای سرورهای `workers.dev` اعمال می‌کند.
-
-</details>
-
-<details>
-<summary><b>🆓 روش دوم — سرور رایگان (بدون نیاز به حساب کاربری)</b></summary>
-
-در صفحه اصلی روی دکمه **«سرور رایگان»** کلیک کنید. برنامه به صورت خودکار سریع‌ترین سرور رایگان را پیدا و متصل می‌شود.
-
-> در صورت قطع، برنامه به صورت خودکار سرور جایگزین پیدا می‌کند.
-
-</details>
-
-<details>
-<summary><b>🌀 روش سوم — Cloudflare WARP</b></summary>
-
-۱. به تب **«ابزارها»** بروید  
-۲. در بخش **WARP** روی **«ساخت حساب WARP»** کلیک کنید (یک‌بار کافی است)  
-۳. در صفحه اصلی روی دکمه **«Cloudflare WARP»** کلیک کنید
-
-این روش یک تونل WireGuard مستقیم به شبکه Cloudflare ایجاد می‌کند و نیازی به تنظیمات اضافه ندارد.
-
-</details>
-
-<details>
-<summary><b>🐙 روش چهارم — GitHub Codespace</b></summary>
-
-**پیش‌نیاز:** حساب GitHub (رایگان کافی است)
-
-#### ساخت Personal Access Token
-
-۱. وارد [github.com](https://github.com) شوید  
-۲. **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**  
-۳. روی **Generate new token (classic)** کلیک کنید  
-۴. تیک `repo` و `codespace` را بزنید و توکن را ذخیره کنید
-
-#### اتصال در نرم‌افزار
-
-۱. به تب **«تنظیمات»** → بخش **GitHub** بروید  
-۲. توکن را وارد کنید و ذخیره کنید  
-۳. در صفحه اصلی روی **«GitHub Codespace»** کلیک کنید
-
-> Codespace رایگان GitHub ماهانه ۱۲۰ ساعت استفاده دارد.
-
-</details>
-
-<details>
-<summary><b>☁️ روش پنجم — پنل BPB</b></summary>
-
-BPB یک پنل پروکسی رایگان است که روی Cloudflare Workers اجرا می‌شود.
-
-**پیش‌نیاز:** حساب Cloudflare (رایگان)
-
-۱. به تب **«BPB Panel»** بروید  
-۲. روی **«ورود به Cloudflare»** کلیک کنید  
-۳. پس از ورود، روی **«استقرار پنل»** کلیک کنید  
-۴. پس از استقرار می‌توانید مستقیماً از همین تب متصل شوید
-
-</details>
-
-<details>
-<summary><b>⚡ روش ششم — Zeus Panel (v2.3.0)</b></summary>
-
-Zeus یک پنل VLESS رایگان است که روی Cloudflare Workers اجرا می‌شود. برنامه همه چیز را به صورت خودکار انجام می‌دهد — فقط یک اکانت Cloudflare رایگان کافی است.
-
-**پیش‌نیاز:** حساب Cloudflare (رایگان)
-
-۱. یک حساب Cloudflare رایگان بسازید  
-۲. در صفحه اصلی روی دکمه **«Zeus Panel»** کلیک کنید  
-۳. روی **«ورود به Cloudflare و راه‌اندازی پنل»** کلیک کنید  
-۴. در مرورگر باز شده وارد Cloudflare شوید  
-۵. برنامه به صورت خودکار: دیتابیس D1 می‌سازد، کد را Deploy می‌کند، حساب کاربری ایجاد می‌کند  
-۶. روی **«اتصال به Zeus»** کلیک کنید — همین!
-
-</details>
+| | Method | Cost | Setup |
+|---|---|---|---|
+| 📋 | **V2Ray Subscription** | Free / Paid | Paste a subscription URL |
+| 🆓 | **Free Servers** | Free | Zero — just click |
+| ☁️ | **BPB Panel** | Free | Cloudflare account |
+| ⚡ | **Zeus Panel** | Free | Cloudflare account |
+| 🌀 | **Cloudflare WARP** | Free | One-time account creation |
+| 🐙 | **GitHub Codespace** | Free (120h/mo) | GitHub account |
 
 ---
 
-## 🔧 قابلیت‌های پیشرفته
+## Features
+
+- **Auto Cloudflare IP Scan** — runs in the background at startup, silently replaces server IPs with the fastest clean Cloudflare IP for your ISP
+- **Race-dial** — tests top 3 servers in parallel, connects to whichever responds first
+- **uTLS + ECH + Fragment** — TLS fingerprint spoofing, encrypted SNI, and packet fragmentation to defeat deep packet inspection
+- **TUN Mode** — system-level network routing; captures all traffic, not just browser traffic (requires Administrator)
+- **Bandwidth Monitor** — live upload/download speed bar while connected
+- **IP Verification** — confirms your IP actually changed after every connection
+- **Smart Reconnect** — detects drops and automatically tries a replacement server
+- **QR Code sharing** — tap any server to show its QR code
+- **Settings Backup** — export and restore all settings as a single JSON file
+- **Upstream Proxy** — chain through an existing SOCKS5 or HTTP proxy
+
+---
+
+## Installation
+
+1. Go to [**Releases**](../../releases/latest) and download `HamidsDeutsch-Connect-Setup-2.3.0-x64.exe`
+2. Run the installer — no extra dependencies required
+3. The app launches automatically after installation
+
+> For TUN Mode and complete firewall control, right-click the app and choose **Run as Administrator**.
+
+---
+
+## Connection Guide
 
 <details>
-<summary><b>🔍 اسکن خودکار IP کلودفلر</b></summary>
+<summary><b>📋 V2Ray Subscription</b></summary>
 
-برنامه هنگام باز شدن به صورت خودکار در پس‌زمینه IP‌های تمیز Cloudflare را اسکن می‌کند و بهترین نتیجه را ذخیره می‌کند. وقتی به سرورهای `workers.dev` یا `pages.dev` متصل می‌شوید، برنامه به صورت خودکار این IP را به جای آدرس اصلی استفاده می‌کند تا سرعت و پایداری بهتری داشته باشید.
+1. Open the **Subscriptions** tab and paste your subscription URL
+2. Servers load automatically — click ▶ next to any server to connect
+3. Or press **Connect to Best Server** on the home screen for auto race-dial
 
-می‌توانید از تب **«ابزارها»** اسکن دستی انجام دهید، زمان‌بندی خودکار تنظیم کنید، یا اسکن خودکار را غیرفعال کنید.
+The app automatically swaps `workers.dev` server IPs with the fastest clean Cloudflare IP found during the background scan.
 
 </details>
 
 <details>
-<summary><b>🎭 uTLS، ECH و Fragment</b></summary>
+<summary><b>🆓 Free Servers</b></summary>
 
-از تب **«ابزارها»** می‌توانید تنظیمات TLS پیشرفته را برای دور زدن فیلترینگ عمیق بسته (DPI) تنظیم کنید:
+Click **Free Server** on the home screen. The app fetches configs from public repositories, tests them, and connects to the fastest one automatically.
 
-- **uTLS Fingerprint:** شبیه‌سازی ترافیک Chrome، Firefox یا سایر مرورگرها
-- **ECH:** رمزگذاری نام سرور در دست دادن TLS
-- **Fragment:** تکه‌تکه کردن بسته‌های TLS برای دور زدن DPI (فعال‌سازی سراسری)
+On disconnect it finds a replacement without any action from you.
 
 </details>
 
 <details>
-<summary><b>📊 مانیتور پهنای باند</b></summary>
+<summary><b>☁️ BPB Panel — Auto Deploy</b></summary>
 
-در حین اتصال، نوار سرعت آنی آپلود و دانلود در صفحه اصلی نمایش داده می‌شود.
+BPB is a free VLESS/Trojan proxy panel that runs on Cloudflare Workers.
+
+**Prerequisite:** A free [Cloudflare](https://cloudflare.com) account
+
+1. Click **BPB Panel** in the app
+2. Click **Login to Cloudflare** — a browser window opens
+3. Authorize the app in Cloudflare
+4. Click **Deploy Panel** — the app creates the Worker automatically
+5. Click **Connect** when deployment finishes
 
 </details>
 
 <details>
-<summary><b>💾 پشتیبان‌گیری از تنظیمات</b></summary>
+<summary><b>⚡ Zeus Panel — Auto Deploy</b></summary>
 
-از تب **«ابزارها»** می‌توانید تمام تنظیمات برنامه (اشتراک‌ها، تنظیمات TLS، پروکسی بالادستی و ...) را به صورت یک فایل JSON خروجی بگیرید و در دستگاه دیگر بازگردانی کنید.
+Zeus is a free VLESS panel that runs on Cloudflare Workers. The app handles the entire deployment — no manual steps.
+
+**Prerequisite:** A free [Cloudflare](https://cloudflare.com) account
+
+1. Click **Zeus Panel** on the home screen
+2. Click **Login to Cloudflare & Deploy Panel**
+3. Log into Cloudflare in the browser that opens
+4. The app automatically creates a D1 database, deploys the Worker, creates your account, and generates a subscription URL
+5. Click **Connect to Zeus** when ready
 
 </details>
 
 <details>
-<summary><b>🔗 پروکسی بالادستی (Upstream Proxy)</b></summary>
+<summary><b>🌀 Cloudflare WARP</b></summary>
 
-اگر از قبل یک پروکسی SOCKS5 یا HTTP دارید، می‌توانید از تب **«ابزارها»** آدرس آن را وارد کنید تا تمام اتصال‌های نرم‌افزار از طریق آن عبور کند.
+WARP is a free WireGuard tunnel to Cloudflare's network — no panel or subscription needed.
+
+1. Open **Tools** → **WARP** and click **Create Account** (one time only)
+2. Click **Cloudflare WARP** on the home screen to connect
+
+</details>
+
+<details>
+<summary><b>🐙 GitHub Codespace</b></summary>
+
+Runs a private proxy inside a GitHub Codespace — no VPS or external server required.
+
+**Prerequisite:** A free [GitHub](https://github.com) account
+
+1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens (classic)**
+2. Generate a token with `repo` and `codespace` scopes
+3. In the app go to **Settings** → **GitHub**, enter your token and save
+4. Click **GitHub Codespace** on the home screen
+
+> Free GitHub accounts include 120 hours/month of Codespace usage.
 
 </details>
 
 ---
 
-## 🛠️ نیازمندی‌ها
-
-- **ویندوز** 10 یا 11 (64 بیتی)
-- **دسترسی مدیر** برای TUN Mode
-
----
-
-## 📄 مجوز
-
-این پروژه تحت [مجوز MIT](LICENSE) منتشر شده است.
-
-</div>
-
----
-
-## 🇬🇧 English
-
-<div align="center">
-
-<img src="public/logo.png" alt="HamidsDeutsch Connect" width="80" height="80">
-
-**HamidsDeutsch Connect** is a Windows desktop app for free internet access, powered by [sing-box](https://github.com/SagerNet/sing-box).
-
-</div>
-
-### ✨ Features
-
-| Connection Method | Description |
-|-------------------|-------------|
-| 📋 **V2Ray Subscription** | Import subscription links, auto latency test, one-click connect |
-| 🆓 **Free Servers** | Auto-fetch best configs from public repositories |
-| 🐙 **GitHub Codespace** | Private proxy inside GitHub — no VPS required |
-| ☁️ **BPB Panel** | Full BPB Panel support via Cloudflare Workers |
-| 🌀 **Cloudflare WARP** | WireGuard tunnel directly to Cloudflare's network |
-| ⚡ **Zeus Panel** | Free VLESS panel on Cloudflare Workers with one-click connect |
-
-| Feature | Description |
-|---------|-------------|
-| 🔍 **Auto CF IP Scan** | Background scan for clean Cloudflare IPs, auto-applied to all connections |
-| 🎭 **uTLS + ECH + Fragment** | TLS fingerprint mimicry + packet fragmentation to bypass DPI |
-| 📊 **Bandwidth Monitor** | Real-time upload/download speed display while connected |
-| 🏁 **Race-dial** | Parallel latency pre-check, connects to fastest of top-3 servers |
-| 📱 **Server QR Code** | Show QR code for any server to share its URI |
-| 💾 **Settings Backup** | Export/import all settings as JSON |
-| 🔗 **Upstream Proxy** | Chain through an existing SOCKS5/HTTP proxy |
-| 🔄 **Smart Reconnect** | Automatically finds a replacement server on disconnect |
-| 🛡️ **IP Verification** | Confirms IP change after every connection |
-| 🌐 **Auto Proxy Management** | Windows proxy settings restored automatically on disconnect |
-| 🔧 **TUN Mode** | System-level network routing (requires administrator) |
-
----
-
-### 🚀 Installation
-
-1. Download the latest `HamidsDeutsch-Connect-Setup-2.3.0-x64.exe` from [Releases](../../releases/latest)
-2. Run the installer and follow the steps
-3. The app launches automatically
-
-> For complete firewall control, run the app **as Administrator**.
-
----
-
-### 📡 Connection Methods
+## Advanced Tools
 
 <details>
-<summary><b>📋 Method 1 — V2Ray Subscription (recommended)</b></summary>
+<summary><b>uTLS, ECH and Fragment</b></summary>
 
-1. Go to the **Subscriptions** tab and add your subscription URL
-2. Servers load automatically — click **▶** next to any server
-3. Or click **Connect to Best Server** on the home screen
+Available in the **Tools** tab:
 
-> The app automatically detects Cloudflare-hosted nodes (`workers.dev`) and replaces the server IP with the fastest clean CF IP from the background scan.
+- **uTLS Fingerprint** — make your TLS handshake look like Chrome, Firefox, or Safari
+- **ECH** — encrypt the server name inside the TLS handshake
+- **Fragment** — split TLS ClientHello packets into fragments to defeat stateful DPI
 
 </details>
 
 <details>
-<summary><b>🆓 Method 2 — Free Servers (no account needed)</b></summary>
+<summary><b>Cloudflare IP Scanner</b></summary>
 
-Click the **Free Server** button on the home screen. The app automatically fetches, tests, and connects to the fastest available free server.
+Runs automatically at startup. Scans Cloudflare IP ranges and caches the lowest-latency clean IP for your network. All connections to `workers.dev` and `pages.dev` nodes use this IP automatically.
 
-> On disconnect, it automatically finds a replacement server.
-
-</details>
-
-<details>
-<summary><b>🌀 Method 3 — Cloudflare WARP</b></summary>
-
-1. Go to the **Tools** tab
-2. Under **WARP**, click **Create WARP Account** (only needed once)
-3. On the home screen, click the **Cloudflare WARP** button
-
-This creates a WireGuard tunnel directly to Cloudflare's network with no additional configuration.
+You can trigger a manual scan or configure a recurring schedule from the **Tools** tab.
 
 </details>
 
 <details>
-<summary><b>🐙 Method 4 — GitHub Codespace</b></summary>
+<summary><b>Settings Backup & Restore</b></summary>
 
-**Prerequisite:** A GitHub account (free tier works)
-
-#### Create a Personal Access Token
-
-1. Go to [github.com](https://github.com) → **Settings** → **Developer settings** → **Personal access tokens (classic)**
-2. Click **Generate new token**
-3. Select `repo` and `codespace` scopes
-4. Copy the token immediately (it won't be shown again)
-
-#### Connect in the app
-
-1. Go to **Settings** → **GitHub** section
-2. Enter your token and save
-3. Click **GitHub Codespace** on the home screen
-
-> Free GitHub accounts get 120 hours/month of Codespace usage.
+**Tools** → **Backup** — export all settings (subscriptions, TLS config, proxy settings, WARP account) to a JSON file. Import it on any other machine to restore everything instantly.
 
 </details>
 
 <details>
-<summary><b>☁️ Method 5 — BPB Panel</b></summary>
+<summary><b>Upstream Proxy</b></summary>
 
-BPB is a free proxy panel running on Cloudflare Workers.
-
-**Prerequisite:** A free Cloudflare account
-
-1. Go to the **BPB Panel** tab
-2. Click **Login to Cloudflare**
-3. After login, click **Deploy Panel**
-4. Once deployed, connect directly from the same tab
-
-</details>
-
-<details>
-<summary><b>⚡ Method 6 — Zeus Panel (v2.3.0)</b></summary>
-
-Zeus is a free VLESS panel running on Cloudflare Workers. The app handles everything automatically — you only need a free Cloudflare account.
-
-**Prerequisite:** A free Cloudflare account
-
-1. Create a free Cloudflare account at cloudflare.com
-2. Click the **Zeus Panel** button on the home screen
-3. Click **Login to Cloudflare & Deploy Panel**
-4. Log into Cloudflare in the browser that opens
-5. The app automatically creates a D1 database, deploys the code, and sets up your account
-6. Click **Connect to Zeus** — done!
+**Tools** → **Upstream Proxy** — route all app traffic through an existing SOCKS5 or HTTP proxy before it reaches the remote server.
 
 </details>
 
 ---
 
-### 🔧 Advanced Features
+## Requirements
 
-<details>
-<summary><b>🔍 Auto Cloudflare IP Scan</b></summary>
-
-On startup, the app silently scans Cloudflare IP ranges in the background and caches the fastest reachable IP. When you connect to any `workers.dev` or `pages.dev` node, this clean IP is automatically substituted as the server address while the original hostname is preserved as the TLS SNI.
-
-You can trigger a manual scan, set a recurring schedule, or disable auto-scan from the **Tools** tab.
-
-</details>
-
-<details>
-<summary><b>🎭 uTLS, ECH and Fragment</b></summary>
-
-From the **Tools** tab you can configure global TLS settings to bypass deep packet inspection (DPI):
-
-- **uTLS Fingerprint** — mimics Chrome, Firefox, or other browser TLS handshakes
-- **ECH (Encrypted ClientHello)** — encrypts the server name in the TLS handshake
-- **Fragment** — splits TLS packets into fragments to defeat stateful DPI filters
-
-</details>
-
-<details>
-<summary><b>💾 Settings Backup & Restore</b></summary>
-
-From **Tools**, export all your settings (subscriptions, TLS config, upstream proxy, etc.) as a JSON file and restore them on another device or after reinstalling.
-
-</details>
-
-<details>
-<summary><b>🔗 Upstream Proxy</b></summary>
-
-If you already have a SOCKS5 or HTTP proxy, enter it in **Tools → Upstream Proxy** and all connections will be chained through it.
-
-</details>
+- Windows 10 or 11 (64-bit)
+- Administrator rights for TUN Mode only
 
 ---
 
-### 🛠️ Requirements
+## License
 
-- **Windows** 10 or 11 (64-bit)
-- **Administrator** access for TUN Mode
-
----
-
-### 📄 License
-
-Released under the [MIT License](LICENSE).
+[MIT](LICENSE)
