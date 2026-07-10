@@ -372,10 +372,28 @@ const FREE_CONFIG_SOURCES = [
   'https://raw.githubusercontent.com/Pawdroid/Free-servers/main/sub',
   'https://raw.githubusercontent.com/sinavm/SVM/main/Splitted-By-Protocol/mix',
   'https://raw.githubusercontent.com/AmirrezaFarnamTaheri/ConfigStream/main/All_Configs_Sub.txt',
+  'https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_Sub.txt',
+  'https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/sub_merge.txt',
+  'https://raw.githubusercontent.com/soroushmirzaei/telegram-configs-collector/main/splitted/mixed',
+  'https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt',
+  'https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/server.txt',
 ]
 const FREE_TEST_TIMEOUT = 3500
 const FREE_CONNECT_ATTEMPTS = 5
 const FREE_BACKGROUND_INTERVAL_MS = 15 * 60 * 1000
+
+// Telegram channel crawler — curated free configs, prioritised above generic lists.
+// Telegram is blocked in Iran, so we only crawl once a tunnel is already up.
+const TELEGRAM_CHANNEL = 'Spotify_Porteghali'
+const TELEGRAM_CRAWL_MIN_INTERVAL_MS = 20 * 60 * 1000
+const TELEGRAM_CHECK_INTERVAL_MS = 60 * 1000
+const TELEGRAM_MAX_POSTS = 200
+let telegramCrawlTimer = null
+let telegramLastCrawlAt = 0
+let telegramCrawling = false
+
+// Last bandwidth sample, used to convert cumulative totals into live speed.
+let lastTrafficSample = null
 
 let freePoolRefreshing = false
 let freeBackgroundTimer = null
@@ -558,6 +576,9 @@ async function backgroundRefreshFreePool() {
             protocol: r.node.protocol,
             host: r.node.host,
             port: r.node.port,
+            security: r.node.security ?? null,
+            transport: r.node.transport ?? null,
+            tls: r.node.tls ?? false,
             latencyMs: cfrayLatencyMap.get(r.id)?.latencyMs ?? null,
             lastTestedAt: now,
             addedAt: now,
@@ -614,9 +635,13 @@ async function backgroundRefreshFreePool() {
             protocol: r.node.protocol,
             host: r.node.host,
             port: r.node.port,
+            security: r.node.security ?? null,
+            transport: r.node.transport ?? null,
+            tls: r.node.tls ?? false,
             latencyMs: latencyMap.get(r.id)?.latencyMs ?? null,
             lastTestedAt: now,
             addedAt: now,
+            source: 'subscription',
           }))
 
         if (toStore.length > 0) {
@@ -669,6 +694,134 @@ function startFreeBackgroundRefresh() {
   freeBackgroundTimer = setInterval(() => {
     backgroundRefreshFreePool().catch(() => {})
   }, FREE_BACKGROUND_INTERVAL_MS)
+}
+
+// ── Telegram config crawler ──────────────────────────────────────────────────
+
+/** Is ANY connection method currently up? Needed so Telegram fetches are tunneled. */
+function isAnyConnectionActive() {
+  try {
+    if (getProcessStatus().running) return true
+  } catch {}
+  try {
+    const b = getBpbStatus()
+    if (b && (b.running || b.ready || b.connected)) return true
+  } catch {}
+  return false
+}
+
+/**
+ * Fetch a URL through the active tunnel. Electron's net.fetch honours the system
+ * proxy (set by our sing-box mixed inbound) and, in TUN mode, all traffic is
+ * captured anyway — so once connected this reaches Telegram past the block.
+ */
+async function tunneledFetch(url) {
+  const { net } = require('electron')
+  const resp = await net.fetch(url, {
+    signal: AbortSignal.timeout(15000),
+    headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en' },
+  })
+  return { ok: resp.ok, status: resp.status, text: () => resp.text() }
+}
+
+/**
+ * Crawl the curated Telegram channel for configs and merge the working ones into
+ * the free pool tagged source:'telegram' (which sorts them ahead of generic
+ * lists). Throttled, and a no-op unless a tunnel is already up.
+ */
+async function crawlTelegramIntoPool({ force = false } = {}) {
+  if (telegramCrawling) return { merged: 0, skipped: 'busy' }
+  if (!force && Date.now() - telegramLastCrawlAt < TELEGRAM_CRAWL_MIN_INTERVAL_MS) {
+    return { merged: 0, skipped: 'throttled' }
+  }
+  if (!isAnyConnectionActive()) return { merged: 0, skipped: 'offline' }
+
+  telegramCrawling = true
+  try {
+    const { crawlTelegramConfigs } = require('./telegram-source-service.cjs')
+    const { testServerBatch } = require('./server-latency.cjs')
+
+    const { uris } = await crawlTelegramConfigs({
+      channel: TELEGRAM_CHANNEL,
+      maxPosts: TELEGRAM_MAX_POSTS,
+      fetchImpl: tunneledFetch,
+    })
+    if (!uris.length) return { merged: 0, skipped: 'empty' }
+
+    const records = parseAllProtocols(uris.join('\n'))
+    const seen = new Set()
+    const unique = records.filter((r) => {
+      if (!r.node.valid || !r.node.host || !r.node.port) return false
+      if (seen.has(r.id)) return false
+      seen.add(r.id)
+      return true
+    })
+    if (!unique.length) return { merged: 0, skipped: 'unparsed' }
+
+    const now = new Date().toISOString()
+    const CHUNK = 80
+    let merged = 0
+    for (let i = 0; i < unique.length; i += CHUNK) {
+      const chunk = unique.slice(i, i + CHUNK)
+      const inputs = chunk.map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
+      const result = await testServerBatch(inputs)
+      const latencyMap = new Map(result.results.map((r) => [r.id, r]))
+      const toStore = chunk
+        .filter((r) => {
+          const lr = latencyMap.get(r.id)
+          return lr && lr.reachable && typeof lr.latencyMs === 'number' && lr.latencyMs >= MIN_PING_MS && lr.latencyMs < PING_THRESHOLD_MS
+        })
+        .map((r) => ({
+          id: r.id,
+          uri: r.uri,
+          name: r.node.name ?? r.node.protocol,
+          protocol: r.node.protocol,
+          host: r.node.host,
+          port: r.node.port,
+          security: r.node.security ?? null,
+          transport: r.node.transport ?? null,
+          tls: r.node.tls ?? false,
+          latencyMs: latencyMap.get(r.id)?.latencyMs ?? null,
+          lastTestedAt: now,
+          addedAt: now,
+          source: 'telegram',
+        }))
+      if (toStore.length > 0) {
+        await mergeFreeServers(toStore).catch(() => {})
+        merged += toStore.length
+      }
+    }
+
+    telegramLastCrawlAt = Date.now()
+    if (merged > 0) {
+      const meta = await getFreePoolMeta().catch(() => null)
+      if (meta) {
+        freeConfigState.poolCount = meta.total
+        freeConfigState.poolDisplaying = meta.displaying
+      }
+      sendFreePoolStatus()
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('free:pool-updated', {
+          count: meta?.total ?? 0,
+          displaying: meta?.displaying ?? 0,
+          refreshedAt: now,
+        })
+      }
+      console.log(`[Telegram] Merged ${merged} configs from @${TELEGRAM_CHANNEL}`)
+    }
+    return { merged, skipped: null }
+  } catch (err) {
+    console.error('[Telegram] Crawl failed:', err?.message ?? err)
+    return { merged: 0, skipped: 'error' }
+  } finally {
+    telegramCrawling = false
+  }
+}
+
+function startTelegramCrawler() {
+  telegramCrawlTimer = setInterval(() => {
+    crawlTelegramIntoPool().catch(() => {})
+  }, TELEGRAM_CHECK_INTERVAL_MS)
 }
 
 async function tryConnectFreeNode(record, directDomains, rescueOptions) {
@@ -776,12 +929,14 @@ async function runFreeConnect({ directDomains, rescueOptions, fetchFresh }) {
   const storedPool = await getAllFreePool().catch(() => [])
   if (storedPool.length > 0) {
     sendFreeProgress('در حال اتصال از مخزن سرورهای ذخیره‌شده...', 'connecting')
-    // Sort priority: cfray-sourced first (speed-tested), then REALITY, then by latency
+    // Sort priority: Telegram (curated) first, then cfray (speed-tested),
+    // then REALITY, then by latency.
     const REALITY_POOL_PROTOCOLS = new Set(['vless', 'vmess', 'trojan'])
+    const sourceRank = (s) => (s.source === 'telegram' ? 0 : s.source === 'cfray' ? 1 : 2)
     const sortedPool = [...storedPool].sort((a, b) => {
-      const aIsCfray = a.source === 'cfray'
-      const bIsCfray = b.source === 'cfray'
-      if (aIsCfray !== bIsCfray) return aIsCfray ? -1 : 1
+      const ra = sourceRank(a)
+      const rb = sourceRank(b)
+      if (ra !== rb) return ra - rb
       const aIsReality = REALITY_POOL_PROTOCOLS.has((a.protocol || '').toLowerCase()) && (a.security || '').toLowerCase() === 'reality'
       const bIsReality = REALITY_POOL_PROTOCOLS.has((b.protocol || '').toLowerCase()) && (b.security || '').toLowerCase() === 'reality'
       if (aIsReality !== bIsReality) return aIsReality ? -1 : 1
@@ -791,7 +946,7 @@ async function runFreeConnect({ directDomains, rescueOptions, fetchFresh }) {
       const record = {
         id: stored.id,
         uri: stored.uri,
-        node: { valid: true, host: stored.host, port: stored.port, name: stored.name, protocol: stored.protocol, transport: null, tls: false, security: null },
+        node: { valid: true, host: stored.host, port: stored.port, name: stored.name, protocol: stored.protocol, transport: stored.transport ?? null, tls: stored.tls ?? false, security: stored.security ?? null },
       }
       sendFreeProgress(`اتصال به ${stored.name} (${stored.latencyMs ?? '?'} ms)...`, 'connecting')
       const configPath = await tryConnectFreeNode(record, directDomains, rescueOptions)
@@ -4514,24 +4669,39 @@ function registerIpcHandlers() {
       const r = await net.fetch('http://127.0.0.1:9090/connections', {
         signal: AbortSignal.timeout(1000),
       })
-      if (!r.ok) return { up: 0, down: 0, connections: 0 }
+      if (!r.ok) { lastTrafficSample = null; return { up: 0, down: 0, connections: 0, upTotal: 0, downTotal: 0 } }
       const data = await r.json()
-      return {
-        up: data.uploadTotal ?? 0,
-        down: data.downloadTotal ?? 0,
-        connections: Array.isArray(data.connections) ? data.connections.length : 0,
+      const upTotal = data.uploadTotal ?? 0
+      const downTotal = data.downloadTotal ?? 0
+      const connections = Array.isArray(data.connections) ? data.connections.length : 0
+      const now = Date.now()
+
+      // /connections gives CUMULATIVE totals. Convert to live bytes/sec by diffing
+      // against the previous sample. A reset (totals went down) restarts the baseline.
+      let up = 0
+      let down = 0
+      if (lastTrafficSample && upTotal >= lastTrafficSample.upTotal && downTotal >= lastTrafficSample.downTotal) {
+        const seconds = Math.max(0.2, (now - lastTrafficSample.at) / 1000)
+        up = Math.max(0, Math.round((upTotal - lastTrafficSample.upTotal) / seconds))
+        down = Math.max(0, Math.round((downTotal - lastTrafficSample.downTotal) / seconds))
       }
+      lastTrafficSample = { upTotal, downTotal, at: now }
+
+      return { up, down, connections, upTotal, downTotal }
     } catch {
-      return { up: 0, down: 0, connections: 0 }
+      lastTrafficSample = null
+      return { up: 0, down: 0, connections: 0, upTotal: 0, downTotal: 0 }
     }
   })
 
   // ── Zeus Panel ──────────────────────────────────────────────────────────────
 
-  ipcMain.handle('zeus:build-sub-url', async (_event, { panelDomain, uuid }) => {
-    if (!panelDomain || !uuid) return { success: false, error: 'Domain and UUID required.' }
+  ipcMain.handle('zeus:build-sub-url', async (_event, { panelDomain, username, uuid }) => {
+    // The Zeus worker serves subscriptions by USERNAME (/sub/{username}), not uuid.
+    const subId = username || uuid
+    if (!panelDomain || !subId) return { success: false, error: 'Domain and username required.' }
     const domain = panelDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')
-    const url = `https://${domain}/sub/${uuid}`
+    const url = `https://${domain}/sub/${subId}`
     return { success: true, url }
   })
 }
@@ -5103,6 +5273,7 @@ app.whenReady().then(async () => {
     freeConfigState.poolLastRefreshedAt = meta.lastRefreshedAt
   }).catch(() => {})
   startFreeBackgroundRefresh()
+  startTelegramCrawler()
 
   // Auto CF IP scan in background (non-blocking)
   getCfAutoScanSettings(app.getPath('userData')).then(async (settings) => {
@@ -5146,6 +5317,7 @@ app.on(
 
     if (freeBackgroundTimer) { clearInterval(freeBackgroundTimer); freeBackgroundTimer = null }
     if (cfScanIntervalTimer) { clearInterval(cfScanIntervalTimer); cfScanIntervalTimer = null }
+    if (telegramCrawlTimer) { clearInterval(telegramCrawlTimer); telegramCrawlTimer = null }
 
     void Promise.allSettled([
       disposeProcessManager({

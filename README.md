@@ -10,7 +10,7 @@
 [![Electron](https://img.shields.io/badge/Electron-v42-47848F?logo=electron&logoColor=white)](https://electronjs.org)
 [![sing‑box](https://img.shields.io/badge/sing--box-v1.13-FF6B35)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.3.1-f2c055)](../../releases/latest)
+[![Version](https://img.shields.io/badge/Version-2.4.0-f2c055)](../../releases/latest)
 
 [**⬇ Download Latest Release**](../../releases/latest)
 
@@ -54,7 +54,7 @@ HamidsDeutsch Connect is a Windows desktop application that gets you past intern
 
 ## Installation
 
-1. Go to [**Releases**](../../releases/latest) and download `HamidsDeutsch-Connect-Setup-2.3.1-x64.exe`
+1. Go to [**Releases**](../../releases/latest) and download `HamidsDeutsch-Connect-Setup-2.4.0-x64.exe`
 2. Run the installer — no extra dependencies required
 3. The app launches automatically after installation
 
@@ -81,6 +81,8 @@ The app automatically swaps `workers.dev` server IPs with the fastest clean Clou
 Click **Free Server** on the home screen. The app fetches configs from public repositories, tests them, and connects to the fastest one automatically.
 
 On disconnect it finds a replacement without any action from you.
+
+**Telegram auto-source:** while you are connected through *any* method, the app quietly reads the latest ~200 posts of a curated Telegram configs channel through your active tunnel (Telegram is blocked in Iran, so this only works once you're already connected). Working configs it finds are added to your pool and shown first, so your next free connection uses fresh, hand-picked servers.
 
 </details>
 

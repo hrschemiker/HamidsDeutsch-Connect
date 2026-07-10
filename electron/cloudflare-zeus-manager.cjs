@@ -202,6 +202,10 @@ async function deployZeusPanel({ userDataPath }) {
       compatibility_date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
       bindings: [
         { type: 'd1', name: 'DB', database_id: dbId },
+        // Encrypted secret bindings — not visible in the dashboard. The worker's
+        // built-in Update/Restart features need these; secret_text keeps them safe.
+        { type: 'secret_text', name: 'CF_API_TOKEN', text: token },
+        { type: 'secret_text', name: 'CF_ACCOUNT_ID', text: accountId },
       ],
       observability: { enabled: false }, placement: {}, usage_model: 'standard',
       tags: [], tail_consumers: [], logpush: false,
@@ -317,6 +321,8 @@ async function updateZeusPanel({ userDataPath }) {
       compatibility_date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
       bindings: [
         { type: 'd1', name: 'DB', database_id: d.dbId },
+        { type: 'secret_text', name: 'CF_API_TOKEN', text: token },
+        { type: 'secret_text', name: 'CF_ACCOUNT_ID', text: accountId },
       ],
       observability: { enabled: false }, placement: {}, usage_model: 'standard',
       tags: [], tail_consumers: [], logpush: false,

@@ -125,7 +125,7 @@ async function githubRequest(method, path, token, body) {
     let data = null
     try { data = JSON.parse(text) } catch { data = null }
 
-    return { ok: response.ok, status: response.status, data }
+    return { ok: response.ok, status: response.status, data, headers: response.headers }
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw new Error('زمان درخواست GitHub API بیش از حد شد.')
@@ -139,10 +139,29 @@ async function githubRequest(method, path, token, body) {
 // ── Public API ───────────────────────────────────────────────────────────────
 
 async function validateToken(token) {
-  const { ok, data } = await githubRequest('GET', '/user', token)
+  const { ok, data, headers } = await githubRequest('GET', '/user', token)
   if (!ok) {
     throw new Error('توکن GitHub معتبر نیست یا دسترسی کافی ندارد.')
   }
+
+  // Classic tokens report their granted scopes in this header. Verify the two we
+  // need are present and tell the user exactly which one is missing.
+  const scopeHeader = headers?.get?.('x-oauth-scopes')
+  if (typeof scopeHeader === 'string') {
+    const scopes = scopeHeader.split(',').map((s) => s.trim()).filter(Boolean)
+    const hasRepo = scopes.includes('repo')
+    const hasCodespace = scopes.includes('codespace') || scopes.includes('codespaces')
+    const missing = []
+    if (!hasRepo) missing.push('repo')
+    if (!hasCodespace) missing.push('codespace')
+    if (missing.length > 0) {
+      throw new Error(
+        `توکن GitHub این دسترسی‌ها را ندارد: ${missing.join(', ')}. ` +
+        `یک توکن classic با هر دو اسکوپ «repo» و «codespace» بساز.`,
+      )
+    }
+  }
+
   return { username: data.login, name: data.name ?? data.login }
 }
 

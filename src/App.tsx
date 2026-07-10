@@ -67,8 +67,8 @@ const ThemeCtx = createContext<{ theme: Theme; setTheme: (t: Theme) => void }>({
 function ConfirmDialog({
   title,
   message,
-  confirmLabel = 'تأیید',
-  cancelLabel = 'انصراف',
+  confirmLabel,
+  cancelLabel,
   onConfirm,
   onCancel,
 }: {
@@ -79,14 +79,17 @@ function ConfirmDialog({
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const t = useT()
+  const okLabel = confirmLabel ?? t('btn.confirm')
+  const noLabel = cancelLabel ?? t('btn.cancel')
   return (
     <div className="confirm-overlay" onClick={onCancel}>
       <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
         <p className="confirm-title">{title}</p>
         <p className="confirm-message">{message}</p>
         <div className="confirm-actions">
-          <button className="confirm-cancel-btn" type="button" onClick={onCancel}>{cancelLabel}</button>
-          <button className="confirm-ok-btn" type="button" onClick={onConfirm}>{confirmLabel}</button>
+          <button className="confirm-cancel-btn" type="button" onClick={onCancel}>{noLabel}</button>
+          <button className="confirm-ok-btn" type="button" onClick={onConfirm}>{okLabel}</button>
         </div>
       </div>
     </div>
@@ -184,7 +187,7 @@ function App() {
   }
 
   const t = (key: string, fallback?: string): string =>
-    TR[lang]?.[key] ?? fallback ?? TR['fa'][key] ?? key
+    TR[lang]?.[key] ?? fallback ?? TR['en']?.[key] ?? TR['fa'][key] ?? key
 
   const navigationItems: NavigationItem[] = [
     { id: 'home', label: t('nav.home'), icon: '⌂' },

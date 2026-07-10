@@ -48,10 +48,21 @@ async function readPool() {
   }
 }
 
+function sourceRank(s) {
+  if (s.source === 'telegram') return 0
+  if (s.source === 'cfray') return 1
+  return 2
+}
+
 async function writePool(servers, meta) {
   await ensureDir()
   const sorted = [...servers]
-    .sort((a, b) => (a.latencyMs ?? 999999) - (b.latencyMs ?? 999999))
+    .sort((a, b) => {
+      const ra = sourceRank(a)
+      const rb = sourceRank(b)
+      if (ra !== rb) return ra - rb
+      return (a.latencyMs ?? 999999) - (b.latencyMs ?? 999999)
+    })
     .slice(0, MAX_POOL_SIZE)
 
   const current = await readPool()
