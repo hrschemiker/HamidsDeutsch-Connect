@@ -1034,12 +1034,11 @@ function buildTlsConfig(
   const fingerprint =
     params.get('fp') || 'chrome'  // default to Chrome uTLS for all TLS outbounds
 
-  // Skip uTLS for REALITY (it has its own handshake mechanism)
-  if (security !== 'reality') {
-    tls.utls = {
-      enabled: true,
-      fingerprint,
-    }
+  // uTLS is REQUIRED for all TLS/REALITY outbounds in sing-box 1.13 — the REALITY
+  // client refuses to initialize without it ("uTLS is required by reality client").
+  tls.utls = {
+    enabled: true,
+    fingerprint,
   }
 
   // ECH — hides SNI from DPI; sing-box fetches ECH config via DNS when not provided
@@ -1400,8 +1399,11 @@ function buildWarpConfig(warpOutbound, directDomains, localPort = 2080, setSyste
         set_system_proxy: setSystemProxy,
       },
     ],
-    outbounds: [
+    // sing-box 1.13: WireGuard lives in `endpoints`, not `outbounds`.
+    endpoints: [
       warpOutbound,
+    ],
+    outbounds: [
       { type: 'direct', tag: 'direct' },
     ],
     route: {

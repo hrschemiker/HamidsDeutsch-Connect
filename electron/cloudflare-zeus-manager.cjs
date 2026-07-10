@@ -13,7 +13,13 @@ const API_BASE = 'https://api.cloudflare.com/client/v4'
 const ZEUS_JS_URL = 'https://raw.githubusercontent.com/IR-NETLIFY/zeus/main/zeus.js'
 const SCOPES = [
   'account:read', 'user:read', 'workers:write', 'workers_kv:write',
-  'workers_routes:write', 'workers_scripts:write', 'offline_access',
+  'workers_routes:write', 'workers_scripts:write',
+  // d1:write is REQUIRED to create/manage the D1 database Zeus needs. Without it
+  // Cloudflare rejects the D1 API call with "Authentication error" (code 10000).
+  // (This is a valid wrangler OAuth scope; removing it earlier was the mistake —
+  // the old 404 was actually caused by the wrong redirect port.)
+  'd1:write',
+  'offline_access',
 ]
 
 let progressListener = null

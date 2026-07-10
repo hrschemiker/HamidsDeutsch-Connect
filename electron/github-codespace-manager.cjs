@@ -242,7 +242,17 @@ async function attemptConnect(userDataPath, settings, directDomains, forceNew) {
     await pushDevcontainerFiles(token, username, uuid)
 
     emitProgress('create', 'در حال ساخت Codespace (۲–۴ دقیقه)...')
-    const created = await createCodespace(token, username)
+    let created
+    try {
+      created = await createCodespace(token, username)
+    } catch (err) {
+      // GitHub can start provisioning but not respond in time. Before failing,
+      // check whether a codespace was actually created and adopt the newest one.
+      const list = await listCodespacesForRepo(token, username).catch(() => [])
+      const usable = list.find((cs) => !TERMINAL_STATES.has(cs.state))
+      if (!usable) throw err
+      created = usable
+    }
     codespaceName = created.name
 
     await saveCodespaceSettings(userDataPath, {

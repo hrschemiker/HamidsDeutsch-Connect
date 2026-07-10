@@ -106,10 +106,14 @@ function buildWarpSingboxOutbound(warpAccount) {
     peer.reserved = warpAccount.reserved
   }
 
+  // sing-box 1.13 removed the `wireguard` OUTBOUND — WireGuard is now an
+  // ENDPOINT, and the local interface addresses field is `address` (not the
+  // old `local_address`). This object is placed in the config's `endpoints`
+  // array; its `proxy` tag is still routable like any outbound.
   return {
     type: 'wireguard',
     tag: 'proxy',
-    local_address: warpAccount.localAddresses,
+    address: warpAccount.localAddresses,
     private_key: warpAccount.privateKey,
     peers: [peer],
     mtu: 1280,

@@ -194,6 +194,7 @@ function App() {
     { id: 'servers', label: t('nav.servers'), icon: '◉' },
     { id: 'subscriptions', label: t('nav.subscriptions'), icon: '↧' },
     { id: 'bpb', label: t('nav.bpb'), icon: '◈' },
+    { id: 'zeus', label: t('nav.zeus'), icon: '⚡' },
     { id: 'direct-sites', label: t('nav.directSites'), icon: '↗' },
     { id: 'rescue', label: t('nav.rescue'), icon: '✦' },
     { id: 'tools', label: t('nav.tools'), icon: '⬡' },
@@ -271,6 +272,9 @@ function App() {
   const [warpConnecting, setWarpConnecting] = useState(false)
   const [warpError, setWarpError] = useState<string | null>(null)
   const [zeusConnecting, setZeusConnecting] = useState(false)
+  // Home-screen connect/stop tracking for BPB (separate process) and Zeus.
+  const [bpbConnected, setBpbConnected] = useState(false)
+  const [zeusConnected, setZeusConnected] = useState(false)
 
   // Bandwidth monitor
   const [_traffic, setTraffic] = useState<{ up: number; down: number } | null>(null)
@@ -503,6 +507,27 @@ function App() {
     }).catch(() => {})
   }, [])
 
+  // Poll BPB status — BPB runs as a separate process, so its connected state is
+  // not reflected in the main engine status. The home BPB button uses this.
+  useEffect(() => {
+    let alive = true
+    const poll = async () => {
+      try {
+        const s = await window.hamidsDeutsch.bpb.getStatus()
+        if (alive) setBpbConnected(Boolean(s?.running || s?.connected))
+      } catch { /* ignore */ }
+    }
+    void poll()
+    const id = setInterval(poll, 3000)
+    return () => { alive = false; clearInterval(id) }
+  }, [])
+
+  // Zeus connects through the main engine — clear its flag whenever the engine
+  // is not running (covers failed connects, manual stop, and method switches).
+  useEffect(() => {
+    if (!engineProcess.status.running) setZeusConnected(false)
+  }, [engineProcess.status.running])
+
   useEffect(() => {
     void window.hamidsDeutsch.free.getPool().then((r) => {
       if (r.success) {
@@ -609,7 +634,11 @@ function App() {
     if (zeusConnecting) return
     const zeusStatus = await window.hamidsDeutsch.zeus.getStatus()
     if (!zeusStatus.deployed || !zeusStatus.subUrl) {
-      setActivePage('zeus')
+      // Not set up yet — the home button only connects/stops; setup lives in the
+      // Zeus menu. Point the user there instead of navigating for them.
+      setToastMessage(t('home.zeus.needsSetup'))
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      toastTimerRef.current = setTimeout(() => setToastMessage(null), 4000)
       return
     }
     // Zeus is deployed — use its subscription URL directly
@@ -624,9 +653,12 @@ function App() {
     const freshList = await window.hamidsDeutsch.subscriptions.list()
     const zeusSub = freshList.find((s) => s.name === 'Zeus Panel')
     if (!zeusSub) {
-      setActivePage('zeus')
+      setToastMessage(t('home.zeus.needsSetup'))
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      toastTimerRef.current = setTimeout(() => setToastMessage(null), 4000)
       return
     }
+    setZeusConnected(true)
     setZeusConnecting(true)
     setConnectionActionError(null)
     ipVerification.reset()
@@ -667,8 +699,47 @@ function App() {
       }
     } catch {
       setZeusConnecting(false)
+      setZeusConnected(false)
       setConnectionActionError('خطا در اتصال به سرور Zeus.')
     }
+  }
+
+  function showSetupToast(key: string) {
+    setToastMessage(t(key))
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 4000)
+  }
+
+  // Home Zeus button: connect or stop ONLY — never navigates. Setup lives in menu.
+  async function handleHomeZeus() {
+    if (zeusConnected || (engineProcess.status.running && zeusConnecting)) {
+      await stopLocalProxy()
+      setZeusConnected(false)
+      return
+    }
+    await connectZeus()
+  }
+
+  // Home BPB button: connect or stop ONLY — never navigates. Setup lives in menu.
+  async function handleHomeBpb() {
+    if (bpbConnected) {
+      intentionalDisconnectRef.current = true
+      await window.hamidsDeutsch.bpb.disconnect().catch(() => {})
+      setBpbConnected(false)
+      return
+    }
+    if (!bpbConfigured) {
+      showSetupToast('home.bpb.needsSetup')
+      return
+    }
+    const r = await window.hamidsDeutsch.bpb.getProfile().catch(() => null)
+    const panelUrl = r?.profile?.panelUrl?.trim()
+    if (!panelUrl) {
+      showSetupToast('home.bpb.needsSetup')
+      return
+    }
+    setLastConnectionType('bpb')
+    await window.hamidsDeutsch.bpb.quickConnect({ panelUrl, directDomains: directDomains.domains })
   }
 
   async function connectViaCodespace() {
@@ -1951,7 +2022,10 @@ function App() {
               geoBlockTrigger={geoBlockTrigger}
               dataLoading={serverNodes.loading || subscriptions.loading}
               trafficSpeed={trafficSpeed}
-              onZeusConnect={() => void connectZeus()}
+              onZeusConnect={() => void handleHomeZeus()}
+              onBpbHome={() => void handleHomeBpb()}
+              bpbConnected={bpbConnected}
+              zeusConnected={zeusConnected}
               onNavigateToTools={() => setActivePage('tools')}
               zeusConfigured={subscriptions.subscriptions.some((s) => s.name === 'Zeus Panel')}
               zeusConnecting={zeusConnecting}
@@ -2446,7 +2520,10 @@ type HomePageProps = {
   onOpenSettings: () => void
   onOpenBpb: () => void
   onBpbQuickConnect: () => Promise<void>
+  onBpbHome: () => void
   bpbConfigured: boolean
+  bpbConnected: boolean
+  zeusConnected: boolean
   warpConnecting: boolean
   warpError: string | null
   onWarpConnect: () => void
@@ -2513,9 +2590,12 @@ function HomePage({
   codespaceHost,
   onCodespaceConnect,
   onCodespaceDisconnect,
-  onOpenBpb,
+  onOpenBpb: _onOpenBpb,
   onBpbQuickConnect: _onBpbQuickConnect,
+  onBpbHome,
   bpbConfigured,
+  bpbConnected,
+  zeusConnected,
   warpConnecting,
   warpError: _warpError,
   onWarpConnect,
@@ -2863,18 +2943,18 @@ function HomePage({
 
             {/* ── BPB Subscription — Gold ── */}
             <button
-              className={`method-btn method-btn-gold${activeMethod === 'bpb' ? ' method-btn-active' : ''}`}
+              className={`method-btn method-btn-gold${bpbConnected ? ' method-btn-active' : ''}`}
               type="button"
-              onClick={() => onOpenBpb()}
+              onClick={() => onBpbHome()}
             >
               <span className="method-btn-icon">
-                {activeMethod === 'bpb' ? '■' : '◈'}
+                {bpbConnected ? '■' : '◈'}
               </span>
               <span className="method-btn-label">
-                <strong>{activeMethod === 'bpb' ? 'BPB متصل است' : (bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup'))}</strong>
+                <strong>{bpbConnected ? t('btn.disconnect') : (bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup'))}</strong>
                 <small>BPB Panel</small>
               </span>
-              {activeMethod !== 'bpb' && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
+              {!bpbConnected && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
             </button>
 
             {/* ── Free Subscription — Teal ── */}
@@ -2921,19 +3001,19 @@ function HomePage({
 
             {/* ── Zeus Panel — Indigo ── */}
             <button
-              className={`method-btn method-btn-zeus${zeusConnecting ? ' method-btn-active' : ''}`}
+              className={`method-btn method-btn-zeus${(zeusConnecting || zeusConnected) ? ' method-btn-active' : ''}`}
               type="button"
               onClick={onZeusConnect}
               disabled={zeusConnecting}
             >
               <span className="method-btn-icon">
-                {zeusConnecting ? <span className="connection-stage-spinner">◌</span> : zeusConfigured ? '⬡' : '＋'}
+                {zeusConnecting ? <span className="connection-stage-spinner">◌</span> : zeusConnected ? '■' : '⬡'}
               </span>
               <span className="method-btn-label">
-                <strong>{zeusConnecting ? '■ در حال اتصال' : zeusConfigured ? 'Zeus Panel' : t('home.zeus.setup')}</strong>
-                <small>{zeusConfigured ? 'اتصال سریع‌ترین سرور' : t('home.zeus.goTools')}</small>
+                <strong>{zeusConnecting ? '■ در حال اتصال' : zeusConnected ? t('btn.disconnect') : 'Zeus Panel'}</strong>
+                <small>{zeusConnected ? t('home.zeus.connected') : zeusConfigured ? 'اتصال سریع‌ترین سرور' : t('home.zeus.goTools')}</small>
               </span>
-              {!zeusConnecting && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
+              {!zeusConnecting && !zeusConnected && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
             </button>
           </div>
 

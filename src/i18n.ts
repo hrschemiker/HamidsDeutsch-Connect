@@ -78,7 +78,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'هسته برنامه',
-    'version': 'نسخه ۲.۴.۰',
+    'version': 'نسخه ۲.۴.۱',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'برای TUN دسترسی Administrator لازم است',
@@ -618,10 +618,14 @@ export const TR: Record<Lang, Record<string, string>> = {
     // ── Home Zeus button ──────────────────────────────────────────────────────
     'home.zeus.setup': 'راه‌اندازی پنل Zeus',
     'home.zeus.goTools': 'برو و راه‌اندازی کن',
+    'home.zeus.needsSetup': 'ابتدا پنل Zeus را از منوی «پنل Zeus» راه‌اندازی کن.',
+    'home.zeus.connected': 'Zeus متصل است',
+    'home.bpb.needsSetup': 'ابتدا پنل BPB را از منوی «اتصال BPB» راه‌اندازی کن.',
     'home.freeTag': 'رایگان',
 
     // ── Tools page ────────────────────────────────────────────────────────────
     'nav.tools': 'ابزارها',
+    'nav.zeus': 'پنل Zeus',
     'page.tools': 'ابزارهای پیشرفته',
     'tools.cfscanner.title': 'اسکنر IP کلودفلر',
     'tools.cfscanner.kicker': 'CF IP Scanner',
@@ -738,7 +742,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'Engine Core',
-    'version': 'Version 2.4.0',
+    'version': 'Version 2.4.1',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'Administrator access required for TUN',
@@ -1229,6 +1233,9 @@ export const TR: Record<Lang, Record<string, string>> = {
     // ── Home Zeus button ──────────────────────────────────────────────────────
     'home.zeus.setup': 'Setup Zeus Panel',
     'home.zeus.goTools': 'Go and Setup',
+    'home.zeus.needsSetup': 'Set up the Zeus panel first from the “Zeus Panel” menu.',
+    'home.zeus.connected': 'Zeus connected',
+    'home.bpb.needsSetup': 'Set up the BPB panel first from the “BPB” menu.',
     'home.freeTag': 'Free',
 
     // ── History date groups ──────────────────────────────────────────────────
@@ -1282,6 +1289,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Tools page ────────────────────────────────────────────────────────────
     'nav.tools': 'Tools',
+    'nav.zeus': 'Zeus Panel',
     'page.tools': 'Advanced Tools',
     'tools.cfscanner.title': 'Cloudflare IP Scanner',
     'tools.cfscanner.kicker': 'CF IP Scanner',

@@ -2,7 +2,10 @@ const { net } = require('electron')
 
 const GITHUB_API = 'https://api.github.com'
 const PROXY_REPO_NAME = 'hd-proxy-node'
-const API_TIMEOUT_MS = 30000
+const API_TIMEOUT_MS = 45000
+// Creating/starting a Codespace can block for a while before GitHub responds,
+// especially over a slow or filtered path — give those calls a longer budget.
+const LONG_API_TIMEOUT_MS = 120000
 
 // ── Embedded devcontainer file contents ─────────────────────────────────────
 
@@ -103,9 +106,9 @@ function buildConfigJson(uuid) {
   }, null, 2)
 }
 
-async function githubRequest(method, path, token, body) {
+async function githubRequest(method, path, token, body, timeoutMs = API_TIMEOUT_MS) {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const response = await net.fetch(`${GITHUB_API}${path}`, {
@@ -231,6 +234,7 @@ async function createCodespace(token, owner) {
     `/repos/${owner}/${PROXY_REPO_NAME}/codespaces`,
     token,
     {},
+    LONG_API_TIMEOUT_MS,
   )
 
   if (!ok) {
@@ -247,7 +251,7 @@ async function getCodespace(token, name) {
 }
 
 async function startCodespace(token, name) {
-  const { ok, data } = await githubRequest('POST', `/user/codespaces/${name}/start`, token)
+  const { ok, data } = await githubRequest('POST', `/user/codespaces/${name}/start`, token, undefined, LONG_API_TIMEOUT_MS)
   if (!ok) {
     throw new Error(data?.message ?? 'راه‌اندازی مجدد Codespace ناموفق بود.')
   }

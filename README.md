@@ -10,7 +10,7 @@
 [![Electron](https://img.shields.io/badge/Electron-v42-47848F?logo=electron&logoColor=white)](https://electronjs.org)
 [![sing‑box](https://img.shields.io/badge/sing--box-v1.13-FF6B35)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.4.0-f2c055)](../../releases/latest)
+[![Version](https://img.shields.io/badge/Version-2.4.1-f2c055)](../../releases/latest)
 
 [**⬇ Download Latest Release**](../../releases/latest)
 
@@ -54,7 +54,7 @@ HamidsDeutsch Connect is a Windows desktop application that gets you past intern
 
 ## Installation
 
-1. Go to [**Releases**](../../releases/latest) and download `HamidsDeutsch-Connect-Setup-2.4.0-x64.exe`
+1. Go to [**Releases**](../../releases/latest) and download `HamidsDeutsch-Connect-Setup-2.4.1-x64.exe`
 2. Run the installer — no extra dependencies required
 3. The app launches automatically after installation
 
@@ -93,11 +93,11 @@ BPB is a free VLESS/Trojan proxy panel that runs on Cloudflare Workers.
 
 **Prerequisite:** A free [Cloudflare](https://cloudflare.com) account
 
-1. Click **BPB Panel** in the app
+1. Open the **BPB** menu item (left sidebar) — this is where setup and settings live
 2. Click **Login to Cloudflare** — a browser window opens
 3. Authorize the app in Cloudflare
 4. Click **Deploy Panel** — the app creates the Worker automatically
-5. Click **Connect** when deployment finishes
+5. Back on the **home screen**, the **BPB Panel** button now connects (and stops) directly — no need to reopen the menu
 
 </details>
 
@@ -108,11 +108,11 @@ Zeus is a free VLESS panel that runs on Cloudflare Workers. The app handles the 
 
 **Prerequisite:** A free [Cloudflare](https://cloudflare.com) account
 
-1. Click **Zeus Panel** on the home screen
+1. Open the **Zeus Panel** menu item (left sidebar) — this is where setup and settings live
 2. Click **Login to Cloudflare & Deploy Panel**
 3. Log into Cloudflare in the browser that opens
 4. The app automatically creates a D1 database, deploys the Worker, creates your account, and generates a subscription URL
-5. Click **Connect to Zeus** when ready
+5. Back on the **home screen**, the **Zeus Panel** button now connects (and stops) directly
 
 </details>
 
