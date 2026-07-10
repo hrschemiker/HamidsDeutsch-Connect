@@ -1409,6 +1409,7 @@ function buildWarpConfig(warpOutbound, directDomains, localPort = 2080, setSyste
       final: 'proxy',
       auto_detect_interface: true,
     },
+    experimental: { clash_api: { external_controller: '127.0.0.1:9090' } },
   }
 }
 

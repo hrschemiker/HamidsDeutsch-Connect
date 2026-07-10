@@ -171,10 +171,11 @@ function extractCookie(setCookieHeader) {
 async function deployZeusPanel({ userDataPath }) {
   if (running) throw new Error('یک عملیات در حال اجراست.')
   running = true
+  let token, accountId, dbId
   try {
     const account = await ensureToken(userDataPath)
-    const token = account.token.access_token
-    const accountId = account.accountId
+    token = account.token.access_token
+    accountId = account.accountId
 
     const workerName = `zeus-hd-${randomText(8).toLowerCase()}`
     const dbName = `zeus-db-${randomText(8).toLowerCase()}`
@@ -192,7 +193,7 @@ async function deployZeusPanel({ userDataPath }) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: dbName }),
     })
-    const dbId = dbResult.result.uuid
+    dbId = dbResult.result.uuid
 
     emit('deploy', 'در حال انتشار پنل Zeus روی Cloudflare Workers...')
     const form = new FormData()
@@ -201,8 +202,6 @@ async function deployZeusPanel({ userDataPath }) {
       compatibility_date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
       bindings: [
         { type: 'd1', name: 'DB', database_id: dbId },
-        { type: 'plain_text', name: 'CF_API_TOKEN', text: token },
-        { type: 'plain_text', name: 'CF_ACCOUNT_ID', text: accountId },
       ],
       observability: { enabled: false }, placement: {}, usage_model: 'standard',
       tags: [], tail_consumers: [], logpush: false,
@@ -224,21 +223,35 @@ async function deployZeusPanel({ userDataPath }) {
     const workerUrl = `https://${workerDomain}`
 
     emit('init', 'در حال راه‌اندازی پنل (چند ثانیه صبر کن)...')
-    await sleep(5000)
 
-    // Set panel password
+    // Wait for Worker to be ready using exponential backoff
     let setupOk = false
-    for (let attempt = 0; attempt < 5; attempt++) {
+    let passwordAlreadySet = false
+    for (let attempt = 0; attempt < 7; attempt++) {
+      const delay = Math.min(2000 * Math.pow(1.5, attempt), 20000)
+      await sleep(delay)
       try {
         const pwResp = await fetch(`${workerUrl}/api/setup-password`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ password: panelPassword }),
         })
-        if (pwResp.ok || pwResp.status === 409) { setupOk = true; break }
+        if (pwResp.ok) { setupOk = true; break }
+        if (pwResp.status === 409) {
+          // 409 means password already set — only safe if we set it in this run
+          // (panel freshly deployed, so any 409 means our request arrived twice)
+          passwordAlreadySet = true; setupOk = true; break
+        }
       } catch {}
-      await sleep(3000)
     }
     if (!setupOk) throw new Error('راه‌اندازی رمز پنل Zeus ناموفق بود. دوباره تلاش کن.')
+    if (passwordAlreadySet) {
+      // Validate password actually works before continuing
+      const check = await fetch(`${workerUrl}/api/login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: panelPassword }),
+      })
+      if (!check.ok) throw new Error('پنل Zeus از قبل وجود داشت و رمز ناسازگار است. پنل را دوباره بساز.')
+    }
 
     // Login to panel to get session cookie
     const loginResp = await fetch(`${workerUrl}/api/login`, {
@@ -273,6 +286,12 @@ async function deployZeusPanel({ userDataPath }) {
     emit('ready', 'پنل Zeus آماده است!', { workerUrl, subUrl })
     return { success: true, workerUrl, subUrl, username, error: null }
   } catch (err) {
+    // Best-effort cleanup: delete D1 database if we created it but deploy failed
+    if (typeof dbId !== 'undefined' && typeof token !== 'undefined' && typeof accountId !== 'undefined') {
+      try {
+        await cfApi(token, `/accounts/${accountId}/d1/database/${dbId}`, { method: 'DELETE' })
+      } catch {}
+    }
     emit('error', err.message)
     return { success: false, error: err.message }
   } finally { running = false }
@@ -298,8 +317,6 @@ async function updateZeusPanel({ userDataPath }) {
       compatibility_date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
       bindings: [
         { type: 'd1', name: 'DB', database_id: d.dbId },
-        { type: 'plain_text', name: 'CF_API_TOKEN', text: token },
-        { type: 'plain_text', name: 'CF_ACCOUNT_ID', text: accountId },
       ],
       observability: { enabled: false }, placement: {}, usage_model: 'standard',
       tags: [], tail_consumers: [], logpush: false,

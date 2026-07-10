@@ -1,6 +1,7 @@
 import {
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react'
 
@@ -43,25 +44,32 @@ export function ZeusPage({ onZeusConnect }: Props) {
     type: 'success' | 'error' | 'info'
     text: string
   } | null>(null)
+  const isMounted = useRef(true)
 
   useEffect(() => {
+    isMounted.current = true
     const unsubscribe = window.hamidsDeutsch.zeus.onProgress((p) => {
-      setProgressText(p.message)
+      if (isMounted.current) setProgressText(p.message)
     })
     void initialize()
-    return unsubscribe
+    return () => {
+      isMounted.current = false
+      unsubscribe()
+    }
   }, [])
 
   async function initialize() {
+    if (!isMounted.current) return
     setLoading(true)
     try {
       const s = await window.hamidsDeutsch.zeus.getStatus()
+      if (!isMounted.current) return
       setStatus(s)
       if (s.deployed) {
         setMessage({ type: 'success', text: t('zeus.msg.panelReady') })
       }
     } finally {
-      setLoading(false)
+      if (isMounted.current) setLoading(false)
     }
   }
 
@@ -198,7 +206,7 @@ export function ZeusPage({ onZeusConnect }: Props) {
             <button
               className="bpb-action-btn bpb-action-btn--primary zeus-connect-btn"
               onClick={onZeusConnect}
-              disabled={busy}
+              disabled={busy || !onZeusConnect}
             >
               ⚡ {t('zeus.connect')}
             </button>

@@ -1885,5 +1885,5 @@ export const _UNUSED_DE_PLACEHOLDER = {
 export function useT() {
   const { lang } = useContext(LangCtx)
   return (key: string, fallback?: string): string =>
-    TR[lang]?.[key] ?? fallback ?? TR['fa'][key] ?? key
+    TR[lang]?.[key] ?? fallback ?? TR['en']?.[key] ?? TR['fa'][key] ?? key
 }

@@ -109,7 +109,7 @@ function buildWarpSingboxOutbound(warpAccount) {
   return {
     type: 'wireguard',
     tag: 'proxy',
-    address: warpAccount.localAddresses,
+    local_address: warpAccount.localAddresses,
     private_key: warpAccount.privateKey,
     peers: [peer],
     mtu: 1280,

@@ -234,6 +234,9 @@ async function deployBpbPanel({ userDataPath }) {
 }
 
 async function updateBpbPanel({ userDataPath }) {
+  if (running) throw new Error('یک عملیات در حال اجراست.')
+  running = true
+  try {
   const state = await ensureToken(userDataPath)
   if (!state.deployment?.projectName) throw new Error('پنل BPB ساخته‌شده‌ای ثبت نشده است.')
   const workerResponse = await fetch(WORKER_URL, { redirect: 'follow' })
@@ -260,6 +263,9 @@ async function updateBpbPanel({ userDataPath }) {
   d.updatedAt = new Date().toISOString()
   await saveState(userDataPath, state)
   return { success:true, panelUrl:d.panelUrl, error:null }
+  } finally {
+    running = false
+  }
 }
 
 async function getCloudflareBpbStatus({ userDataPath }) {

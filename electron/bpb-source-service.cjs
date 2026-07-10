@@ -206,23 +206,11 @@ function sanitizeConfig(
     },
   ]
 
-  if (
-    config.experimental &&
-    typeof config.experimental ===
-      'object'
-  ) {
-    delete config
-      .experimental
-      .clash_api
-
-    if (
-      Object.keys(
-        config.experimental,
-      ).length === 0
-    ) {
-      delete config.experimental
-    }
+  // Always ensure clash_api is present for traffic monitoring
+  if (!config.experimental || typeof config.experimental !== 'object') {
+    config.experimental = {}
   }
+  config.experimental.clash_api = { external_controller: '127.0.0.1:9090' }
 
   if (
     config.route &&

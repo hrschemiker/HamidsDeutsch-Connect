@@ -433,16 +433,6 @@ function parseAllProtocols(content) {
   return parseSubscriptionNodeRecords(content)
 }
 
-async function testFreeNodes(records) {
-  const { testServerBatch } = require('./server-latency.cjs')
-  const inputs = records
-    .filter((r) => r.node.valid && r.node.host && r.node.port)
-    .map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
-  if (inputs.length === 0) return []
-  const result = await testServerBatch(inputs)
-  return result.results
-}
-
 async function testProxyConnectivity(port = 2080, timeoutMs = 10000) {
   // Full-stack check: CONNECT tunnel + TLS handshake + actual HTTP response bytes.
   // A server that only accepts CONNECT but can't relay TLS traffic will fail here.
@@ -606,7 +596,7 @@ async function backgroundRefreshFreePool() {
       const now = new Date().toISOString()
 
       for (let i = 0; i < unique.length; i += CHUNK) {
-        if (freeConfigState.userDisconnected === false && freePoolRefreshing === false) break
+        if (freeConfigState.userDisconnected === true || freePoolRefreshing === false) break
         const chunk = unique.slice(i, i + CHUNK)
         const inputs = chunk.map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
         const result = await testServerBatch(inputs)
@@ -1485,8 +1475,8 @@ async function connectBpbAutomatically({
           updatedAt: null,
         }
 
-  const wizardStatus =
-    await getWizardStatus()
+  const bpbStatus =
+    await getCloudflareBpbStatus({ userDataPath: app.getPath('userData') }).catch(() => ({ panelUrl: null }))
 
   const effectivePanelUrl =
     typeof panelUrl ===
@@ -1495,7 +1485,7 @@ async function connectBpbAutomatically({
       ? panelUrl.trim()
       : (
           currentProfile.panelUrl ||
-          wizardStatus.panelUrl ||
+          bpbStatus.panelUrl ||
           ''
         )
 
@@ -1993,8 +1983,8 @@ function registerIpcHandlers() {
             // Restart sing-box with the new config
             const enginePath = getEnginePath()
             const userDataPath = app.getPath('userData')
-            await stopLocalProxy({ userDataPath }).catch(() => {})
             await backupWindowsProxyState(userDataPath).catch(() => {})
+            await stopLocalProxy({ userDataPath }).catch(() => {})
             await startLocalProxy({ enginePath, userDataPath, configPath: newConfigResult.configPath })
             activeConnectionParams = { ...activeConnectionParams, directDomains: newDomains }
             if (mainWindow && !mainWindow.isDestroyed()) {
@@ -2030,11 +2020,14 @@ function registerIpcHandlers() {
         }
 
         // Use PowerShell Compress-Archive to create ZIP
+        // Pass paths as single-quoted arguments to avoid injection via special characters
+        const safeSrc = extensionPath.replace(/'/g, "''")
+        const safeDst = filePath.replace(/'/g, "''")
         await execFileAsync('powershell.exe', [
           '-NoProfile',
           '-NonInteractive',
           '-Command',
-          `Compress-Archive -Path "${extensionPath}\\*" -DestinationPath "${filePath}" -Force`,
+          `& { param($src, $dst) Compress-Archive -Path (Join-Path $src '*') -DestinationPath $dst -Force } -src '${safeSrc}' -dst '${safeDst}'`,
         ])
 
         return { success: true, path: filePath, error: null }
@@ -5150,6 +5143,9 @@ app.on(
 
     event.preventDefault()
     isQuitting = true
+
+    if (freeBackgroundTimer) { clearInterval(freeBackgroundTimer); freeBackgroundTimer = null }
+    if (cfScanIntervalTimer) { clearInterval(cfScanIntervalTimer); cfScanIntervalTimer = null }
 
     void Promise.allSettled([
       disposeProcessManager({

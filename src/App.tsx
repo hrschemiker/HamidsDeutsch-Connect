@@ -612,14 +612,14 @@ function App() {
     // Zeus is deployed — use its subscription URL directly
     // First ensure it's in our subscriptions list
     const subUrl = zeusStatus.subUrl
-    const existingSub = subscriptions.subscriptions.find((s) => s.name.startsWith('Zeus Panel'))
+    const existingSub = (await window.hamidsDeutsch.subscriptions.list()).find((s) => s.name === 'Zeus Panel')
     if (!existingSub) {
-      // Add the Zeus subscription so we can use it
       await window.hamidsDeutsch.subscriptions.add({ url: subUrl, name: 'Zeus Panel' })
       await subscriptions.refresh()
     }
-    // Find subscription and connect via race-dial
-    const zeusSub = subscriptions.subscriptions.find((s) => s.name.startsWith('Zeus Panel'))
+    // Use fresh list to avoid stale React state after refresh
+    const freshList = await window.hamidsDeutsch.subscriptions.list()
+    const zeusSub = freshList.find((s) => s.name === 'Zeus Panel')
     if (!zeusSub) {
       setActivePage('zeus')
       return
@@ -1950,7 +1950,7 @@ function App() {
               trafficSpeed={trafficSpeed}
               onZeusConnect={() => void connectZeus()}
               onNavigateToTools={() => setActivePage('tools')}
-              zeusConfigured={subscriptions.subscriptions.some((s) => s.name.startsWith('Zeus Panel'))}
+              zeusConfigured={subscriptions.subscriptions.some((s) => s.name === 'Zeus Panel')}
               zeusConnecting={zeusConnecting}
               onShowQr={async (compositeId: string) => {
                 const parts = compositeId.split('::')
