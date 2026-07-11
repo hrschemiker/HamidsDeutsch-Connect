@@ -185,6 +185,13 @@ async function getAllPool() {
   return pool.servers
 }
 
+/** Permanently remove one server from the pool by id. Returns the new list. */
+async function removeServer(id) {
+  const pool = await readPool()
+  const remaining = pool.servers.filter((s) => s.id !== id)
+  return writePool(remaining, pool.meta)
+}
+
 module.exports = {
   mergeServers,
   revalidatePool,
@@ -193,6 +200,7 @@ module.exports = {
   getPool,
   getPoolMeta,
   getAllPool,
+  removeServer,
   PING_THRESHOLD_MS,
   MIN_PING_MS,
 }

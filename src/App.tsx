@@ -51,6 +51,8 @@ type FreePoolServer = {
   failCount: number
   lastTestedAt: string | null
   addedAt: string
+  security?: string | null
+  source?: string | null
 }
 
 // ── Theme ────────────────────────────────────────────────────────────────────
@@ -1294,6 +1296,8 @@ function App() {
     setSubConnectingStep('در حال قطع اتصال قبلی...')
     setLastConnectionType('subscription')
 
+    // Stop whatever is currently connected — including the separate BPB process.
+    await window.hamidsDeutsch.bpb.disconnect().catch(() => {})
     if (engineProcess.status.running) {
       await engineProcess.stop()
     }
@@ -2164,6 +2168,14 @@ function App() {
                 }
               }}
               onConnectSubNode={(node) => void prepareAndStart(node)}
+              onStopConnection={() => void stopLocalProxy()}
+              onRemoveFreeNode={async (nodeId) => {
+                const r = await window.hamidsDeutsch.free.removeNode(nodeId)
+                if (r.success) {
+                  setFreePool(r.servers)
+                  if (r.meta) setFreePoolMeta({ total: r.meta.total, displaying: r.meta.displaying, lastRefreshedAt: r.meta.lastRefreshedAt, poolRefreshing: false })
+                }
+              }}
               subConnectingNodeId={subConnectingNodeId}
               subConnectingStep={subConnectingStep}
               onAddManualNode={async (uri) => {
@@ -4166,6 +4178,8 @@ function ServersPage({
   onConnectFreeNode,
   onRefreshFreePool,
   onConnectSubNode,
+  onStopConnection,
+  onRemoveFreeNode,
   subConnectingNodeId,
   subConnectingStep,
   onAddManualNode,
@@ -4213,6 +4227,8 @@ function ServersPage({
   onConnectFreeNode: (server: FreePoolServer) => void
   onRefreshFreePool: () => void
   onConnectSubNode: (node: SafeServerNode) => void
+  onStopConnection: () => void
+  onRemoveFreeNode: (nodeId: string) => void
   subConnectingNodeId: string | null
   subConnectingStep: string | null
   onAddManualNode: (uri: string) => Promise<{ success: boolean; error?: string }>
@@ -4231,6 +4247,10 @@ function ServersPage({
   const [manualAdding, setManualAdding] = useState(false)
   const [manualError, setManualError] = useState<string | null>(null)
   const [showManualInput, setShowManualInput] = useState(false)
+
+  // Free-pool search + protocol filter
+  const [freeSearch, setFreeSearch] = useState('')
+  const [freeProtoFilter, setFreeProtoFilter] = useState<'all' | 'vless' | 'vmess' | 'trojan' | 'ss' | 'reality'>('all')
 
   type SortMode = 'ping' | 'name' | 'protocol' | 'reality'
   const [sortMode, setSortMode] = useState<SortMode>(() => {
@@ -4588,10 +4608,12 @@ function ServersPage({
                   className={`server-list-connect-btn${isSelected && processRunning ? ' server-list-connect-btn-active' : ''}${isConnecting ? ' server-list-connect-btn-connecting' : ''}`}
                   type="button"
                   disabled={!node.valid || (subConnectingNodeId !== null && !isConnecting)}
-                  title={t('servers.selectThis')}
+                  title={isSelected && processRunning ? t('btn.disconnect') : t('servers.selectThis')}
                   onClick={() => {
-                    if (processRunning && !isSelected) {
-                      setSwitchConfirm({ server: toPublicServer(node) })
+                    // Already connected to THIS node → stop. Otherwise connect —
+                    // prepareAndStart stops whatever is running first, then dials.
+                    if (isSelected && processRunning) {
+                      onStopConnection()
                     } else {
                       onConnectSubNode(node)
                     }
@@ -4779,30 +4801,96 @@ function ServersPage({
               >↻ دریافت مجدد</button>
             </div>
           </div>
-          <div className="free-pool-list">
-            {freePool.filter((s) => s.latencyMs == null || s.latencyMs >= 100).map((server, index) => (
-              <div
-                key={server.id}
-                className="free-pool-row"
-              >
-                <span className="free-pool-rank">{index + 1}</span>
-                <div className="free-pool-main">
-                  <strong>{server.name}</strong>
-                  <small dir="ltr"><ProtocolBadge protocol={server.protocol} /> {server.host ?? '—'}{server.port ? `:${server.port}` : ''}</small>
-                </div>
-                <span className={server.latencyMs != null ? 'bpb-ping is-online' : 'bpb-ping'} dir="ltr">
-                  {server.latencyMs != null ? `${server.latencyMs} ms` : '—'}
-                </span>
+          {/* Search + protocol filter */}
+          <div className="free-pool-toolbar">
+            <input
+              className="free-pool-search"
+              type="text"
+              dir="auto"
+              value={freeSearch}
+              onChange={(e) => setFreeSearch(e.target.value)}
+              placeholder={t('free.searchPlaceholder')}
+            />
+            <div className="free-pool-filters">
+              {(['all', 'reality', 'vless', 'vmess', 'trojan', 'ss'] as const).map((f) => (
                 <button
-                  className="free-pool-connect-btn"
+                  key={f}
                   type="button"
-                  disabled={freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting'}
-                  onClick={() => onConnectFreeNode(server)}
+                  className={`free-pool-filter-chip${freeProtoFilter === f ? ' is-active' : ''}`}
+                  onClick={() => setFreeProtoFilter(f)}
                 >
-                  اتصال
+                  {f === 'all' ? t('free.filterAll') : f === 'reality' ? 'REALITY' : f.toUpperCase()}
                 </button>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+          <div className="free-pool-list">
+            {(() => {
+              const q = freeSearch.trim().toLowerCase()
+              const filtered = freePool
+                .filter((s) => s.latencyMs == null || s.latencyMs >= 100)
+                .filter((s) => {
+                  if (freeProtoFilter === 'all') return true
+                  if (freeProtoFilter === 'reality') return (s.security ?? '').toLowerCase() === 'reality'
+                  return (s.protocol ?? '').toLowerCase() === freeProtoFilter
+                })
+                .filter((s) => {
+                  if (!q) return true
+                  return (
+                    (s.name ?? '').toLowerCase().includes(q) ||
+                    (s.host ?? '').toLowerCase().includes(q) ||
+                    (s.protocol ?? '').toLowerCase().includes(q)
+                  )
+                })
+              if (filtered.length === 0) {
+                return <div className="free-pool-empty">{t('free.noMatch')}</div>
+              }
+              return filtered.map((server, index) => {
+                const pct = server.latencyMs != null
+                  ? Math.max(6, Math.min(100, Math.round(100 - (server.latencyMs / 400) * 100)))
+                  : 0
+                return (
+                  <div key={server.id} className="free-pool-row">
+                    <span className="free-pool-rank">{index + 1}</span>
+                    <div className="free-pool-main">
+                      <strong>
+                        {server.name}
+                        {server.source === 'telegram' && <span className="free-pool-tg-badge" title="Telegram"> ✈</span>}
+                      </strong>
+                      <small dir="ltr"><ProtocolBadge protocol={server.protocol} /> {server.host ?? '—'}{server.port ? `:${server.port}` : ''}</small>
+                    </div>
+                    {/* Colored ping bar (same style as subscription list) */}
+                    <div className="free-pool-latency">
+                      <span className="bpb-ping is-online" dir="ltr">
+                        {server.latencyMs != null ? `${server.latencyMs} ms` : '—'}
+                      </span>
+                      <span
+                        className="free-pool-latency-bar"
+                        style={pct > 0 ? ({ '--lat-pct': `${pct}%`, '--lat-color': getLatencyColor(server.latencyMs) } as React.CSSProperties) : undefined}
+                      />
+                    </div>
+                    <button
+                      className="free-pool-connect-btn"
+                      type="button"
+                      disabled={freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting'}
+                      onClick={() => onConnectFreeNode(server)}
+                      title={t('servers.selectThis')}
+                    >
+                      ▶
+                    </button>
+                    <button
+                      className="free-pool-delete-btn"
+                      type="button"
+                      onClick={() => onRemoveFreeNode(server.id)}
+                      title={t('free.delete')}
+                      aria-label={t('free.delete')}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )
+              })
+            })()}
           </div>
         </section>
       )}

@@ -78,7 +78,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'هسته برنامه',
-    'version': 'نسخه ۲.۴.۱',
+    'version': 'نسخه ۲.۴.۲',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'برای TUN دسترسی Administrator لازم است',
@@ -622,6 +622,10 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.zeus.connected': 'Zeus متصل است',
     'home.bpb.needsSetup': 'ابتدا پنل BPB را از منوی «اتصال BPB» راه‌اندازی کن.',
     'home.freeTag': 'رایگان',
+    'free.searchPlaceholder': 'جستجو در نام، آدرس یا پروتکل...',
+    'free.filterAll': 'همه',
+    'free.noMatch': 'سروری با این فیلتر پیدا نشد.',
+    'free.delete': 'حذف از مخزن',
 
     // ── Tools page ────────────────────────────────────────────────────────────
     'nav.tools': 'ابزارها',
@@ -742,7 +746,7 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'Engine Core',
-    'version': 'Version 2.4.1',
+    'version': 'Version 2.4.2',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.adminRequired': 'Administrator access required for TUN',
@@ -1237,6 +1241,10 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.zeus.connected': 'Zeus connected',
     'home.bpb.needsSetup': 'Set up the BPB panel first from the “BPB” menu.',
     'home.freeTag': 'Free',
+    'free.searchPlaceholder': 'Search by name, address or protocol...',
+    'free.filterAll': 'All',
+    'free.noMatch': 'No servers match this filter.',
+    'free.delete': 'Remove from pool',
 
     // ── History date groups ──────────────────────────────────────────────────
     'history.today': 'Today',

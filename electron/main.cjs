@@ -127,6 +127,7 @@ const {
   getPool: getFreePool,
   getPoolMeta: getFreePoolMeta,
   getAllPool: getAllFreePool,
+  removeServer: removeFreeServer,
   PING_THRESHOLD_MS,
   MIN_PING_MS,
 } = require('./free-config-store.cjs')
@@ -451,11 +452,13 @@ function parseAllProtocols(content) {
   return parseSubscriptionNodeRecords(content)
 }
 
-async function testProxyConnectivity(port = 2080, timeoutMs = 10000) {
-  // Full-stack check: CONNECT tunnel + TLS handshake + actual HTTP response bytes.
-  // A server that only accepts CONNECT but can't relay TLS traffic will fail here.
+async function testProxyConnectivity(port = 2080, timeoutMs = 12000) {
+  // Real-relay check: CONNECT tunnel + TLS handshake + a real HTTP 200 from a
+  // Cloudflare endpoint proves the server actually relays traffic. We resolve as
+  // soon as the 200 status line comes back — requiring a fixed payload size was
+  // too strict and rejected many genuinely-working (but slower) free servers.
   const TEST_HOST = 'speed.cloudflare.com'
-  const TEST_PATH = '/__down?bytes=1024' // 1 KB — enough to prove real data flows
+  const TEST_PATH = '/__down?bytes=1024'
 
   return new Promise((resolve) => {
     const net = require('node:net')
@@ -507,7 +510,6 @@ async function testProxyConnectivity(port = 2080, timeoutMs = 10000) {
 
       let responseBuf = ''
       let headersDone = false
-      let dataBytes = 0
 
       tlsSocket.on('data', (d) => {
         if (!headersDone) {
@@ -515,16 +517,15 @@ async function testProxyConnectivity(port = 2080, timeoutMs = 10000) {
           const sep = responseBuf.indexOf('\r\n\r\n')
           if (sep === -1) return
           const status = responseBuf.split('\r\n')[0] ?? ''
-          if (!status.includes('200')) { done(false); return }
+          if (!status.includes('200') && !status.includes('204')) { done(false); return }
           headersDone = true
-          dataBytes += Math.max(0, d.length - (sep + 4 - (responseBuf.length - d.length)))
-        } else {
-          dataBytes += d.length
+          // A 200/204 status line means the request traversed the tunnel to
+          // Cloudflare and came back — the server relays. That's enough.
+          done(true)
         }
-        if (dataBytes >= 512) done(true) // got real payload bytes — proxy is working
       })
 
-      tlsSocket.on('end', () => done(dataBytes >= 512))
+      tlsSocket.on('end', () => done(headersDone))
     })
   })
 }
@@ -4171,8 +4172,15 @@ function registerIpcHandlers() {
     if (!nodeUri || !nodeId) return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: 'اطلاعات سرور ناقص است.' }
 
     freeConfigState.userDisconnected = false
-    try { assertBpbInactive() } catch (err) { return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: err.message } }
 
+    // Stop whatever is currently connected — main engine AND the separate BPB
+    // process — so this node's connection replaces it cleanly.
+    try {
+      const bpb = getBpbStatus()
+      if (bpb && (bpb.running || bpb.ready || bpb.connected)) {
+        await stopBpbProxy({ userDataPath: app.getPath('userData') }).catch(() => {})
+      }
+    } catch {}
     const mainStatus = getProcessStatus()
     if (mainStatus.running) {
       try { await stopLocalProxy({ userDataPath: app.getPath('userData') }) } catch {}
@@ -4210,6 +4218,17 @@ function registerIpcHandlers() {
       return { success: true, servers, meta, error: null }
     } catch (err) {
       return { success: false, servers: [], meta: null, error: err?.message ?? 'خطا در بروزرسانی مخزن' }
+    }
+  })
+
+  ipcMain.handle('free:remove-node', async (_event, nodeId) => {
+    try {
+      if (!nodeId) return { success: false, servers: [], meta: null, error: 'شناسه سرور نامعتبر است.' }
+      await removeFreeServer(nodeId)
+      const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
+      return { success: true, servers, meta, error: null }
+    } catch (err) {
+      return { success: false, servers: [], meta: null, error: err?.message ?? 'حذف سرور ناموفق بود.' }
     }
   })
 

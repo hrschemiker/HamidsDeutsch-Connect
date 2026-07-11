@@ -796,6 +796,8 @@ declare global {
 
         refreshPool: () => Promise<FreePoolResult>
 
+        removeNode: (nodeId: string) => Promise<FreePoolResult>
+
         disconnect: () => Promise<{ success: boolean; error: string | null }>
 
         getStatus: () => Promise<FreeConfigStatus>
@@ -922,7 +924,7 @@ declare global {
 
       zeus: {
         buildSubUrl: (input: { panelDomain: string; username?: string; uuid?: string }) => Promise<{ success: boolean; url?: string; error?: string }>
-        getStatus: () => Promise<{ connected: boolean; accountName: string | null; deployed: boolean; workerUrl: string | null; workerDomain: string | null; username: string | null; subUrl: string | null; deployedAt: string | null }>
+        getStatus: () => Promise<{ connected: boolean; needsReauth?: boolean; accountName: string | null; deployed: boolean; workerUrl: string | null; workerDomain: string | null; username: string | null; subUrl: string | null; deployedAt: string | null }>
         login: () => Promise<{ success: boolean; accountId?: string; accountName?: string; error?: string | null }>
         deploy: () => Promise<{ success: boolean; workerUrl?: string; subUrl?: string; username?: string; error?: string | null }>
         updatePanel: () => Promise<{ success: boolean; error?: string | null }>

@@ -4602,6 +4602,112 @@ button {
   cursor: default;
 }
 
+/* ── Free pool: search, filters, ping bar, delete ─────────────────────────── */
+
+.free-pool-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 10px 0 14px;
+}
+
+.free-pool-search {
+  flex: 1 1 220px;
+  min-width: 160px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font-size: 0.82rem;
+  outline: none;
+}
+
+.free-pool-search:focus {
+  border-color: rgba(45, 212, 191, 0.55);
+}
+
+.free-pool-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.free-pool-filter-chip {
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  opacity: 0.72;
+  transition: background 140ms, border-color 140ms, opacity 140ms;
+}
+
+.free-pool-filter-chip:hover {
+  opacity: 1;
+}
+
+.free-pool-filter-chip.is-active {
+  background: rgba(45, 212, 191, 0.14);
+  border-color: rgba(45, 212, 191, 0.5);
+  color: var(--teal);
+  opacity: 1;
+}
+
+.free-pool-latency {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 74px;
+}
+
+.free-pool-latency-bar {
+  display: block;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--lat-color, var(--teal)) var(--lat-pct, 0%),
+    rgba(255, 255, 255, 0.1) var(--lat-pct, 0%)
+  );
+}
+
+.free-pool-delete-btn {
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.06);
+  color: #f87171;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 140ms, border-color 140ms;
+}
+
+.free-pool-delete-btn:hover {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.55);
+}
+
+.free-pool-tg-badge {
+  color: #38bdf8;
+  font-size: 0.75rem;
+}
+
+.free-pool-empty {
+  padding: 18px;
+  text-align: center;
+  opacity: 0.6;
+  font-size: 0.82rem;
+}
+
 /* ── Light theme: free config ─────────────────────────────────────────────── */
 
 [data-theme="light"] .free-config-card {

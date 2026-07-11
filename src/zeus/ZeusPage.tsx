@@ -9,6 +9,7 @@ import { LangCtx, useT } from '../i18n'
 
 type ZeusStatus = {
   connected: boolean
+  needsReauth?: boolean
   accountName: string | null
   deployed: boolean
   workerUrl: string | null
@@ -80,7 +81,10 @@ export function ZeusPage({ onZeusConnect }: Props) {
     setProgressText('')
     try {
       let s = await window.hamidsDeutsch.zeus.getStatus()
-      if (!s.connected) {
+      // Re-login if there is no token OR the stored token predates a required
+      // scope (needsReauth) — otherwise the browser never opens and the D1 call
+      // later fails with "Authentication error".
+      if (!s.connected || s.needsReauth) {
         const login = await window.hamidsDeutsch.zeus.login()
         if (!login.success) {
           throw new Error(login.error ?? t('zeus.msg.cfLoginFailed'))

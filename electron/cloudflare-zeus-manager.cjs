@@ -154,7 +154,10 @@ async function loginCloudflareZeus({ userDataPath }) {
     const accounts = await cfApi(token.access_token, '/accounts')
     if (!accounts.result?.length) throw new Error('هیچ حساب Cloudflare پیدا نشد.')
     const account = accounts.result[0]
-    const saved = { token, accountId: account.id, accountName: account.name, connectedAt: new Date().toISOString() }
+    // Record exactly which scopes this token was granted, so we can detect a
+    // stale token (e.g. one issued before d1:write was added) and force a
+    // re-login instead of failing the D1 call with "Authentication error".
+    const saved = { token, scopesGranted: SCOPES, accountId: account.id, accountName: account.name, connectedAt: new Date().toISOString() }
     await saveState(userDataPath, saved)
     emit('connected', `حساب Cloudflare متصل شد: ${account.name}`)
     return { success: true, accountId: account.id, accountName: account.name, error: null }
@@ -350,8 +353,14 @@ async function updateZeusPanel({ userDataPath }) {
 
 async function getZeusStatus({ userDataPath }) {
   const state = await loadState(userDataPath)
+  const connected = Boolean(state?.token?.access_token)
+  // A token is only usable if it was granted every scope we now require. Tokens
+  // saved before d1:write existed have no (or an incomplete) scopesGranted list.
+  const grantedScopes = Array.isArray(state?.scopesGranted) ? state.scopesGranted : []
+  const hasAllScopes = SCOPES.every((s) => grantedScopes.includes(s))
   return {
-    connected: Boolean(state?.token?.access_token),
+    connected,
+    needsReauth: connected && !hasAllScopes,
     accountName: state?.accountName ?? null,
     deployed: Boolean(state?.deployment?.workerUrl),
     workerUrl: state?.deployment?.workerUrl ?? null,

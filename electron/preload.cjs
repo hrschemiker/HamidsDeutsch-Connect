@@ -271,6 +271,9 @@ contextBridge.exposeInMainWorld(
       refreshPool: () =>
         ipcRenderer.invoke('free:refresh-pool'),
 
+      removeNode: (nodeId) =>
+        ipcRenderer.invoke('free:remove-node', nodeId),
+
       disconnect: () =>
         ipcRenderer.invoke('free:disconnect'),
 
