@@ -27,6 +27,34 @@ const LOCAL_PROXY_HOST =
   '127.0.0.1'
 
 const LOCAL_PROXY_PORT = 2080
+
+// Ports the engine binds: the local mixed proxy (2080), the BPB proxy (2081),
+// and the clash_api control port (9090). A stuck/orphan sing-box holding any of
+// these blocks every new connection, so we free them before each fresh start.
+const ENGINE_PORTS = [2080, 2081, 9090]
+
+/**
+ * Kill any process still LISTENING on the engine ports. This clears orphan
+ * sing-box instances left behind by a failed connection or a hard app kill,
+ * which would otherwise make "nothing connects" until reboot.
+ */
+function freeEnginePorts() {
+  if (process.platform !== 'win32') return
+  try {
+    const { execFileSync } = require('node:child_process')
+    const out = execFileSync('netstat', ['-ano', '-p', 'TCP'], { encoding: 'utf8', timeout: 5000 })
+    const pids = new Set()
+    for (const line of out.split(/\r?\n/)) {
+      const m = line.match(/^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/)
+      if (m && ENGINE_PORTS.includes(Number(m[1]))) pids.add(m[2])
+    }
+    for (const pid of pids) {
+      try { execFileSync('taskkill', ['/F', '/PID', pid], { timeout: 5000, stdio: 'ignore' }) } catch {}
+    }
+  } catch {
+    // Best-effort — never block a connection on cleanup failure.
+  }
+}
 const START_TIMEOUT_MS = 12000
 const STOP_TIMEOUT_MS = 3500
 const CHECK_TIMEOUT_MS = 15000
@@ -145,6 +173,9 @@ async function startLocalProxy({
       ? 'system-proxy'
       : 'local-proxy',
   )
+
+  // Clear any orphan engine holding the ports so the new instance can bind.
+  freeEnginePorts()
 
   const child = spawn(
     enginePath,
@@ -290,6 +321,9 @@ async function startTunMode({
     false,
     'tun',
   )
+
+  // Clear any orphan engine holding the ports so the new instance can bind.
+  freeEnginePorts()
 
   const child = spawn(
     enginePath,

@@ -28,6 +28,25 @@ const LOCAL_HOST =
 const LOCAL_PORT =
   2081
 
+// Free any orphan engine holding the BPB/main/control ports before spawning,
+// so a stuck instance can't block a fresh BPB connection.
+const ENGINE_PORTS = [2080, 2081, 9090]
+function freeEnginePorts() {
+  if (process.platform !== 'win32') return
+  try {
+    const { execFileSync } = require('node:child_process')
+    const out = execFileSync('netstat', ['-ano', '-p', 'TCP'], { encoding: 'utf8', timeout: 5000 })
+    const pids = new Set()
+    for (const line of out.split(/\r?\n/)) {
+      const m = line.match(/^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/)
+      if (m && ENGINE_PORTS.includes(Number(m[1]))) pids.add(m[2])
+    }
+    for (const pid of pids) {
+      try { execFileSync('taskkill', ['/F', '/PID', pid], { timeout: 5000, stdio: 'ignore' }) } catch {}
+    }
+  } catch {}
+}
+
 const START_TIMEOUT_MS =
   12000
 
@@ -121,6 +140,8 @@ async function startBpbProxy({
     nodeName
   state.startedAt =
     new Date().toISOString()
+
+  freeEnginePorts()
 
   const child =
     spawn(
