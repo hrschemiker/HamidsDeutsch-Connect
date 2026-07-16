@@ -332,7 +332,7 @@ function setupTray() {
   } catch {
     appTray = new Tray(nativeImage.createEmpty())
   }
-  appTray.setToolTip('HamidsDeutsch Connect')
+  appTray.setToolTip('Manfaz VPN')
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'نمایش برنامه',
@@ -1503,7 +1503,7 @@ function openBpbPanelWindow(
       autoHideMenuBar: true,
       backgroundColor: '#0b1120',
       title:
-        'BPB Panel — HamidsDeutsch Connect',
+        'BPB Panel — Manfaz VPN',
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -4740,7 +4740,7 @@ function createMainWindow() {
       backgroundColor:
         '#090b10',
       title:
-        'HamidsDeutsch Connect',
+        'Manfaz VPN',
       autoHideMenuBar: true,
 
       webPreferences: {

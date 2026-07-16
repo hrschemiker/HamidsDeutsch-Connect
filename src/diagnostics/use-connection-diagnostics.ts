@@ -395,7 +395,7 @@ export function useConnectionDiagnostics() {
               new Date()
                 .toISOString(),
             application:
-              'HamidsDeutsch Connect',
+              'Manfaz VPN',
             events:
               data.events,
             sessions:

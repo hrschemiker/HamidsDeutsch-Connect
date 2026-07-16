@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="public/logo.png" alt="HamidsDeutsch Connect" width="110" height="110">
+<img src="public/logo.png" alt="Manfaz VPN" width="110" height="110">
 
-# HamidsDeutsch Connect
+# Manfaz VPN
 
 **Free Internet Access for Windows — One Click, Zero Configuration**
 
@@ -10,7 +10,7 @@
 [![Electron](https://img.shields.io/badge/Electron-v42-47848F?logo=electron&logoColor=white)](https://electronjs.org)
 [![sing‑box](https://img.shields.io/badge/sing--box-v1.13-FF6B35)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.4.2-f2c055)](../../releases/latest)
+[![Version](https://img.shields.io/badge/Version-2.5.0-f2c055)](../../releases/latest)
 
 [**⬇ Download Latest Release**](../../releases/latest)
 
@@ -20,7 +20,7 @@
 
 ## What is it?
 
-HamidsDeutsch Connect is a Windows desktop application that gets you past internet censorship. It wraps [sing-box](https://github.com/SagerNet/sing-box) in a clean UI and supports six different connection methods — from free public servers to fully auto-deployed private panels on Cloudflare Workers — all manageable from a single window.
+Manfaz VPN is a Windows desktop application that gets you past internet censorship. It wraps [sing-box](https://github.com/SagerNet/sing-box) in a clean UI and supports six different connection methods — from free public servers to fully auto-deployed private panels on Cloudflare Workers — all manageable from a single window.
 
 ---
 
@@ -54,7 +54,7 @@ HamidsDeutsch Connect is a Windows desktop application that gets you past intern
 
 ## Installation
 
-1. Go to [**Releases**](../../releases/latest) and download `HamidsDeutsch-Connect-Setup-2.4.2-x64.exe`
+1. Go to [**Releases**](../../releases/latest) and download `Manfaz-VPN-Setup-2.5.0-x64.exe`
 2. Run the installer — no extra dependencies required
 3. The app launches automatically after installation
 

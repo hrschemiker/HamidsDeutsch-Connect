@@ -1785,10 +1785,10 @@ function App() {
         className="sidebar"
       >
         <div className="brand">
-          <div className="brand-mark"><img src="logo.png" alt="HamidsDeutsch Connect" className="brand-logo-img" /></div>
+          <div className="brand-mark"><img src="logo.png" alt="Manfaz VPN" className="brand-logo-img" /></div>
           <div className="brand-text">
-            <strong>HamidsDeutsch</strong>
-            <span>Connect</span>
+            <strong>Manfaz</strong>
+            <span>VPN</span>
           </div>
         </div>
 
@@ -1844,7 +1844,7 @@ function App() {
       <section className="main-area">
         <header className="topbar">
           <div>
-            <p className="topbar-eyebrow">HamidsDeutsch Connect</p>
+            <p className="topbar-eyebrow">Manfaz VPN</p>
             <h1>{pageTitles[activePage]}</h1>
           </div>
 
@@ -2901,15 +2901,21 @@ function HomePage({
             {heroConnected && elapsedSecs >= 0 && (
               <span className="session-timer" dir="ltr">{formatElapsed(elapsedSecs)}</span>
             )}
+            {/* Persistent speed meter, pinned next to the timer. Shows live
+                up/down pace (0 B/s when idle instead of vanishing) plus the
+                download-speed result in the same compact pill style. */}
+            {heroConnected && (
+              <span className="hero-meter" dir="ltr">
+                <span className="hero-meter-pill bw-up">↑ {formatBytes(trafficSpeed?.upSpeed ?? 0)}/s</span>
+                <span className="hero-meter-pill bw-down">↓ {formatBytes(trafficSpeed?.downSpeed ?? 0)}/s</span>
+                {speedTest?.running ? (
+                  <span className="hero-meter-pill bw-speed">⚡ …</span>
+                ) : speedTest?.mbps != null ? (
+                  <span className="hero-meter-pill bw-speed">⚡ {speedTest.mbps} Mbps</span>
+                ) : null}
+              </span>
+            )}
           </div>
-
-          {heroConnected && trafficSpeed && (trafficSpeed.upSpeed > 0 || trafficSpeed.downSpeed > 0) && (
-            <div className="bandwidth-bar" dir="ltr">
-              <span className="bw-up">↑ {formatBytes(trafficSpeed.upSpeed)}/s</span>
-              <span className="bw-sep">·</span>
-              <span className="bw-down">↓ {formatBytes(trafficSpeed.downSpeed)}/s</span>
-            </div>
-          )}
 
           {elevationError && (
             <div className="inline-error">
@@ -3126,9 +3132,9 @@ function HomePage({
           </div>
         </article>
         <article className="statistic-card" style={{ animationDelay: '80ms' }}>
-          <span className="statistic-icon">◌</span>
+          <span className="statistic-icon">◉</span>
           <div>
-            <span className="statistic-label">{t('stats.prevServer')}</span>
+            <span className="statistic-label">{t('stats.currentServer')}</span>
             <strong>
               {activeMethod === 'codespace' && codespaceHost
                 ? codespaceHost
@@ -3153,26 +3159,6 @@ function HomePage({
             </strong>
           </div>
         </article>
-        {speedTest && (
-          <article className="statistic-card" style={heroConnected ? { animationDelay: '240ms' } : undefined}>
-            <span className="statistic-icon">⚡</span>
-            <div>
-              <span className="statistic-label">{t('stats.speed')}</span>
-              {speedTest.running ? (
-                <span className="speed-bar-wrap"><span className="speed-bar-fill speed-bar-testing" /></span>
-              ) : speedTest.mbps !== null ? (
-                <div className="speed-bar-group">
-                  <span className="speed-bar-wrap">
-                    <span className="speed-bar-fill" style={{ width: `${Math.min(speedTest.mbps / 100 * 100, 100)}%` }} />
-                  </span>
-                  <strong dir="ltr">{speedTest.mbps} Mbps</strong>
-                </div>
-              ) : (
-                <strong>{t('stats.speedError')}</strong>
-              )}
-            </div>
-          </article>
-        )}
       </section>
       )}
 
@@ -3187,6 +3173,23 @@ function HomePage({
           </ol>
         </div>
       )}
+
+      {/* Promo banner — links to the Manfaz VPN Telegram. Hidden gracefully if
+          banner.png is not present so there is no broken-image placeholder. */}
+      <a
+        className="promo-banner"
+        href="https://t.me/manfazvpn"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Manfaz VPN — https://t.me/manfazvpn"
+      >
+        <img
+          src="banner.png"
+          alt="Manfaz VPN"
+          className="promo-banner-img"
+          onError={(e) => { (e.currentTarget.closest('.promo-banner') as HTMLElement | null)?.style.setProperty('display', 'none') }}
+        />
+      </a>
 
       <section className="connection-choice-grid">
         <ConnectionChoiceCard
@@ -6896,8 +6899,8 @@ function SettingsPage({
               Chrome / Edge
             </span>
             <InfoButton
-              fa="افزونه همراه فقط هنگام اتصال تأییدشده HamidsDeutsch فعال می‌شود و مختصات HTML5 Geolocation را با کشور و شهر IP خروجی هماهنگ می‌کند. با قطع برنامه یا استفاده از VPN دیگر، خودکار غیرفعال می‌شود."
-              en="The bundled extension activates only on a verified HamidsDeutsch connection, aligning HTML5 Geolocation coordinates with the exit IP country and city. It deactivates automatically when the app disconnects or another VPN is used."
+              fa="افزونه همراه فقط هنگام اتصال تأییدشده Manfaz VPN فعال می‌شود و مختصات HTML5 Geolocation را با کشور و شهر IP خروجی هماهنگ می‌کند. با قطع برنامه یا استفاده از VPN دیگر، خودکار غیرفعال می‌شود."
+              en="The bundled extension activates only on a verified Manfaz VPN connection, aligning HTML5 Geolocation coordinates with the exit IP country and city. It deactivates automatically when the app disconnects or another VPN is used."
             />
           </div>
         </div>
