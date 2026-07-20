@@ -25,8 +25,6 @@ import { useWindowsElevation } from './system/use-windows-elevation'
 import { useRescueSettings } from './rescue/use-rescue-settings'
 import { useConnectionSettings } from './settings/use-connection-settings'
 import { useConnectionDiagnostics } from './diagnostics/use-connection-diagnostics'
-import { BpbPage } from './bpb/BpbPage'
-import { ZeusPage } from './zeus/ZeusPage'
 import './App.css'
 
 // ── Free Config types ────────────────────────────────────────────────────────
@@ -133,8 +131,6 @@ type PageId =
   | 'servers'
   | 'subscriptions'
   | 'direct-sites'
-  | 'bpb'
-  | 'zeus'
   | 'rescue'
   | 'statistics'
   | 'logs'
@@ -197,8 +193,6 @@ function App() {
     { id: 'home', label: t('nav.home'), icon: '⌂' },
     { id: 'servers', label: t('nav.servers'), icon: '◉' },
     { id: 'subscriptions', label: t('nav.subscriptions'), icon: '↧' },
-    { id: 'bpb', label: t('nav.bpb'), icon: '◈' },
-    { id: 'zeus', label: t('nav.zeus'), icon: '⚡' },
     { id: 'direct-sites', label: t('nav.directSites'), icon: '↗' },
     { id: 'rescue', label: t('nav.rescue'), icon: '✦' },
     { id: 'tools', label: t('nav.tools'), icon: '⬡' },
@@ -212,8 +206,6 @@ function App() {
     home: t('page.home'),
     servers: t('page.servers'),
     subscriptions: t('page.subscriptions'),
-    bpb: t('page.bpb'),
-    zeus: t('zeus.title'),
     'direct-sites': t('page.directSites'),
     rescue: t('page.rescue'),
     statistics: t('page.statistics'),
@@ -245,11 +237,6 @@ function App() {
   const connectionWatchdogBusyRef = useRef(false)
   const automaticConnectionBusyRef = useRef(false)
 
-  const [codespaceConnecting, setCodespaceConnecting] = useState(false)
-  const [codespaceConnected, setCodespaceConnected] = useState(false)
-  const [codespaceProgress, setCodespaceProgress] = useState<string | null>(null)
-  const [codespaceError, setCodespaceError] = useState<string | null>(null)
-  const [codespaceHost, setCodespaceHost] = useState<string | null>(null)
 
   const [freePhase, setFreePhase] = useState<FreeConfigPhase>('idle')
   const [freeNodeName, setFreeNodeName] = useState<string | null>(null)
@@ -274,12 +261,7 @@ function App() {
   const [subConnectingStep, setSubConnectingStep] = useState<string | null>(null)
 
   // WARP connection state
-  const [warpConnecting, setWarpConnecting] = useState(false)
-  const [warpError, setWarpError] = useState<string | null>(null)
-  const [zeusConnecting, setZeusConnecting] = useState(false)
   // Home-screen connect/stop tracking for BPB (separate process) and Zeus.
-  const [bpbConnected, setBpbConnected] = useState(false)
-  const [zeusConnected, setZeusConnected] = useState(false)
 
   // Bandwidth monitor
   const [_traffic, setTraffic] = useState<{ up: number; down: number } | null>(null)
@@ -291,7 +273,7 @@ function App() {
   const [qrUri, setQrUri] = useState<string | null>(null)
 
   // Last connection for one-tap reconnect
-  const [lastConnectionType, setLastConnectionType] = useState<'free' | 'subscription' | 'bpb' | 'codespace' | 'warp' | null>(null)
+  const [lastConnectionType, setLastConnectionType] = useState<'free' | 'subscription' | null>(null)
   const [showReconnectBar, setShowReconnectBar] = useState(false)
 
   // Ctrl+Enter keyboard shortcut toggle (UX #9)
@@ -315,8 +297,6 @@ function App() {
   }, [])
 
   // For smart hero-button priority: know if BPB/codespace are configured
-  const [codespaceHasToken, setCodespaceHasToken] = useState(false)
-  const [bpbConfigured, setBpbConfigured] = useState(false)
 
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
@@ -370,7 +350,7 @@ function App() {
         engineProcess.status.systemProxyEnabled
 
   // ── Toast on disconnect ───────────────────────────────────────────────────
-  const appHeroConnected = connectionVerified || codespaceConnected || freePhase === 'connected'
+  const appHeroConnected = connectionVerified || freePhase === 'connected'
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevHeroConnectedRef = useRef(false)
@@ -382,7 +362,7 @@ function App() {
     if (appHeroConnected) {
       hasConnectedRef.current = true
       if (!prevHeroConnectedRef.current) {
-        const mode = freePhase === 'connected' ? 'free' : codespaceConnected ? 'codespace' : lastConnectionType === 'bpb' ? 'bpb' : lastConnectionType === 'warp' ? 'warp' : 'subscription'
+        const mode: 'free' | 'subscription' = freePhase === 'connected' ? 'free' : 'subscription'
         setLastConnectionType(mode)
         setShowReconnectBar(false)
         connectionStartRef.current = {
@@ -392,13 +372,13 @@ function App() {
           protocol: freePhase === 'connected' ? null : (selectedServer.selectedServer?.protocol ?? null),
           latencyMs: null,
         }
-        // Record free/codespace/bpb sessions in diagnostics (subscription sessions are recorded in prepareAndStart)
-        if (mode === 'free' || mode === 'codespace' || mode === 'bpb') {
+        // Record free sessions in diagnostics (subscription sessions are recorded in prepareAndStart)
+        if (mode === 'free') {
           diagnostics.beginSession({
-            serverName: mode === 'free' ? (freeNodeName ?? mode) : mode === 'codespace' ? 'GitHub Codespace' : 'BPB Panel',
-            subscriptionName: mode === 'free' ? 'سرور رایگان' : mode === 'codespace' ? 'GitHub Codespace' : 'BPB Panel',
+            serverName: freeNodeName ?? 'free',
+            subscriptionName: 'کانفیگ رایگان',
             mode: 'system-proxy',
-            latencyMs: mode === 'free' ? (freeLatencyMs ?? null) : null,
+            latencyMs: freeLatencyMs ?? null,
             exitIp: null,
           })
         }
@@ -486,12 +466,6 @@ function App() {
     void window.hamidsDeutsch.system.setDirectDomains(directDomains.domains)
   }, [directDomains.domains])
 
-  useEffect(() => {
-    return window.hamidsDeutsch.codespace.onProgress(({ message }) => {
-      setCodespaceProgress(message)
-    })
-  }, [])
-
   // Check for engine update once on startup (30s delay to not block init)
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -501,37 +475,6 @@ function App() {
     }, 30000)
     return () => clearTimeout(timer)
   }, [])
-
-  // Load codespace token state + BPB profile state once on mount
-  useEffect(() => {
-    void window.hamidsDeutsch.codespace.getStatus().then((s) => {
-      setCodespaceHasToken(Boolean(s?.hasToken))
-    }).catch(() => {})
-    void window.hamidsDeutsch.bpb.getProfile().then((r) => {
-      setBpbConfigured(Boolean(r?.profile?.panelUrl?.trim()))
-    }).catch(() => {})
-  }, [])
-
-  // Poll BPB status — BPB runs as a separate process, so its connected state is
-  // not reflected in the main engine status. The home BPB button uses this.
-  useEffect(() => {
-    let alive = true
-    const poll = async () => {
-      try {
-        const s = await window.hamidsDeutsch.bpb.getStatus()
-        if (alive) setBpbConnected(Boolean(s?.running || s?.connected))
-      } catch { /* ignore */ }
-    }
-    void poll()
-    const id = setInterval(poll, 3000)
-    return () => { alive = false; clearInterval(id) }
-  }, [])
-
-  // Zeus connects through the main engine — clear its flag whenever the engine
-  // is not running (covers failed connects, manual stop, and method switches).
-  useEffect(() => {
-    if (!engineProcess.status.running) setZeusConnected(false)
-  }, [engineProcess.status.running])
 
   useEffect(() => {
     void window.hamidsDeutsch.free.getPool().then((r) => {
@@ -612,196 +555,6 @@ function App() {
       setFreeError(null)
     } catch {
       // ignore
-    }
-  }
-
-  async function connectWarp() {
-    if (warpConnecting) return
-    setWarpConnecting(true)
-    setWarpError(null)
-    setLastConnectionType('warp')
-    setConnectionActionError(null)
-
-    if (engineProcess.status.running) {
-      await engineProcess.stop()
-      ipVerification.reset()
-    }
-
-    const result = await window.hamidsDeutsch.warp.connect({ directDomains: directDomains.domains })
-    if (!result.success) {
-      setWarpConnecting(false)
-      setWarpError(result.error ?? 'اتصال WARP ناموفق بود.')
-      setLastConnectionType(null)
-      return
-    }
-
-    const proxyResult = await engineProcess.enableSystemProxy()
-    setWarpConnecting(false)
-    if (!proxyResult.success) {
-      setWarpError(proxyResult.error ?? 'خطا در فعال‌سازی پراکسی سیستم')
-      void stopLocalProxy()
-    }
-  }
-
-  async function connectZeus() {
-    if (zeusConnecting) return
-    const zeusStatus = await window.hamidsDeutsch.zeus.getStatus()
-    if (!zeusStatus.deployed || !zeusStatus.subUrl) {
-      // Not set up yet — the home button only connects/stops; setup lives in the
-      // Zeus menu. Point the user there instead of navigating for them.
-      setToastMessage(t('home.zeus.needsSetup'))
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-      toastTimerRef.current = setTimeout(() => setToastMessage(null), 4000)
-      return
-    }
-    // Zeus is deployed — use its subscription URL directly
-    // First ensure it's in our subscriptions list
-    const subUrl = zeusStatus.subUrl
-    const existingSub = (await window.hamidsDeutsch.subscriptions.list()).find((s) => s.name === 'Zeus Panel')
-    if (!existingSub) {
-      await window.hamidsDeutsch.subscriptions.add({ url: subUrl, name: 'Zeus Panel' })
-      await subscriptions.refresh()
-    }
-    // Use fresh list to avoid stale React state after refresh
-    const freshList = await window.hamidsDeutsch.subscriptions.list()
-    const zeusSub = freshList.find((s) => s.name === 'Zeus Panel')
-    if (!zeusSub) {
-      setToastMessage(t('home.zeus.needsSetup'))
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-      toastTimerRef.current = setTimeout(() => setToastMessage(null), 4000)
-      return
-    }
-    setZeusConnected(true)
-    setZeusConnecting(true)
-    setConnectionActionError(null)
-    ipVerification.reset()
-    try {
-      if (engineProcess.status.running) await engineProcess.stop()
-      const result = await window.hamidsDeutsch.subscriptions.loadNodes(zeusSub.id)
-      if (!result.success || result.nodes.length === 0) {
-        setZeusConnecting(false)
-        setConnectionActionError(result.error ?? 'هیچ سروری در اشتراک Zeus یافت نشد.')
-        return
-      }
-      const validNodes = result.nodes.filter((n) => n.valid)
-      if (validNodes.length === 0) {
-        setZeusConnecting(false)
-        setConnectionActionError('هیچ سرور معتبری یافت نشد.')
-        return
-      }
-      const top3 = validNodes.slice(0, 3)
-      const tested = await Promise.all(top3.map(async (n) => {
-        if (!n.host || !n.port) return { node: n, ms: Number.MAX_SAFE_INTEGER }
-        try {
-          const r = await window.hamidsDeutsch.servers.testLatency([{ id: n.id, host: n.host, port: n.port }])
-          const item = r.results.find((x) => x.id === n.id)
-          return { node: n, ms: item?.reachable ? (item.latencyMs ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER }
-        } catch { return { node: n, ms: Number.MAX_SAFE_INTEGER } }
-      }))
-      tested.sort((a, b) => a.ms - b.ms)
-      const best = tested[0].node
-      const compositeId = `${zeusSub.id}::${best.id}`
-      const found = serverNodes.nodes.find((n) => n.id === compositeId)
-        ?? serverNodes.nodes.find((n) => n.nodeId === best.id && n.subscriptionId === zeusSub.id)
-      if (found) {
-        setZeusConnecting(false)
-        void prepareAndStart(found)
-      } else {
-        setZeusConnecting(false)
-        void connectToFirstHealthyServer()
-      }
-    } catch {
-      setZeusConnecting(false)
-      setZeusConnected(false)
-      setConnectionActionError('خطا در اتصال به سرور Zeus.')
-    }
-  }
-
-  function showSetupToast(key: string) {
-    setToastMessage(t(key))
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-    toastTimerRef.current = setTimeout(() => setToastMessage(null), 4000)
-  }
-
-  // Home Zeus button: connect or stop ONLY — never navigates. Setup lives in menu.
-  async function handleHomeZeus() {
-    if (zeusConnected || (engineProcess.status.running && zeusConnecting)) {
-      await stopLocalProxy()
-      setZeusConnected(false)
-      return
-    }
-    await connectZeus()
-  }
-
-  // Home BPB button: connect or stop ONLY — never navigates. Setup lives in menu.
-  async function handleHomeBpb() {
-    if (bpbConnected) {
-      intentionalDisconnectRef.current = true
-      await window.hamidsDeutsch.bpb.disconnect().catch(() => {})
-      setBpbConnected(false)
-      return
-    }
-    if (!bpbConfigured) {
-      showSetupToast('home.bpb.needsSetup')
-      return
-    }
-    const r = await window.hamidsDeutsch.bpb.getProfile().catch(() => null)
-    const panelUrl = r?.profile?.panelUrl?.trim()
-    if (!panelUrl) {
-      showSetupToast('home.bpb.needsSetup')
-      return
-    }
-    setLastConnectionType('bpb')
-    await window.hamidsDeutsch.bpb.quickConnect({ panelUrl, directDomains: directDomains.domains })
-  }
-
-  async function connectViaCodespace() {
-    if (codespaceConnecting || engineProcess.status.running) return
-    setCodespaceConnecting(true)
-    setCodespaceError(null)
-    setCodespaceProgress(null)
-
-    try {
-      const result = await window.hamidsDeutsch.codespace.connect(
-        directDomains.domains,
-      )
-
-      if (!result.success) {
-        setCodespaceError(result.error ?? 'اتصال GitHub Codespace ناموفق بود.')
-        return
-      }
-
-      setCodespaceHost(result.host)
-      setCodespaceConnected(true)
-
-      // Activate system proxy for the sing-box that's now running
-      await engineProcess.enableSystemProxy()
-      const verification = await ipVerification.verify()
-      if (!verification.success || !verification.changed) {
-        setCodespaceError('پروکسی اجرا شد اما تغییر IP تأیید نشد. اتصال ممکن است فعال باشد.')
-      }
-    } catch (err) {
-      setCodespaceError(
-        err instanceof Error ? err.message : 'خطای ناشناخته در اتصال GitHub',
-      )
-    } finally {
-      setCodespaceConnecting(false)
-      setCodespaceProgress(null)
-    }
-  }
-
-  async function disconnectCodespace() {
-    intentionalDisconnectRef.current = true
-    setCodespaceConnecting(true)
-    setCodespaceError(null)
-    try {
-      await engineProcess.disableSystemProxy(false)
-      await window.hamidsDeutsch.codespace.disconnect()
-      setCodespaceConnected(false)
-      setCodespaceHost(null)
-      ipVerification.reset()
-    } finally {
-      setCodespaceConnecting(false)
     }
   }
 
@@ -1523,42 +1276,12 @@ function App() {
     } catch {
       // fall through
     }
-
-    // Priority 3: BPB panel if configured
-    try {
-      const profileResult = await window.hamidsDeutsch.bpb.getProfile()
-      const bpbPanelUrl = profileResult?.profile?.panelUrl?.trim()
-      if (bpbPanelUrl) {
-        const result = await window.hamidsDeutsch.bpb.quickConnect({
-          panelUrl: bpbPanelUrl,
-          directDomains: directDomains.domains,
-        })
-        if (result?.success) return
-      }
-    } catch {
-      // fall through
-    }
-
-    // Priority 4: GitHub Codespace if token configured
-    if (codespaceHasToken) {
-      void connectViaCodespace()
-    }
   }
 
   async function quickReconnect() {
     if (appHeroConnected) return
-    if (lastConnectionType === 'warp') {
-      void connectWarp()
-    } else if (lastConnectionType === 'free') {
+    if (lastConnectionType === 'free') {
       void connectFreeConfig()
-    } else if (lastConnectionType === 'codespace') {
-      void connectViaCodespace()
-    } else if (lastConnectionType === 'bpb') {
-      const profileResult = await window.hamidsDeutsch.bpb.getProfile().catch(() => null)
-      const panelUrl = profileResult?.profile?.panelUrl?.trim()
-      if (panelUrl) {
-        void window.hamidsDeutsch.bpb.quickConnect({ panelUrl, directDomains: directDomains.domains })
-      }
     } else if (lastConnectionType === 'subscription') {
       // Reconnect to the last used subscription server directly, falling back to fastest
       const node = selectedServer.selectedServer
@@ -1974,9 +1697,7 @@ function App() {
               latencyTesting={latency.testing}
               latencyError={latency.error}
               onMainAction={() => {
-                if (codespaceConnected) {
-                  void disconnectCodespace()
-                } else if (freePhase === 'connected') {
+                if (freePhase === 'connected') {
                   void disconnectFreeConfig()
                 } else if (engineProcess.status.running) {
                   void stopLocalProxy()
@@ -1998,30 +1719,7 @@ function App() {
               onOpenServers={() => setActivePage('servers')}
               onOpenDirectSites={() => setActivePage('direct-sites')}
               onOpenRescue={() => setActivePage('rescue')}
-              codespaceConnecting={codespaceConnecting}
-              codespaceConnected={codespaceConnected}
-              codespaceProgress={codespaceProgress}
-              codespaceError={codespaceError}
-              codespaceHost={codespaceHost}
-              onCodespaceConnect={() => void connectViaCodespace()}
-              onCodespaceDisconnect={() => void disconnectCodespace()}
               onOpenSettings={() => setActivePage('settings')}
-              onOpenBpb={() => setActivePage('bpb')}
-              bpbConfigured={bpbConfigured}
-              onBpbQuickConnect={async () => {
-                const r = await window.hamidsDeutsch.bpb.getProfile().catch(() => null)
-                const panelUrl = r?.profile?.panelUrl?.trim()
-                if (panelUrl) {
-                  setLastConnectionType('bpb')
-                  await window.hamidsDeutsch.bpb.quickConnect({ panelUrl, directDomains: directDomains.domains })
-                } else {
-                  setActivePage('bpb')
-                }
-              }}
-              warpConnecting={warpConnecting}
-              warpError={warpError}
-              onWarpConnect={() => void connectWarp()}
-              onWarpDisconnect={() => void stopLocalProxy()}
               freePhase={freePhase}
               freeNodeName={freeNodeName}
               freeLatencyMs={freeLatencyMs}
@@ -2036,13 +1734,7 @@ function App() {
               geoBlockTrigger={geoBlockTrigger}
               dataLoading={serverNodes.loading || subscriptions.loading}
               trafficSpeed={trafficSpeed}
-              onZeusConnect={() => void handleHomeZeus()}
-              onBpbHome={() => void handleHomeBpb()}
-              bpbConnected={bpbConnected}
-              zeusConnected={zeusConnected}
               onNavigateToTools={() => setActivePage('tools')}
-              zeusConfigured={subscriptions.subscriptions.some((s) => s.name === 'Zeus Panel')}
-              zeusConnecting={zeusConnecting}
               onShowQr={async (compositeId: string) => {
                 const parts = compositeId.split('::')
                 const subscriptionId = parts[0]
@@ -2254,29 +1946,6 @@ function App() {
             />
           )}
 
-          {activePage === 'bpb' && (
-            <BpbPage
-              mainConnected={
-                connectionVerified ||
-                engineProcess.status.running
-              }
-              directDomains={
-                directDomains.domains
-              }
-              rescueSettings={
-                rescueSettings.settings
-              }
-              onBpbConnect={() => setLastConnectionType('bpb')}
-              onBpbDisconnect={() => { intentionalDisconnectRef.current = true }}
-            />
-          )}
-
-          {activePage === 'zeus' && (
-            <ZeusPage
-              onZeusConnect={() => void connectZeus()}
-            />
-          )}
-
           {activePage === 'direct-sites' && (
             <DirectSitesPage
               domains={directDomains.domains}
@@ -2405,7 +2074,6 @@ function App() {
             <ToolsPage
               directDomains={directDomains.domains}
               onNavigateToSubscriptions={() => setActivePage('subscriptions')}
-              onNavigateToZeus={() => setActivePage('zeus')}
             />
           )}
         </main>
@@ -2531,24 +2199,7 @@ type HomePageProps = {
   onOpenServers: () => void
   onOpenDirectSites: () => void
   onOpenRescue: () => void
-  codespaceConnecting: boolean
-  codespaceConnected: boolean
-  codespaceProgress: string | null
-  codespaceError: string | null
-  codespaceHost: string | null
-  onCodespaceConnect: () => void
-  onCodespaceDisconnect: () => void
   onOpenSettings: () => void
-  onOpenBpb: () => void
-  onBpbQuickConnect: () => Promise<void>
-  onBpbHome: () => void
-  bpbConfigured: boolean
-  bpbConnected: boolean
-  zeusConnected: boolean
-  warpConnecting: boolean
-  warpError: string | null
-  onWarpConnect: () => void
-  onWarpDisconnect: () => void
   topSubServers: Array<{ id: string; name: string; protocol: string; latencyMs: number | null }>
   topFreeServers: FreePoolServer[]
   onConnectSubServer: (id: string) => void
@@ -2568,10 +2219,7 @@ type HomePageProps = {
   dataLoading: boolean
   trafficSpeed: { upSpeed: number; downSpeed: number } | null
   onShowQr: (compositeId: string) => void
-  onZeusConnect: () => void
   onNavigateToTools: () => void
-  zeusConfigured: boolean
-  zeusConnecting: boolean
 }
 
 function HomePage({
@@ -2604,23 +2252,6 @@ function HomePage({
   onOpenServers,
   onOpenDirectSites: _onOpenDirectSites,
   onOpenRescue: _onOpenRescue,
-  codespaceConnecting,
-  codespaceConnected,
-  codespaceProgress,
-  codespaceError,
-  codespaceHost,
-  onCodespaceConnect,
-  onCodespaceDisconnect,
-  onOpenBpb: _onOpenBpb,
-  onBpbQuickConnect: _onBpbQuickConnect,
-  onBpbHome,
-  bpbConfigured,
-  bpbConnected,
-  zeusConnected,
-  warpConnecting,
-  warpError: _warpError,
-  onWarpConnect,
-  onWarpDisconnect,
   freePhase,
   freeNodeName,
   freeLatencyMs,
@@ -2640,10 +2271,7 @@ function HomePage({
   onConnectFreeServer,
   trafficSpeed,
   onShowQr,
-  onZeusConnect,
   onNavigateToTools: _onNavigateToTools,
-  zeusConfigured,
-  zeusConnecting,
 }: HomePageProps) {
   const t = useT()
 
@@ -2664,7 +2292,7 @@ function HomePage({
 
   // ── Error banner (top of hero, auto-dismisses after 10s or on connection) ──
   const freeConnectedLocal = freePhase === 'connected'
-  const heroConnectedLocal = isConnected || codespaceConnected || freeConnectedLocal
+  const heroConnectedLocal = isConnected || false || freeConnectedLocal
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const errorBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dismissErrorBanner = () => {
@@ -2674,8 +2302,7 @@ function HomePage({
   // Collect errors into banner
   const activeError = (freePhase === 'error' && freeError) ? freeError
     : processError ? processError
-    : codespaceError ? codespaceError
-    : (latencyError && !heroConnectedLocal) ? latencyError
+        : (latencyError && !heroConnectedLocal) ? latencyError
     : null
   useEffect(() => {
     if (!activeError) return
@@ -2745,26 +2372,11 @@ function HomePage({
     }
   }
 
-  function handleCodespaceConnect() {
-    if (processStatus.running || codespaceConnected) {
-      requireSwitch(
-        'تغییر روش اتصال',
-        'اتصال فعلی قطع می‌شود و از طریق GitHub Codespace مجدداً متصل می‌شوید. ادامه می‌دهید؟',
-        () => {
-          setSwitchConfirm(null)
-          onCodespaceConnect()
-        },
-      )
-    } else {
-      onCodespaceConnect()
-    }
-  }
-
   const freeConnected = freeConnectedLocal
-  const otherMethodActive = processStatus.running || codespaceConnected || freeConnected
+  const otherMethodActive = processStatus.running || freeConnected
   const heroConnected = heroConnectedLocal
-  const activeMethod: 'codespace' | 'free' | 'subscription' | 'bpb' | 'warp' | null =
-    codespaceConnected ? 'codespace' : freeConnected ? 'free' : (warpConnecting || (processStatus.running && lastConnectionType === 'warp')) ? 'warp' : processStatus.running ? (lastConnectionType === 'bpb' ? 'bpb' : 'subscription') : null
+  const activeMethod: 'free' | 'subscription' | null =
+    freeConnected ? 'free' : processStatus.running ? 'subscription' : null
 
   const isConnecting = processBusy && !heroConnected
   const isReconnecting = freePhase === 'reconnecting'
@@ -2780,7 +2392,6 @@ function HomePage({
 
   const isSubConnecting = processBusy && !isConnected
   const isFreeActive = freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' || freeConnected
-  const isCodespaceActive = codespaceConnecting || codespaceConnected
 
   function handleSubscriptionConnect() {
     // During connecting or when connected: always stop/cancel
@@ -2794,14 +2405,6 @@ function HomePage({
       )
     } else {
       void onStartFastest()
-    }
-  }
-
-  function handleCodespaceToggle() {
-    if (isCodespaceActive) {
-      onCodespaceDisconnect()
-    } else {
-      handleCodespaceConnect()
     }
   }
 
@@ -2828,15 +2431,15 @@ function HomePage({
         { icon: '✓', label: 'تأیید IP', status: connected && isConnected ? 'done' : connected ? 'active' : 'idle' },
       ]
     }
-    if (activeMethod === 'codespace' || codespaceConnecting) {
-      const done = codespaceConnected
+    if (false || false) {
+      const done = false
       return [
-        { icon: '⬡', label: 'ساخت Codespace', status: codespaceConnecting ? 'active' : done ? 'done' : 'idle' },
-        { icon: '⇄', label: 'اتصال تونل', status: codespaceConnecting ? 'active' : done ? 'done' : 'idle' },
+        { icon: '⬡', label: 'ساخت Codespace', status: false ? 'active' : done ? 'done' : 'idle' },
+        { icon: '⇄', label: 'اتصال تونل', status: false ? 'active' : done ? 'done' : 'idle' },
         { icon: '✓', label: 'تأیید IP', status: done && isConnected ? 'done' : done ? 'active' : 'idle' },
       ]
     }
-    if (isConnecting || activeMethod === 'subscription' || activeMethod === 'bpb' || activeMethod === 'warp' || warpConnecting) {
+    if (isConnecting || activeMethod === 'subscription' || false || false || false) {
       return [
         { icon: '◌', label: 'شروع sing-box', status: processBusy && !processStatus.ready ? 'active' : (processStatus.ready || isConnected) ? 'done' : 'idle' },
         { icon: '⇄', label: 'پراکسی محلی', status: processStatus.ready && !isConnected ? 'active' : isConnected ? 'done' : 'idle' },
@@ -2847,7 +2450,7 @@ function HomePage({
   }
 
   const subStages = getSubStages()
-  const showStages = subStages.length > 0 && (isConnecting || codespaceConnecting ||
+  const showStages = subStages.length > 0 && (isConnecting || false ||
     freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' ||
     (heroConnected && subStages.some(s => s.status !== 'idle')))
 
@@ -2892,9 +2495,7 @@ function HomePage({
                   : 'status-label-dot'
               }
             />
-            {activeMethod === 'codespace'
-              ? `GitHub Codespace ${t('status.connected')}${codespaceHost ? ` · ${codespaceHost}` : ''}${isConnected ? ` · IP ${ipVerificationResult.proxyIp ?? t('stats.confirmed')}` : ''}`
-              : activeMethod === 'free'
+            {activeMethod === 'free'
                 ? `${t('home.free.title')} ${t('status.connected')}${freeNodeName ? ` · ${freeNodeName}` : ''}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}${isConnected ? ` · IP ${ipVerificationResult.proxyIp ?? t('stats.confirmed')}` : ''}`
                 : isConnected
                   ? processStatus.connectionMode === 'tun'
@@ -2952,38 +2553,6 @@ function HomePage({
               </span>
             </button>
 
-            {/* ── GitHub Codespace — Red ── */}
-            <button
-              className={`method-btn method-btn-red${activeMethod === 'codespace' || (codespaceConnecting && !codespaceConnected) ? ' method-btn-active' : ''}`}
-              type="button"
-              onClick={handleCodespaceToggle}
-            >
-              <span className="method-btn-icon">
-                {codespaceConnecting && !codespaceConnected ? <span className="connection-stage-spinner">◌</span> : codespaceConnected ? '■' : '⬡'}
-              </span>
-              <span className="method-btn-label">
-                <strong>{codespaceConnected ? t('hero.disconnectGithub') : codespaceConnecting ? '■ توقف' : t('home.codespace.connect')}</strong>
-                <small>GitHub Codespace</small>
-              </span>
-              {!(codespaceConnected || codespaceConnecting) && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
-            </button>
-
-            {/* ── BPB Subscription — Gold ── */}
-            <button
-              className={`method-btn method-btn-gold${bpbConnected ? ' method-btn-active' : ''}`}
-              type="button"
-              onClick={() => onBpbHome()}
-            >
-              <span className="method-btn-icon">
-                {bpbConnected ? '■' : '◈'}
-              </span>
-              <span className="method-btn-label">
-                <strong>{bpbConnected ? t('btn.disconnect') : (bpbConfigured ? t('home.bpb.connect') : t('home.bpb.setup'))}</strong>
-                <small>BPB Panel</small>
-              </span>
-              {!bpbConnected && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
-            </button>
-
             {/* ── Free Subscription — Teal ── */}
             <button
               className={`method-btn method-btn-teal${isFreeActive ? ' method-btn-active' : ''}`}
@@ -3009,39 +2578,6 @@ function HomePage({
               {!isFreeActive && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
             </button>
 
-            {/* ── Cloudflare WARP — Purple ── */}
-            <button
-              className={`method-btn method-btn-purple${activeMethod === 'warp' ? ' method-btn-active' : ''}`}
-              type="button"
-              onClick={() => { activeMethod === 'warp' ? onWarpDisconnect() : onWarpConnect() }}
-              disabled={warpConnecting && !processStatus.running}
-            >
-              <span className="method-btn-icon">
-                {warpConnecting ? <span className="connection-stage-spinner">◌</span> : activeMethod === 'warp' ? '■' : '⬡'}
-              </span>
-              <span className="method-btn-label">
-                <strong>{activeMethod === 'warp' ? 'WARP متصل است' : warpConnecting ? '■ توقف' : 'Cloudflare WARP'}</strong>
-                <small>WireGuard · CF</small>
-              </span>
-              {activeMethod !== 'warp' && !warpConnecting && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
-            </button>
-
-            {/* ── Zeus Panel — Indigo ── */}
-            <button
-              className={`method-btn method-btn-zeus${(zeusConnecting || zeusConnected) ? ' method-btn-active' : ''}`}
-              type="button"
-              onClick={onZeusConnect}
-              disabled={zeusConnecting}
-            >
-              <span className="method-btn-icon">
-                {zeusConnecting ? <span className="connection-stage-spinner">◌</span> : zeusConnected ? '■' : '⬡'}
-              </span>
-              <span className="method-btn-label">
-                <strong>{zeusConnecting ? '■ در حال اتصال' : zeusConnected ? t('btn.disconnect') : 'Zeus Panel'}</strong>
-                <small>{zeusConnected ? t('home.zeus.connected') : zeusConfigured ? 'اتصال سریع‌ترین سرور' : t('home.zeus.goTools')}</small>
-              </span>
-              {!zeusConnecting && !zeusConnected && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
-            </button>
           </div>
 
           {showStages && (
@@ -3070,9 +2606,8 @@ function HomePage({
           aria-hidden={!heroConnected}
           title={heroConnected ? t('btn.disconnect') : undefined}
           onClick={heroConnected ? () => {
-            if (activeMethod === 'codespace') handleCodespaceToggle()
-            else if (activeMethod === 'free') handleFreeToggle()
-            else if (activeMethod === 'subscription' || activeMethod === 'bpb') {
+            if (activeMethod === 'free') handleFreeToggle()
+            else if (activeMethod === 'subscription') {
               requireSwitch(t('btn.disconnect'), 'اتصال قطع می‌شود. ادامه می‌دهید؟', () => { setSwitchConfirm(null); onMainAction() })
             }
           } : undefined}
@@ -3095,7 +2630,7 @@ function HomePage({
             <div className="hero-mode-pill">
               {freePhase === 'connected'
                 ? t('hero.modeFree')
-                : codespaceConnected
+                : false
                   ? t('hero.modeCodespace')
                   : lastConnectionType === 'bpb'
                     ? 'BPB Panel'
@@ -3128,8 +2663,8 @@ function HomePage({
               <strong dir="ltr">
                 {ipVerificationResult.proxyIp
                   ? ipVerificationResult.proxyIp
-                  : activeMethod === 'codespace' && codespaceHost
-                    ? codespaceHost
+                  : false && null
+                    ? null
                     : heroConnected
                       ? t('stats.confirmed')
                       : '—'}
@@ -3145,11 +2680,11 @@ function HomePage({
           <div>
             <span className="statistic-label">{t('stats.currentServer')}</span>
             <strong>
-              {activeMethod === 'codespace' && codespaceHost
-                ? codespaceHost
+              {false && null
+                ? null
                 : activeMethod === 'free' && freeNodeName
                   ? freeNodeName
-                  : activeMethod === 'bpb'
+                  : false
                     ? 'BPB Panel'
                     : selectedServer?.name ?? '—'}
             </strong>
@@ -3243,8 +2778,8 @@ function HomePage({
       </section>
 
       {/* Codespace progress shown inline when active */}
-      {activeMethod === 'codespace' && codespaceProgress && (
-        <div className="codespace-progress">{codespaceProgress}</div>
+      {false && null && (
+        <div className="codespace-progress">{null}</div>
       )}
 
       {switchConfirm && (
@@ -7666,19 +7201,15 @@ function SettingRow({
 // ── ToolsPage ────────────────────────────────────────────────────────────────
 
 function ToolsPage({
-  directDomains,
+  directDomains: _directDomains,
   onNavigateToSubscriptions,
-  onNavigateToZeus,
 }: {
   directDomains: string[]
   onNavigateToSubscriptions: () => void
-  onNavigateToZeus: () => void
 }) {
   return (
     <div className="page-content tools-page">
       <CfScannerSection />
-      <WarpSection directDomains={directDomains} />
-      <ZeusPanelSection onNavigateToZeus={onNavigateToZeus} />
       <SubscriptionConverterSection onNavigateToSubscriptions={onNavigateToSubscriptions} />
       <UpstreamProxySection />
       <UTlsSection />
@@ -7824,94 +7355,6 @@ function CfScannerSection() {
       {result && !result.success && (
         <p className="error-text">{result.error}</p>
       )}
-    </div>
-  )
-}
-
-// ── WARP Section ──────────────────────────────────────────────────────────────
-
-function WarpSection({ directDomains }: { directDomains: string[] }) {
-  const t = useT()
-  const [account, setAccount] = useState<WarpAccount | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [creating, setCreating] = useState(false)
-  const [connecting, setConnecting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [status, setStatus] = useState<string | null>(null)
-
-  useEffect(() => {
-    window.hamidsDeutsch.warp.getAccount().then((r) => {
-      setAccount(r.account ?? null)
-      setLoading(false)
-    }).catch(() => setLoading(false))
-  }, [])
-
-  async function createAccount() {
-    setCreating(true)
-    setError(null)
-    const r = await window.hamidsDeutsch.warp.createAccount()
-    setCreating(false)
-    if (r.success && r.account) {
-      setAccount(r.account as WarpAccount)
-      setStatus(t('tools.warp.accountCreated'))
-    } else {
-      setError(r.error ?? 'Failed')
-    }
-  }
-
-  async function deleteAccount() {
-    await window.hamidsDeutsch.warp.deleteAccount()
-    setAccount(null)
-    setStatus(null)
-  }
-
-  async function connect() {
-    setConnecting(true)
-    setError(null)
-    const r = await window.hamidsDeutsch.warp.connect({ directDomains })
-    setConnecting(false)
-    if (!r.success) setError(r.error ?? 'Failed')
-  }
-
-  if (loading) return null
-
-  return (
-    <div className="settings-section">
-      <div className="section-kicker">{t('tools.warp.kicker')}</div>
-      <h3 className="section-title">{t('tools.warp.title')}</h3>
-      <p className="section-desc">{t('tools.warp.desc')}</p>
-      {!account ? (
-        <button className="action-btn" type="button" onClick={createAccount} disabled={creating}>
-          {creating ? t('tools.warp.creating') : t('tools.warp.createBtn')}
-        </button>
-      ) : (
-        <>
-          <div className="warp-account-info">
-            <div className="warp-info-row">
-              <span className="warp-label">{t('tools.warp.endpoint')}</span>
-              <span className="warp-value">{account.endpointHost}:{account.endpointPort}</span>
-            </div>
-            <div className="warp-info-row">
-              <span className="warp-label">{t('tools.warp.addresses')}</span>
-              <span className="warp-value">{account.localAddresses.join(', ')}</span>
-            </div>
-            <div className="warp-info-row">
-              <span className="warp-label">Created</span>
-              <span className="warp-value">{new Date(account.createdAt).toLocaleDateString()}</span>
-            </div>
-          </div>
-          <div className="warp-actions">
-            <button className="action-btn" type="button" onClick={connect} disabled={connecting}>
-              {connecting ? '...' : t('tools.warp.connectBtn')}
-            </button>
-            <button className="secondary-btn" type="button" onClick={deleteAccount}>
-              {t('tools.warp.deleteBtn')}
-            </button>
-          </div>
-        </>
-      )}
-      {status && <p className="success-text">{status}</p>}
-      {error && <p className="error-text">{error}</p>}
     </div>
   )
 }
@@ -8290,24 +7733,5 @@ function BackupRestoreSection() {
   )
 }
 
-// ── Zeus Panel Section ────────────────────────────────────────────────────────
-
-function ZeusPanelSection({ onNavigateToZeus }: { onNavigateToZeus: () => void }) {
-  const { lang } = useContext(LangCtx)
-  return (
-    <div className="settings-section">
-      <div className="section-kicker">Zeus Panel</div>
-      <h3 className="section-title">{lang === 'fa' ? 'پنل Zeus' : 'Zeus Panel'}</h3>
-      <p className="section-desc" style={{ marginBottom: 14 }}>
-        {lang === 'fa'
-          ? 'پنل VLESS رایگان روی Cloudflare Workers. با یک کلیک وارد Cloudflare شوید و پنل به صورت خودکار راه‌اندازی می‌شود.'
-          : 'Free VLESS panel on Cloudflare Workers. Log in to Cloudflare with one click and the panel deploys automatically.'}
-      </p>
-      <button className="action-btn" type="button" onClick={onNavigateToZeus}>
-        {lang === 'fa' ? 'رفتن به پنل Zeus ←' : 'Open Zeus Panel →'}
-      </button>
-    </div>
-  )
-}
 
 export default App
