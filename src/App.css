@@ -4702,6 +4702,18 @@ button {
   font-size: 0.75rem;
 }
 
+.free-pool-flag {
+  font-size: 1.15rem;
+  line-height: 1;
+  min-width: 22px;
+  text-align: center;
+}
+
+.free-pool-ok-dot {
+  color: #4ade80;
+  font-size: 0.7rem;
+}
+
 .free-pool-empty {
   padding: 18px;
   text-align: center;

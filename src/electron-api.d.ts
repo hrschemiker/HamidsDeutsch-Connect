@@ -484,12 +484,15 @@ type FreeConfigStatus = {
 type FreePoolServer = {
   id: string
   uri: string
-  name: string
-  protocol: string
+  protocol: string | null
   host: string | null
   port: number | null
+  security: string | null
+  country: string | null
+  flag: string | null
+  source: string | null
+  working: boolean | null
   latencyMs: number | null
-  failCount: number
   lastTestedAt: string | null
   addedAt: string
 }
@@ -497,40 +500,43 @@ type FreePoolServer = {
 type FreeConnectResult = {
   success: boolean
   nodeId: string | null
-  nodeName: string | null
-  latencyMs: number | null
   error: string | null
 }
 
 type FreePoolMeta = {
   total: number
-  displaying: number
+  working: number
+  untested: number
   lastRefreshedAt: string | null
-  sourceCount: number
+  channels: Record<string, number>
 }
 
 type FreePoolResult = {
   success: boolean
   servers: FreePoolServer[]
   meta: FreePoolMeta | null
+  added?: number
+  tested?: number
+  removed?: number
   error: string | null
 }
 
 type FreePoolStatusEvent = {
-  poolCount: number
-  poolDisplaying: number
-  poolLastRefreshedAt: string | null
-  poolRefreshing: boolean
+  total: number
+  working: number
+  untested: number
+  testing: boolean
+  testDone: number
+  testTotal: number
+  lastRefreshedAt: string | null
 }
 
 type FreePoolUpdatedEvent = {
-  count: number
-  displaying: number
-  refreshedAt: string
+  added: number
 }
 
 type FreeProgressEvent = {
-  text: string
+  message: string
   phase: FreeConfigPhase
 }
 
@@ -773,28 +779,16 @@ declare global {
       }
 
       free: {
-        fetchAndConnect: (input?: {
-          directDomains?: string[]
-          rescueOptions?: RescueOptions | null
-        }) => Promise<FreeConnectResult>
+        crawl: () => Promise<FreePoolResult>
 
-        connectFromPool: (input?: {
-          directDomains?: string[]
-          rescueOptions?: RescueOptions | null
-        }) => Promise<FreeConnectResult>
+        testStart: () => Promise<FreePoolResult>
 
         connectSpecificNode: (input: {
-          nodeId: string
-          nodeUri: string
-          nodeName: string
-          nodeHost: string | null
-          nodePort: number | null
-          nodeProtocol: string
+          nodeId?: string
+          nodeUri?: string
           directDomains?: string[]
           rescueOptions?: RescueOptions | null
         }) => Promise<FreeConnectResult>
-
-        refreshPool: () => Promise<FreePoolResult>
 
         removeNode: (nodeId: string) => Promise<FreePoolResult>
 
@@ -803,8 +797,6 @@ declare global {
         getStatus: () => Promise<FreeConfigStatus>
 
         getPool: () => Promise<FreePoolResult>
-
-        getPoolMeta: () => Promise<{ success: boolean; total: number; displaying: number; lastRefreshedAt: string | null; poolRefreshing: boolean; error: string | null }>
 
         onProgress: (
           callback: (payload: FreeProgressEvent) => void,

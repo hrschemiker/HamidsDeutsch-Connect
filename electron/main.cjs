@@ -120,16 +120,15 @@ const {
 } = require('./sing-box-process-manager.cjs')
 
 const {
-  mergeServers: mergeFreeServers,
-  revalidatePool: revalidateFreePool,
-  updatePoolMeta: updateFreePoolMeta,
-  markSuccess: markFreeSuccess,
-  getPool: getFreePool,
-  getPoolMeta: getFreePoolMeta,
-  getAllPool: getAllFreePool,
+  addConfigs: addFreeConfigs,
+  setTestResult: setFreeTestResult,
+  pruneDead: pruneFreeDead,
   removeServer: removeFreeServer,
-  PING_THRESHOLD_MS,
-  MIN_PING_MS,
+  getChannelId: getFreeChannelId,
+  setChannelId: setFreeChannelId,
+  getPool: getFreePool,
+  getAllPool: getAllFreePool,
+  getPoolMeta: getFreePoolMeta,
 } = require('./free-config-store.cjs')
 
 const {
@@ -365,39 +364,30 @@ function setupTray() {
   })
 }
 
-// ── Free Config State ──────────────────────────────────────────────────────
+// ── Free Config Engine (Telegram channels → geoip → test → connect) ─────────
+//
+// Free configs come exclusively from two curated Telegram channels. Crawling
+// happens through the ACTIVE tunnel (Telegram is blocked in Iran), incrementally
+// per-channel via the stored newest-post-id cursor. Configs are stored with a
+// random 6-digit id + the country flag of the server IP (offline GeoIP); their
+// name is never shown. Connecting to a free config is identical to a
+// subscription connect. The working-test connects to each config one-by-one and
+// deletes the ones that pass no real traffic.
 
-const FREE_CONFIG_SOURCES = [
-  'https://raw.githubusercontent.com/MohammadBahemmat/V2ray-Collector/main/all_servers.txt',
-  'https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/mix',
-  'https://raw.githubusercontent.com/Pawdroid/Free-servers/main/sub',
-  'https://raw.githubusercontent.com/sinavm/SVM/main/Splitted-By-Protocol/mix',
-  'https://raw.githubusercontent.com/AmirrezaFarnamTaheri/ConfigStream/main/All_Configs_Sub.txt',
-  'https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_Sub.txt',
-  'https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/sub_merge.txt',
-  'https://raw.githubusercontent.com/soroushmirzaei/telegram-configs-collector/main/splitted/mixed',
-  'https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt',
-  'https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/server.txt',
-]
-const FREE_TEST_TIMEOUT = 3500
-const FREE_CONNECT_ATTEMPTS = 5
-const FREE_BACKGROUND_INTERVAL_MS = 15 * 60 * 1000
-
-// Telegram channel crawler — curated free configs, prioritised above generic lists.
-// Telegram is blocked in Iran, so we only crawl once a tunnel is already up.
-const TELEGRAM_CHANNEL = 'Spotify_Porteghali'
-const TELEGRAM_CRAWL_MIN_INTERVAL_MS = 20 * 60 * 1000
-const TELEGRAM_CHECK_INTERVAL_MS = 60 * 1000
+const TELEGRAM_CHANNELS = ['best_internet_iran', 'Spotify_Porteghali']
 const TELEGRAM_MAX_POSTS = 200
+const CRAWL_MIN_INTERVAL_MS = 3 * 60 * 1000
+const TEST_PORT = 3080
+const TEST_PER_CONFIG_TIMEOUT = 5000
+
+let crawlInFlight = false
+let lastCrawlAt = 0
+let testInFlight = false
 let telegramCrawlTimer = null
-let telegramLastCrawlAt = 0
-let telegramCrawling = false
+let freeBackgroundTimer = null
 
 // Last bandwidth sample, used to convert cumulative totals into live speed.
 let lastTrafficSample = null
-
-let freePoolRefreshing = false
-let freeBackgroundTimer = null
 
 let freeConfigState = {
   phase: 'idle',
@@ -407,315 +397,38 @@ let freeConfigState = {
   error: null,
   userDisconnected: false,
   poolCount: 0,
-  poolDisplaying: 0,
-  poolLastRefreshedAt: null,
-  poolRefreshing: false,
+  testing: false,
+  testDone: 0,
+  testTotal: 0,
 }
 
 function sendFreeProgress(text, phase) {
   if (phase) freeConfigState.phase = phase
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('free:progress', { text, phase: freeConfigState.phase })
+    mainWindow.webContents.send('free:progress', { message: text, phase: freeConfigState.phase, at: new Date().toISOString() })
   }
 }
 
-async function fetchOneSource(url) {
-  const { net } = require('electron')
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 20000)
-  try {
-    const res = await net.fetch(url, {
-      method: 'GET',
-      redirect: 'follow',
-      signal: ctrl.signal,
-      headers: { 'User-Agent': 'HamidsDeutsch-Connect/1.0' },
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return await res.text()
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-async function fetchAllFreeSources() {
-  const results = await Promise.allSettled(
-    FREE_CONFIG_SOURCES.map((url) => fetchOneSource(url)),
-  )
-  const texts = results
-    .filter((r) => r.status === 'fulfilled' && r.value)
-    .map((r) => r.value)
-  return { texts, sourceCount: texts.length }
-}
-
-function parseAllProtocols(content) {
-  const { parseSubscriptionNodeRecords } = require('./subscription-parser.cjs')
-  return parseSubscriptionNodeRecords(content)
-}
-
-async function testProxyConnectivity(port = 2080, timeoutMs = 12000) {
-  // Real-relay check: CONNECT tunnel + TLS handshake + a real HTTP 200 from a
-  // Cloudflare endpoint proves the server actually relays traffic. We resolve as
-  // soon as the 200 status line comes back — requiring a fixed payload size was
-  // too strict and rejected many genuinely-working (but slower) free servers.
-  const TEST_HOST = 'speed.cloudflare.com'
-  const TEST_PATH = '/__down?bytes=1024'
-
-  return new Promise((resolve) => {
-    const net = require('node:net')
-    const tls = require('node:tls')
-    let resolved = false
-    let tlsSocket = null
-
-    const done = (ok) => {
-      if (!resolved) {
-        resolved = true
-        try { tlsSocket?.destroy() } catch {}
-        try { socket.destroy() } catch {}
-        resolve(ok)
-      }
-    }
-
-    const socket = new net.Socket()
-    socket.setTimeout(timeoutMs)
-    socket.on('timeout', () => done(false))
-    socket.on('error', () => done(false))
-
-    socket.connect(port, '127.0.0.1', () => {
-      socket.write(`CONNECT ${TEST_HOST}:443 HTTP/1.1\r\nHost: ${TEST_HOST}:443\r\n\r\n`)
-    })
-
-    let connectBuf = ''
-    let tunnelReady = false
-
-    socket.on('data', (chunk) => {
-      if (tunnelReady) return // TLS layer takes over after this
-      connectBuf += chunk.toString('ascii', 0, Math.min(chunk.length, 512))
-      if (!connectBuf.includes('\r\n\r\n')) return
-
-      const firstLine = connectBuf.split('\r\n')[0] ?? ''
-      if (!firstLine.includes('200')) { done(false); return }
-
-      tunnelReady = true
-      socket.removeAllListeners('data')
-
-      tlsSocket = tls.connect({ socket, servername: TEST_HOST, rejectUnauthorized: false }, () => {
-        tlsSocket.write(
-          `GET ${TEST_PATH} HTTP/1.1\r\nHost: ${TEST_HOST}\r\nConnection: close\r\n\r\n`
-        )
-      })
-
-      tlsSocket.on('error', () => done(false))
-      tlsSocket.setTimeout(timeoutMs)
-      tlsSocket.on('timeout', () => done(false))
-
-      let responseBuf = ''
-      let headersDone = false
-
-      tlsSocket.on('data', (d) => {
-        if (!headersDone) {
-          responseBuf += d.toString('ascii', 0, Math.min(d.length, 1024))
-          const sep = responseBuf.indexOf('\r\n\r\n')
-          if (sep === -1) return
-          const status = responseBuf.split('\r\n')[0] ?? ''
-          if (!status.includes('200') && !status.includes('204')) { done(false); return }
-          headersDone = true
-          // A 200/204 status line means the request traversed the tunnel to
-          // Cloudflare and came back — the server relays. That's enough.
-          done(true)
-        }
-      })
-
-      tlsSocket.on('end', () => done(headersDone))
-    })
-  })
-}
-
-async function backgroundRefreshFreePool() {
-  if (freePoolRefreshing) return
-  freePoolRefreshing = true
-  freeConfigState.poolRefreshing = true
-  sendFreePoolStatus()
-
-  try {
-    const { testServerBatch } = require('./server-latency.cjs')
-
-    // 1. Fetch raw text from all subscription sources first (needed for both cfray and fallback)
-    const { texts, sourceCount } = await fetchAllFreeSources()
-    if (texts.length === 0) return
-
-    let cfrayMergedCount = 0
-
-    // 2. PRIMARY: try cfray (speed+latency tested, most reliable results).
-    //    Pass the already-fetched text so we don't re-download.
-    //    cfray runs in background; we do NOT update freePhase here so the
-    //    connect-flow UI state is unaffected.
-    try {
-      const { uris, source } = await getCfrayConfigs(texts)
-      if (source === 'cfray' && uris.length > 0) {
-        const cfrayRecords = parseAllProtocols(uris.join('\n'))
-        const now = new Date().toISOString()
-        const cfraySeen = new Set()
-        const cfrayUnique = cfrayRecords.filter((r) => {
-          if (!r.node.valid || !r.node.host || !r.node.port) return false
-          if (cfraySeen.has(r.id)) return false
-          cfraySeen.add(r.id)
-          return true
-        })
-        // cfray already speed-ranked these — just do a fast TCP reachability check
-        const cfrayInputs = cfrayUnique.map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
-        const cfrayLatency = await testServerBatch(cfrayInputs)
-        const cfrayLatencyMap = new Map(cfrayLatency.results.map((r) => [r.id, r]))
-        const cfrayToStore = cfrayUnique
-          .filter((r) => {
-            const lr = cfrayLatencyMap.get(r.id)
-            return lr && lr.reachable && typeof lr.latencyMs === 'number' && lr.latencyMs >= MIN_PING_MS && lr.latencyMs < PING_THRESHOLD_MS
-          })
-          .map((r) => ({
-            id: r.id,
-            uri: r.uri,
-            name: r.node.name ?? r.node.protocol,
-            protocol: r.node.protocol,
-            host: r.node.host,
-            port: r.node.port,
-            security: r.node.security ?? null,
-            transport: r.node.transport ?? null,
-            tls: r.node.tls ?? false,
-            latencyMs: cfrayLatencyMap.get(r.id)?.latencyMs ?? null,
-            lastTestedAt: now,
-            addedAt: now,
-            source: 'cfray',
-          }))
-        if (cfrayToStore.length > 0) {
-          await mergeFreeServers(cfrayToStore).catch(() => {})
-          cfrayMergedCount = cfrayToStore.length
-        }
-      }
-    } catch {
-      // cfray unavailable or timed out — proceed with fallback ping-only approach
-    }
-
-    // 3. FALLBACK: parse & ping-test from the same fetched subscription texts.
-    //    Even if cfray succeeded, this adds more servers to the pool.
-    const combined = texts.join('\n')
-    const records = parseAllProtocols(combined)
-
-    let totalMerged = cfrayMergedCount
-
-    if (records.length > 0) {
-      const seen = new Set()
-      const unique = records.filter((r) => {
-        if (!r.node.valid || !r.node.host || !r.node.port) return false
-        if (seen.has(r.id)) return false
-        seen.add(r.id)
-        return true
-      })
-
-      // Re-validate existing pool (drop dead servers)
-      await revalidateFreePool(async (inputs) => testServerBatch(inputs)).catch(() => {})
-
-      // Ping-test new candidates in chunks
-      const CHUNK = 80
-      const now = new Date().toISOString()
-
-      for (let i = 0; i < unique.length; i += CHUNK) {
-        if (freeConfigState.userDisconnected === true || freePoolRefreshing === false) break
-        const chunk = unique.slice(i, i + CHUNK)
-        const inputs = chunk.map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
-        const result = await testServerBatch(inputs)
-        const latencyMap = new Map(result.results.map((r) => [r.id, r]))
-
-        const toStore = chunk
-          .filter((r) => {
-            const lr = latencyMap.get(r.id)
-            return lr && lr.reachable && typeof lr.latencyMs === 'number' && lr.latencyMs >= MIN_PING_MS && lr.latencyMs < PING_THRESHOLD_MS
-          })
-          .map((r) => ({
-            id: r.id,
-            uri: r.uri,
-            name: r.node.name ?? r.node.protocol,
-            protocol: r.node.protocol,
-            host: r.node.host,
-            port: r.node.port,
-            security: r.node.security ?? null,
-            transport: r.node.transport ?? null,
-            tls: r.node.tls ?? false,
-            latencyMs: latencyMap.get(r.id)?.latencyMs ?? null,
-            lastTestedAt: now,
-            addedAt: now,
-            source: 'subscription',
-          }))
-
-        if (toStore.length > 0) {
-          await mergeFreeServers(toStore).catch(() => {})
-          totalMerged += toStore.length
-        }
-      }
-    }
-
-    const refreshedAt = new Date().toISOString()
-    await updateFreePoolMeta({ lastRefreshedAt: refreshedAt, sourceCount }).catch(() => {})
-    freeConfigState.poolLastRefreshedAt = refreshedAt
-
-    const meta = await getFreePoolMeta().catch(() => null)
-    if (meta) {
-      freeConfigState.poolCount = meta.total
-      freeConfigState.poolDisplaying = meta.displaying
-    }
-
-    sendFreePoolStatus()
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('free:pool-updated', {
-        count: meta?.total ?? 0,
-        displaying: meta?.displaying ?? 0,
-        refreshedAt,
-      })
-    }
-  } catch {
-    // Best-effort background refresh; do not surface errors.
-  } finally {
-    freePoolRefreshing = false
-    freeConfigState.poolRefreshing = false
-    sendFreePoolStatus()
-  }
-}
-
-function sendFreePoolStatus() {
+async function sendFreePoolStatus() {
+  const meta = await getFreePoolMeta().catch(() => null)
+  if (meta) freeConfigState.poolCount = meta.total
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('free:pool-status', {
-      poolCount: freeConfigState.poolCount,
-      poolDisplaying: freeConfigState.poolDisplaying,
-      poolLastRefreshedAt: freeConfigState.poolLastRefreshedAt,
-      poolRefreshing: freeConfigState.poolRefreshing,
+      total: meta?.total ?? 0,
+      working: meta?.working ?? 0,
+      untested: meta?.untested ?? 0,
+      testing: freeConfigState.testing,
+      testDone: freeConfigState.testDone,
+      testTotal: freeConfigState.testTotal,
+      lastRefreshedAt: meta?.lastRefreshedAt ?? null,
     })
   }
 }
 
-function startFreeBackgroundRefresh() {
-  backgroundRefreshFreePool().catch(() => {})
-  freeBackgroundTimer = setInterval(() => {
-    backgroundRefreshFreePool().catch(() => {})
-  }, FREE_BACKGROUND_INTERVAL_MS)
-}
-
-// ── Telegram config crawler ──────────────────────────────────────────────────
-
-/** Is ANY connection method currently up? Needed so Telegram fetches are tunneled. */
 function isAnyConnectionActive() {
-  try {
-    if (getProcessStatus().running) return true
-  } catch {}
-  try {
-    const b = getBpbStatus()
-    if (b && (b.running || b.ready || b.connected)) return true
-  } catch {}
-  return false
+  try { return getProcessStatus().running } catch { return false }
 }
 
-/**
- * Fetch a URL through the active tunnel. Electron's net.fetch honours the system
- * proxy (set by our sing-box mixed inbound) and, in TUN mode, all traffic is
- * captured anyway — so once connected this reaches Telegram past the block.
- */
 async function tunneledFetch(url) {
   const { net } = require('electron')
   const resp = await net.fetch(url, {
@@ -725,109 +438,212 @@ async function tunneledFetch(url) {
   return { ok: resp.ok, status: resp.status, text: () => resp.text() }
 }
 
+function parseAllProtocols(content) {
+  const { parseSubscriptionNodeRecords } = require('./subscription-parser.cjs')
+  return parseSubscriptionNodeRecords(content)
+}
+
 /**
- * Crawl the curated Telegram channel for configs and merge the working ones into
- * the free pool tagged source:'telegram' (which sorts them ahead of generic
- * lists). Throttled, and a no-op unless a tunnel is already up.
+ * Crawl both Telegram channels for NEW configs (since the stored post-id cursor),
+ * resolve each server's country flag offline, and add them to the pool.
+ * Runs only while a tunnel is up. Throttled unless force=true.
  */
-async function crawlTelegramIntoPool({ force = false } = {}) {
-  if (telegramCrawling) return { merged: 0, skipped: 'busy' }
-  if (!force && Date.now() - telegramLastCrawlAt < TELEGRAM_CRAWL_MIN_INTERVAL_MS) {
-    return { merged: 0, skipped: 'throttled' }
-  }
-  if (!isAnyConnectionActive()) return { merged: 0, skipped: 'offline' }
+async function crawlFreeConfigs({ force = false } = {}) {
+  if (crawlInFlight) return { added: 0, skipped: 'busy' }
+  if (!force && Date.now() - lastCrawlAt < CRAWL_MIN_INTERVAL_MS) return { added: 0, skipped: 'throttled' }
+  if (!isAnyConnectionActive()) return { added: 0, skipped: 'offline' }
 
-  telegramCrawling = true
+  crawlInFlight = true
   try {
-    const { crawlTelegramConfigs } = require('./telegram-source-service.cjs')
-    const { testServerBatch } = require('./server-latency.cjs')
+    const { crawlChannel } = require('./telegram-source-service.cjs')
+    const geoip = require('./geoip-service.cjs')
+    sendFreeProgress('در حال جستجوی کانفیگ‌های جدید در تلگرام...', 'fetching')
 
-    const { uris } = await crawlTelegramConfigs({
-      channel: TELEGRAM_CHANNEL,
-      maxPosts: TELEGRAM_MAX_POSTS,
-      fetchImpl: tunneledFetch,
-    })
-    if (!uris.length) return { merged: 0, skipped: 'empty' }
+    const collected = []
+    for (const channel of TELEGRAM_CHANNELS) {
+      const sinceId = await getFreeChannelId(channel).catch(() => 0)
+      let res
+      try {
+        res = await crawlChannel({ channel, sinceId, maxPosts: TELEGRAM_MAX_POSTS, fetchImpl: tunneledFetch })
+      } catch { continue }
+      const records = parseAllProtocols(res.uris.join('\n'))
+      for (const r of records) {
+        if (!r.node.valid || !r.node.host || !r.node.port) continue
+        collected.push(r)
+      }
+      if (res.newestId) await setFreeChannelId(channel, res.newestId).catch(() => {})
+    }
 
-    const records = parseAllProtocols(uris.join('\n'))
+    // Resolve country/flag (offline geoip; domains resolve through the tunnel).
     const seen = new Set()
-    const unique = records.filter((r) => {
-      if (!r.node.valid || !r.node.host || !r.node.port) return false
-      if (seen.has(r.id)) return false
-      seen.add(r.id)
-      return true
-    })
-    if (!unique.length) return { merged: 0, skipped: 'unparsed' }
-
-    const now = new Date().toISOString()
-    const CHUNK = 80
-    let merged = 0
-    for (let i = 0; i < unique.length; i += CHUNK) {
-      const chunk = unique.slice(i, i + CHUNK)
-      const inputs = chunk.map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
-      const result = await testServerBatch(inputs)
-      const latencyMap = new Map(result.results.map((r) => [r.id, r]))
-      const toStore = chunk
-        .filter((r) => {
-          const lr = latencyMap.get(r.id)
-          return lr && lr.reachable && typeof lr.latencyMs === 'number' && lr.latencyMs >= MIN_PING_MS && lr.latencyMs < PING_THRESHOLD_MS
-        })
-        .map((r) => ({
-          id: r.id,
-          uri: r.uri,
-          name: r.node.name ?? r.node.protocol,
-          protocol: r.node.protocol,
-          host: r.node.host,
-          port: r.node.port,
-          security: r.node.security ?? null,
-          transport: r.node.transport ?? null,
-          tls: r.node.tls ?? false,
-          latencyMs: latencyMap.get(r.id)?.latencyMs ?? null,
-          lastTestedAt: now,
-          addedAt: now,
-          source: 'telegram',
-        }))
-      if (toStore.length > 0) {
-        await mergeFreeServers(toStore).catch(() => {})
-        merged += toStore.length
-      }
+    const entries = []
+    for (const r of collected) {
+      if (seen.has(r.uri)) continue
+      seen.add(r.uri)
+      const country = await geoip.countryForHost(r.node.host).catch(() => null)
+      entries.push({
+        uri: r.uri,
+        host: r.node.host,
+        port: r.node.port,
+        protocol: r.node.protocol,
+        security: r.node.security ?? null,
+        country,
+        flag: geoip.flagForCountry(country),
+        source: 'telegram',
+      })
     }
 
-    telegramLastCrawlAt = Date.now()
-    if (merged > 0) {
-      const meta = await getFreePoolMeta().catch(() => null)
-      if (meta) {
-        freeConfigState.poolCount = meta.total
-        freeConfigState.poolDisplaying = meta.displaying
-      }
-      sendFreePoolStatus()
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('free:pool-updated', {
-          count: meta?.total ?? 0,
-          displaying: meta?.displaying ?? 0,
-          refreshedAt: now,
-        })
-      }
-      console.log(`[Telegram] Merged ${merged} configs from @${TELEGRAM_CHANNEL}`)
+    const added = entries.length ? await addFreeConfigs(entries) : 0
+    lastCrawlAt = Date.now()
+    await sendFreePoolStatus()
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('free:pool-updated', { added })
     }
-    return { merged, skipped: null }
+    if (added > 0) console.log(`[Free] Added ${added} new configs from Telegram`)
+    return { added, skipped: null }
   } catch (err) {
-    console.error('[Telegram] Crawl failed:', err?.message ?? err)
-    return { merged: 0, skipped: 'error' }
+    console.error('[Free] crawl failed:', err?.message ?? err)
+    return { added: 0, skipped: 'error' }
   } finally {
-    telegramCrawling = false
+    crawlInFlight = false
   }
 }
 
-function startTelegramCrawler() {
-  telegramCrawlTimer = setInterval(() => {
-    crawlTelegramIntoPool().catch(() => {})
-  }, TELEGRAM_CHECK_INTERVAL_MS)
+/** Probe whether the local proxy on `port` actually relays real traffic. */
+function probeRelay(port, timeoutMs = TEST_PER_CONFIG_TIMEOUT) {
+  const TEST_HOST = 'speed.cloudflare.com'
+  return new Promise((resolve) => {
+    const netmod = require('node:net')
+    const tls = require('node:tls')
+    let done = false
+    let tlsSocket = null
+    const t0 = Date.now()
+    const finish = (ok) => {
+      if (done) return
+      done = true
+      try { tlsSocket?.destroy() } catch {}
+      try { socket.destroy() } catch {}
+      resolve({ ok, ms: ok ? Date.now() - t0 : null })
+    }
+    const socket = new netmod.Socket()
+    socket.setTimeout(timeoutMs)
+    socket.on('timeout', () => finish(false))
+    socket.on('error', () => finish(false))
+    socket.connect(port, '127.0.0.1', () => {
+      socket.write(`CONNECT ${TEST_HOST}:443 HTTP/1.1\r\nHost: ${TEST_HOST}:443\r\n\r\n`)
+    })
+    let buf = ''
+    let tunnelReady = false
+    socket.on('data', (chunk) => {
+      if (tunnelReady) return
+      buf += chunk.toString('ascii', 0, Math.min(chunk.length, 512))
+      if (!buf.includes('\r\n\r\n')) return
+      if (!(buf.split('\r\n')[0] || '').includes('200')) { finish(false); return }
+      tunnelReady = true
+      socket.removeAllListeners('data')
+      tlsSocket = tls.connect({ socket, servername: TEST_HOST, rejectUnauthorized: false }, () => {
+        tlsSocket.write(`GET /__down?bytes=1024 HTTP/1.1\r\nHost: ${TEST_HOST}\r\nConnection: close\r\n\r\n`)
+      })
+      tlsSocket.setTimeout(timeoutMs)
+      tlsSocket.on('timeout', () => finish(false))
+      tlsSocket.on('error', () => finish(false))
+      let rbuf = ''
+      tlsSocket.on('data', (d) => {
+        rbuf += d.toString('ascii', 0, Math.min(d.length, 512))
+        const line = rbuf.split('\r\n')[0] || ''
+        if (rbuf.includes('\r\n')) finish(line.includes('200') || line.includes('204'))
+      })
+    })
+  })
 }
 
-async function tryConnectFreeNode(record, directDomains, rescueOptions) {
+/** Build a throwaway test config for a uri and spawn a sing-box on TEST_PORT. */
+async function spawnTestEngine(uri) {
+  const { createAndCheckConfig } = require('./sing-box-config-service.cjs')
   const enginePath = getEnginePath()
   const userDataPath = app.getPath('userData')
+  const res = await createAndCheckConfig({
+    subscriptionUrl: 'https://t.me',
+    nodeId: 'test',
+    nodeUri: uri,
+    enginePath,
+    userDataPath,
+    directDomains: [],
+    rescueOptions: null,
+    runtimeDirectoryName: 'test-runtime',
+    configFileName: 'test.json',
+    localPort: TEST_PORT,
+    setSystemProxy: false,
+  }).catch(() => ({ success: false }))
+  if (!res.success) return null
+  const { spawn } = require('node:child_process')
+  const child = spawn(enginePath, ['run', '-c', res.configPath], { windowsHide: true, stdio: 'ignore' })
+  return child
+}
+
+/**
+ * Test every config one-by-one: connect, check real traffic, mark working/dead.
+ * Deletes configs that relay nothing. Must run while disconnected.
+ */
+async function testAllFreeConfigs() {
+  if (testInFlight) return { tested: 0, removed: 0, skipped: 'busy' }
+  testInFlight = true
+  freeConfigState.testing = true
+  try {
+    const all = await getAllFreePool().catch(() => [])
+    freeConfigState.testTotal = all.length
+    freeConfigState.testDone = 0
+    await sendFreePoolStatus()
+    for (const cfg of all) {
+      freeConfigState.testDone++
+      sendFreeProgress(`آزمایش کانفیگ‌ها: ${freeConfigState.testDone}/${freeConfigState.testTotal}`, 'testing')
+      let child = null
+      try {
+        child = await spawnTestEngine(cfg.uri)
+        if (!child) { await setFreeTestResult(cfg.id, false, null).catch(() => {}); continue }
+        await new Promise((r) => setTimeout(r, 1200))
+        const { ok, ms } = await probeRelay(TEST_PORT)
+        await setFreeTestResult(cfg.id, ok, ms).catch(() => {})
+      } catch {
+        await setFreeTestResult(cfg.id, false, null).catch(() => {})
+      } finally {
+        try { child?.kill() } catch {}
+        await new Promise((r) => setTimeout(r, 150))
+      }
+      if (freeConfigState.testDone % 10 === 0) await sendFreePoolStatus()
+    }
+    const removed = await pruneFreeDead().catch(() => 0)
+    await sendFreePoolStatus()
+    sendFreeProgress(`آزمایش کامل شد. ${removed} کانفیگ بی‌کار حذف شد.`, 'idle')
+    return { tested: all.length, removed, skipped: null }
+  } finally {
+    testInFlight = false
+    freeConfigState.testing = false
+    await sendFreePoolStatus()
+  }
+}
+
+/**
+ * Connect to a free config EXACTLY like a subscription: build the normal runtime
+ * config and start the engine. No separate free-runtime, no extra gate.
+ */
+async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOptions = null }) {
+  const { createAndCheckConfig } = require('./sing-box-config-service.cjs')
+  freeConfigState.userDisconnected = false
+  const enginePath = getEnginePath()
+  const userDataPath = app.getPath('userData')
+
+  // Resolve the uri from the pool if only an id was given.
+  let uri = nodeUri
+  if (!uri && nodeId) {
+    const all = await getAllFreePool().catch(() => [])
+    uri = all.find((s) => s.id === nodeId)?.uri
+  }
+  if (!uri) return { success: false, error: 'کانفیگ رایگان پیدا نشد.' }
+
+  if (getProcessStatus().running) {
+    try { await stopLocalProxy({ userDataPath }) } catch {}
+  }
 
   const [upstreamProxy, utlsSettings, cfScanCache] = await Promise.all([
     getUpstreamProxy(userDataPath).catch(() => null),
@@ -835,252 +651,56 @@ async function tryConnectFreeNode(record, directDomains, rescueOptions) {
     getCfScanCache(userDataPath).catch(() => null),
   ])
 
-  const baseRescueOptions = utlsSettings?.fragmentEnabled
-    ? { ...(rescueOptions ?? {}), enabled: true, recordFragment: true }
-    : rescueOptions
+  const configResult = await createAndCheckConfig({
+    subscriptionUrl: 'https://t.me',
+    nodeId: nodeId ?? 'free',
+    nodeUri: uri,
+    enginePath,
+    userDataPath,
+    directDomains: Array.isArray(directDomains) ? directDomains : [],
+    rescueOptions,
+    localPort: 2080,
+    setSystemProxy: true,
+    proxyDoH: proxyDoHEnabled,
+    upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
+    utlsSettings,
+    cfCleanIp: cfScanCache?.bestIp ?? null,
+  }).catch((e) => ({ success: false, error: e?.message }))
 
-  async function attempt(options) {
-    try {
-      const configResult = await createAndCheckConfig({
-        subscriptionUrl: FREE_CONFIG_SOURCES[0],
-        nodeId: record.id,
-        nodeUri: record.uri,
-        enginePath,
-        userDataPath,
-        directDomains: directDomains ?? [],
-        rescueOptions: options,
-        runtimeDirectoryName: 'free-runtime',
-        configFileName: 'free-config.json',
-        localPort: 2080,
-        setSystemProxy: true,
-        proxyDoH: proxyDoHEnabled,
-        upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
-        utlsSettings,
-        cfCleanIp: cfScanCache?.bestIp ?? null,
-      })
-      if (!configResult.success) return null
-
-      await backupWindowsProxyState(userDataPath).catch(() => {})
-
-      const started = await startLocalProxy({ enginePath, userDataPath, configPath: configResult.configPath })
-      if (!started.success) return null
-
-      const proxyWorks = await testProxyConnectivity(2080)
-      if (!proxyWorks) {
-        await stopLocalProxy({ userDataPath }).catch(() => {})
-        return null
-      }
-
-      return configResult.configPath
-    } catch {
-      return null
-    }
+  if (!configResult.success) {
+    return { success: false, error: configResult.error ?? 'کانفیگ رایگان معتبر نبود.' }
   }
+  await backupWindowsProxyState(userDataPath).catch(() => {})
+  const started = await startLocalProxy({ enginePath, userDataPath, configPath: configResult.configPath })
+  if (!started.success) return { success: false, error: started.error ?? 'اتصال ناموفق بود.' }
 
-  // First attempt: with current rescue options (or none, plus fragment if enabled globally)
-  const firstResult = await attempt(baseRescueOptions ?? null)
-  if (firstResult) return firstResult
-
-  // Auto DPI bypass retry: if dpiBypassAuto is enabled and rescue is not already forcing dpiBypass
-  const dpiBypassAuto = rescueOptions?.dpiBypassAuto !== false
-  const alreadyUsingDpi = rescueOptions?.dpiBypass === true
-  if (dpiBypassAuto && !alreadyUsingDpi) {
-    sendFreeProgress('تلاش مجدد با DPI Bypass...', 'connecting')
-    const dpiOptions = {
-      ...(rescueOptions ?? {}),
-      enabled: true,
-      recordFragment: true,
-      dpiBypass: true,
-    }
-    return attempt(dpiOptions)
-  }
-
-  return null
+  freeConfigState.phase = 'connected'
+  freeConfigState.nodeId = nodeId ?? null
+  return { success: true, nodeId: nodeId ?? null, error: null }
 }
 
-async function testFreeNodes(records) {
-  const { testServerBatch } = require('./server-latency.cjs')
-  const inputs = records
-    .filter((r) => r.node.valid && r.node.host && r.node.port)
-    .map((r) => ({ id: r.id, host: r.node.host, port: r.node.port }))
-  if (inputs.length === 0) return []
-  const result = await testServerBatch(inputs)
-  return result.results
+// Automation: crawl for new configs shortly after any connection comes up;
+// run the connectivity test automatically when disconnected (and on launch).
+function startFreeAutomation() {
+  freeBackgroundTimer = setInterval(() => {
+    if (isAnyConnectionActive()) crawlFreeConfigs().catch(() => {})
+  }, 60 * 1000)
 }
 
-async function runFreeConnect({ directDomains, rescueOptions, fetchFresh }) {
-  freeConfigState.userDisconnected = false
+// Kept for call-site compatibility with app startup.
+function startFreeBackgroundRefresh() { startFreeAutomation() }
+function startTelegramCrawler() { /* folded into startFreeAutomation */ }
 
-  try {
-    assertBpbInactive()
-  } catch (err) {
-    return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: err.message }
-  }
-
-  const mainStatus = getProcessStatus()
-  if (mainStatus.running) {
-    try {
-      await stopLocalProxy({ userDataPath: app.getPath('userData') })
-    } catch {
-      // Best-effort stop.
-    }
-  }
-
-  // First: try from stored pool (fast path — already tested, below threshold)
-  const storedPool = await getAllFreePool().catch(() => [])
-  if (storedPool.length > 0) {
-    sendFreeProgress('در حال اتصال از مخزن سرورهای ذخیره‌شده...', 'connecting')
-    // Sort priority: Telegram (curated) first, then cfray (speed-tested),
-    // then REALITY, then by latency.
-    const REALITY_POOL_PROTOCOLS = new Set(['vless', 'vmess', 'trojan'])
-    const sourceRank = (s) => (s.source === 'telegram' ? 0 : s.source === 'cfray' ? 1 : 2)
-    const sortedPool = [...storedPool].sort((a, b) => {
-      const ra = sourceRank(a)
-      const rb = sourceRank(b)
-      if (ra !== rb) return ra - rb
-      const aIsReality = REALITY_POOL_PROTOCOLS.has((a.protocol || '').toLowerCase()) && (a.security || '').toLowerCase() === 'reality'
-      const bIsReality = REALITY_POOL_PROTOCOLS.has((b.protocol || '').toLowerCase()) && (b.security || '').toLowerCase() === 'reality'
-      if (aIsReality !== bIsReality) return aIsReality ? -1 : 1
-      return (a.latencyMs ?? 9999) - (b.latencyMs ?? 9999)
-    })
-    for (const stored of sortedPool.slice(0, FREE_CONNECT_ATTEMPTS)) {
-      const record = {
-        id: stored.id,
-        uri: stored.uri,
-        node: { valid: true, host: stored.host, port: stored.port, name: stored.name, protocol: stored.protocol, transport: stored.transport ?? null, tls: stored.tls ?? false, security: stored.security ?? null },
-      }
-      sendFreeProgress(`اتصال به ${stored.name} (${stored.latencyMs ?? '?'} ms)...`, 'connecting')
-      const configPath = await tryConnectFreeNode(record, directDomains, rescueOptions)
-      if (configPath) {
-        freeConfigState.phase = 'connected'
-        freeConfigState.nodeId = stored.id
-        freeConfigState.nodeName = stored.name
-        freeConfigState.latencyMs = stored.latencyMs
-        freeConfigState.error = null
-        await markFreeSuccess(stored.id).catch(() => {})
-        setVirtualLocationConnected(true)
-        sendFreeProgress(`متصل شد: ${stored.name}`, 'connected')
-        return { success: true, nodeId: stored.id, nodeName: stored.name, latencyMs: stored.latencyMs, error: null }
-      }
-    }
-  }
-
-  // Fallback: fetch fresh from all sources
-  sendFreeProgress(`در حال دریافت سرورها از ${FREE_CONFIG_SOURCES.length} منبع...`, 'fetching')
-  let records = []
-  try {
-    const { texts } = await fetchAllFreeSources()
-    const combined = texts.join('\n')
-    records = parseAllProtocols(combined)
-  } catch {
-    // Nothing fetched — pool already tried above
-  }
-
-  if (records.length === 0) {
-    freeConfigState.phase = 'error'
-    freeConfigState.error = 'هیچ سرور رایگانی در دسترس نیست. اتصال به اینترنت را بررسی کنید.'
-    sendFreeProgress(freeConfigState.error, 'error')
-    return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: freeConfigState.error }
-  }
-
-  sendFreeProgress(`در حال بررسی پینگ ${records.length} سرور...`, 'testing')
-  const latencyResults = await testFreeNodes(records)
-  const latencyMap = new Map(latencyResults.map((r) => [r.id, r]))
-
-  const reachable = records
-    .filter((r) => {
-      const lr = latencyMap.get(r.id)
-      return lr && lr.reachable && typeof lr.latencyMs === 'number' && lr.latencyMs < PING_THRESHOLD_MS
-    })
-    .sort((a, b) => {
-      const la = latencyMap.get(a.id)?.latencyMs ?? 999999
-      const lb = latencyMap.get(b.id)?.latencyMs ?? 999999
-      return la - lb
-    })
-
-  if (reachable.length > 0) {
-    const now = new Date().toISOString()
-    const toStore = reachable.map((r) => ({
-      id: r.id,
-      uri: r.uri,
-      name: r.node.name ?? r.node.protocol,
-      protocol: r.node.protocol,
-      host: r.node.host,
-      port: r.node.port,
-      latencyMs: latencyMap.get(r.id)?.latencyMs ?? null,
-      lastTestedAt: now,
-      addedAt: now,
-    }))
-    await mergeFreeServers(toStore).catch(() => {})
-    const meta = await getFreePoolMeta().catch(() => null)
-    if (meta) {
-      freeConfigState.poolCount = meta.total
-      freeConfigState.poolDisplaying = meta.displaying
-      freeConfigState.poolLastRefreshedAt = meta.lastRefreshedAt
-    }
-    sendFreePoolStatus()
-  }
-
-  if (reachable.length === 0) {
-    freeConfigState.phase = 'error'
-    freeConfigState.error = 'هیچ سروری با پینگ زیر ۴۰۰ میلی‌ثانیه پیدا نشد.'
-    sendFreeProgress(freeConfigState.error, 'error')
-    return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: freeConfigState.error }
-  }
-
-  const candidates = reachable.slice(0, FREE_CONNECT_ATTEMPTS)
-  sendFreeProgress('در حال اتصال به سریع‌ترین سرور...', 'connecting')
-
-  for (const record of candidates) {
-    const lr = latencyMap.get(record.id)
-    sendFreeProgress(`اتصال به ${record.node.name ?? record.id} (${lr?.latencyMs ?? '?'} ms)...`, 'connecting')
-
-    const configPath = await tryConnectFreeNode(record, directDomains, rescueOptions)
-    if (configPath) {
-      const nodeName = record.node.name ?? record.node.protocol
-      const latencyMs = lr?.latencyMs ?? null
-
-      freeConfigState.phase = 'connected'
-      freeConfigState.nodeId = record.id
-      freeConfigState.nodeName = nodeName
-      freeConfigState.latencyMs = latencyMs
-      freeConfigState.error = null
-
-      await markFreeSuccess(record.id).catch(() => {})
-      setVirtualLocationConnected(true)
-
-      sendFreeProgress(`متصل شد: ${nodeName}`, 'connected')
-
-      return { success: true, nodeId: record.id, nodeName, latencyMs, error: null }
-    }
-  }
-
-  freeConfigState.phase = 'error'
-  freeConfigState.error = 'هیچ‌کدام از سرورهای آزمایش‌شده قابل اتصال نبودند.'
-  sendFreeProgress(freeConfigState.error, 'error')
-  return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: freeConfigState.error }
-}
-
-// Register auto-reconnect on unexpected engine exit
-setProcessExitCallback(({ code }) => {
-  if (freeConfigState.userDisconnected) return
-  if (freeConfigState.phase !== 'connected') return
-  if (code === 0) return
-
-  freeConfigState.phase = 'reconnecting'
-  sendFreeProgress('اتصال قطع شد. جستجوی خودکار سرور جایگزین...', 'reconnecting')
-
+// On disconnect, automatically run the free-config connectivity test (spec #9):
+// once the tunnel is down, quietly test any untested configs in the background.
+setProcessExitCallback(() => {
+  freeConfigState.phase = 'idle'
   setTimeout(() => {
-    runFreeConnect({
-      directDomains: [],
-      rescueOptions: null,
-      fetchFresh: false,
-    }).catch(() => {
-      freeConfigState.phase = 'error'
-      freeConfigState.error = 'اتصال مجدد ناموفق بود.'
-      sendFreeProgress('اتصال مجدد ناموفق بود.', 'error')
-    })
-  }, 1500)
+    if (isAnyConnectionActive() || testInFlight) return
+    getFreePoolMeta()
+      .then((meta) => { if (meta && meta.untested > 0) return testAllFreeConfigs() })
+      .catch(() => {})
+  }, 2500)
 })
 
 function getProductionLogPath() {
@@ -4135,15 +3755,7 @@ function registerIpcHandlers() {
       const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
       return { success: true, servers, meta, error: null }
     } catch (err) {
-      return { success: false, servers: [], meta: null, error: err?.message ?? 'خواندن مخزن سرورهای رایگان ناموفق بود.' }
-    }
-  })
-
-  ipcMain.handle('free:get-pool-meta', async () => {
-    try {
-      return { success: true, ...(await getFreePoolMeta()), poolRefreshing: freePoolRefreshing, error: null }
-    } catch (err) {
-      return { success: false, error: err?.message ?? 'خطا' }
+      return { success: false, servers: [], meta: null, error: err?.message ?? 'خواندن مخزن کانفیگ‌های رایگان ناموفق بود.' }
     }
   })
 
@@ -4151,84 +3763,42 @@ function registerIpcHandlers() {
     return { ...freeConfigState }
   })
 
-  ipcMain.handle('free:fetch-and-connect', async (_event, input) => {
-    return runFreeConnect({
-      directDomains: Array.isArray(input?.directDomains) ? input.directDomains : [],
-      rescueOptions: input?.rescueOptions ?? null,
-      fetchFresh: true,
-    })
-  })
-
-  ipcMain.handle('free:connect-from-pool', async (_event, input) => {
-    return runFreeConnect({
-      directDomains: Array.isArray(input?.directDomains) ? input.directDomains : [],
-      rescueOptions: input?.rescueOptions ?? null,
-      fetchFresh: false,
-    })
-  })
-
-  ipcMain.handle('free:connect-specific-node', async (_event, input) => {
-    const { nodeId, nodeUri, nodeName, nodeHost, nodePort, nodeProtocol, directDomains, rescueOptions } = input ?? {}
-    if (!nodeUri || !nodeId) return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: 'اطلاعات سرور ناقص است.' }
-
-    freeConfigState.userDisconnected = false
-
-    // Stop whatever is currently connected — main engine AND the separate BPB
-    // process — so this node's connection replaces it cleanly.
+  // Crawl the two Telegram channels for new configs (through the active tunnel).
+  ipcMain.handle('free:crawl', async () => {
     try {
-      const bpb = getBpbStatus()
-      if (bpb && (bpb.running || bpb.ready || bpb.connected)) {
-        await stopBpbProxy({ userDataPath: app.getPath('userData') }).catch(() => {})
-      }
-    } catch {}
-    const mainStatus = getProcessStatus()
-    if (mainStatus.running) {
-      try { await stopLocalProxy({ userDataPath: app.getPath('userData') }) } catch {}
-    }
-
-    const record = {
-      id: nodeId,
-      uri: nodeUri,
-      node: { valid: true, host: nodeHost, port: nodePort, name: nodeName, protocol: nodeProtocol, transport: null, tls: false, security: null },
-    }
-    const dd = Array.isArray(directDomains) ? directDomains : []
-    sendFreeProgress(`اتصال به ${nodeName}...`, 'connecting')
-    const configPath = await tryConnectFreeNode(record, dd, rescueOptions ?? null)
-    if (configPath) {
-      freeConfigState.phase = 'connected'
-      freeConfigState.nodeId = nodeId
-      freeConfigState.nodeName = nodeName
-      freeConfigState.latencyMs = null
-      freeConfigState.error = null
-      await markFreeSuccess(nodeId).catch(() => {})
-      setVirtualLocationConnected(true)
-      sendFreeProgress(`متصل شد: ${nodeName}`, 'connected')
-      return { success: true, nodeId, nodeName, latencyMs: null, error: null }
-    }
-    freeConfigState.phase = 'error'
-    freeConfigState.error = `اتصال به ${nodeName} ناموفق بود.`
-    sendFreeProgress(freeConfigState.error, 'error')
-    return { success: false, nodeId: null, nodeName: null, latencyMs: null, error: freeConfigState.error }
-  })
-
-  ipcMain.handle('free:refresh-pool', async () => {
-    try {
-      await backgroundRefreshFreePool()
+      const result = await crawlFreeConfigs({ force: true })
       const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
-      return { success: true, servers, meta, error: null }
+      return { success: true, added: result.added, skipped: result.skipped, servers, meta, error: null }
     } catch (err) {
-      return { success: false, servers: [], meta: null, error: err?.message ?? 'خطا در بروزرسانی مخزن' }
+      return { success: false, added: 0, servers: [], meta: null, error: err?.message ?? 'جستجوی کانفیگ‌ها ناموفق بود.' }
     }
+  })
+
+  // Run the one-by-one working test (caller must have disconnected first).
+  ipcMain.handle('free:test-start', async () => {
+    try {
+      const result = await testAllFreeConfigs()
+      const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
+      return { success: true, ...result, servers, meta, error: null }
+    } catch (err) {
+      return { success: false, servers: [], meta: null, error: err?.message ?? 'آزمایش کانفیگ‌ها ناموفق بود.' }
+    }
+  })
+
+  // Connect to a free config — identical path to a subscription connect (spec #8).
+  ipcMain.handle('free:connect-specific-node', async (_event, input) => {
+    const { nodeId, nodeUri, directDomains, rescueOptions } = input ?? {}
+    return connectFreeConfig({ nodeId, nodeUri, directDomains, rescueOptions })
   })
 
   ipcMain.handle('free:remove-node', async (_event, nodeId) => {
     try {
-      if (!nodeId) return { success: false, servers: [], meta: null, error: 'شناسه سرور نامعتبر است.' }
+      if (!nodeId) return { success: false, servers: [], meta: null, error: 'شناسه کانفیگ نامعتبر است.' }
       await removeFreeServer(nodeId)
       const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
       return { success: true, servers, meta, error: null }
     } catch (err) {
-      return { success: false, servers: [], meta: null, error: err?.message ?? 'حذف سرور ناموفق بود.' }
+      return { success: false, servers: [], meta: null, error: err?.message ?? 'حذف کانفیگ ناموفق بود.' }
     }
   })
 

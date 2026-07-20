@@ -40,19 +40,21 @@ type FreeConfigPhase =
   | 'reconnecting'
   | 'error'
 
+// New free-config model: 6-digit id + country flag, no display name.
 type FreePoolServer = {
   id: string
   uri: string
-  name: string
-  protocol: string
+  protocol: string | null
   host: string | null
   port: number | null
+  security: string | null
+  country: string | null
+  flag: string | null
+  source: string | null
+  working: boolean | null
   latencyMs: number | null
-  failCount: number
   lastTestedAt: string | null
   addedAt: string
-  security?: string | null
-  source?: string | null
 }
 
 // ── Theme ────────────────────────────────────────────────────────────────────
@@ -255,7 +257,8 @@ function App() {
   const [freeProgress, setFreeProgress] = useState<string | null>(null)
   const [freeError, setFreeError] = useState<string | null>(null)
   const [freePool, setFreePool] = useState<FreePoolServer[]>([])
-  const [freePoolMeta, setFreePoolMeta] = useState<{ total: number; displaying: number; lastRefreshedAt: string | null; poolRefreshing: boolean } | null>(null)
+  const [freePoolMeta, setFreePoolMeta] = useState<{ total: number; working: number; untested: number; lastRefreshedAt: string | null } | null>(null)
+  const [freeTest, setFreeTest] = useState<{ testing: boolean; done: number; total: number }>({ testing: false, done: 0, total: 0 })
 
   // Engine update notification
   const [engineUpdateAvailable, setEngineUpdateAvailable] = useState(false)
@@ -534,51 +537,59 @@ function App() {
     void window.hamidsDeutsch.free.getPool().then((r) => {
       if (r.success) {
         setFreePool(r.servers)
-        if (r.meta) setFreePoolMeta({ total: r.meta.total, displaying: r.meta.displaying, lastRefreshedAt: r.meta.lastRefreshedAt, poolRefreshing: false })
+        if (r.meta) setFreePoolMeta({ total: r.meta.total, working: r.meta.working, untested: r.meta.untested, lastRefreshedAt: r.meta.lastRefreshedAt })
       }
     })
-    const unsubProgress = window.hamidsDeutsch.free.onProgress(({ text, phase }) => {
-      setFreeProgress(text)
+    const unsubProgress = window.hamidsDeutsch.free.onProgress(({ message, phase }) => {
+      setFreeProgress(message)
       setFreePhase(phase)
     })
     const unsubPoolUpdated = window.hamidsDeutsch.free.onPoolUpdated((payload) => {
       void window.hamidsDeutsch.free.getPool().then((r) => {
         if (r.success) setFreePool(r.servers)
       })
-      setFreePoolMeta((prev) => ({ ...prev, total: payload.count, displaying: payload.displaying, lastRefreshedAt: payload.refreshedAt, poolRefreshing: false } as typeof prev))
-      setToastMessage(`${payload.count} سرور رایگان در مخزن — ${payload.displaying} در حال نمایش`)
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-      toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500)
+      if (payload.added > 0) {
+        setToastMessage(`${payload.added} کانفیگ رایگان جدید پیدا شد`)
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+        toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500)
+      }
     })
     const unsubPoolStatus = window.hamidsDeutsch.free.onPoolStatus((payload) => {
-      setFreePoolMeta((prev) => ({
-        total: payload.poolCount ?? prev?.total ?? 0,
-        displaying: payload.poolDisplaying ?? prev?.displaying ?? 0,
-        lastRefreshedAt: payload.poolLastRefreshedAt ?? prev?.lastRefreshedAt ?? null,
-        poolRefreshing: payload.poolRefreshing ?? false,
-      }))
+      setFreePoolMeta({
+        total: payload.total,
+        working: payload.working,
+        untested: payload.untested,
+        lastRefreshedAt: payload.lastRefreshedAt,
+      })
+      setFreeTest({ testing: payload.testing, done: payload.testDone, total: payload.testTotal })
+      if (payload.testing) {
+        void window.hamidsDeutsch.free.getPool().then((r) => { if (r.success) setFreePool(r.servers) })
+      }
     })
     return () => { unsubProgress(); unsubPoolUpdated(); unsubPoolStatus() }
   }, [])
 
+  // Connect to the best working free config — same path as a subscription (spec #8).
   async function connectFreeConfig() {
-    setFreePhase('fetching')
-    setFreeProgress('در حال آماده‌سازی...')
+    setFreePhase('connecting')
+    setFreeProgress('در حال اتصال به کانفیگ رایگان...')
     setFreeError(null)
     setFreeNodeName(null)
     setFreeLatencyMs(null)
     try {
-      const result = await window.hamidsDeutsch.free.fetchAndConnect({
-        directDomains: directDomains.domains,
-      })
+      const list = await window.hamidsDeutsch.free.getPool()
+      const best = list.success ? list.servers.find((s) => s.working === true) ?? list.servers[0] : undefined
+      if (!best) {
+        setFreePhase('error')
+        setFreeError('هنوز کانفیگ رایگانی ذخیره نشده. ابتدا یک‌بار از طریق اشتراک وصل شو تا کانفیگ‌ها پیدا شوند.')
+        return
+      }
+      setLastConnectionType('free')
+      const result = await window.hamidsDeutsch.free.connectSpecificNode({ nodeId: best.id, directDomains: directDomains.domains })
       if (result.success) {
-        setFreeNodeName(result.nodeName)
-        setFreeLatencyMs(result.latencyMs)
+        setFreeNodeName(`${best.id} ${best.flag ?? ''}`.trim())
         setFreePhase('connected')
         setFreeError(null)
-        void window.hamidsDeutsch.free.getPool().then((r) => {
-          if (r.success) setFreePool(r.servers)
-        })
       } else {
         setFreePhase('error')
         setFreeError(result.error ?? 'اتصال ناموفق بود.')
@@ -1496,19 +1507,18 @@ function App() {
       return
     }
 
-    // Priority 2: try free config
+    // Priority 2: try the best working free config
     try {
-      const freeResult = await window.hamidsDeutsch.free.fetchAndConnect({
-        directDomains: directDomains.domains,
-      })
-      if (freeResult.success) {
-        setFreeNodeName(freeResult.nodeName)
-        setFreeLatencyMs(freeResult.latencyMs)
-        setFreePhase('connected')
-        void window.hamidsDeutsch.free.getPool().then((r) => {
-          if (r.success) setFreePool(r.servers)
-        })
-        return
+      const list = await window.hamidsDeutsch.free.getPool()
+      const best = list.success ? list.servers.find((s) => s.working === true) ?? list.servers[0] : undefined
+      if (best) {
+        setLastConnectionType('free')
+        const freeResult = await window.hamidsDeutsch.free.connectSpecificNode({ nodeId: best.id, directDomains: directDomains.domains })
+        if (freeResult.success) {
+          setFreeNodeName(`${best.id} ${best.flag ?? ''}`.trim())
+          setFreePhase('connected')
+          return
+        }
       }
     } catch {
       // fall through
@@ -2049,7 +2059,7 @@ function App() {
                   .map((n) => ({ id: n.id, name: n.name, protocol: n.protocol, latencyMs: latency.results[n.id]?.latencyMs ?? null }))
               })()}
               topFreeServers={freePool
-                .filter((s) => s.latencyMs != null && s.latencyMs >= 100)
+                .filter((s) => s.working === true)
                 .sort((a, b) => (a.latencyMs ?? 9999) - (b.latencyMs ?? 9999))
                 .slice(0, 5)}
               onConnectSubServer={(id) => {
@@ -2058,22 +2068,17 @@ function App() {
               }}
               onConnectFreeServer={async (server) => {
                 setFreePhase('connecting')
-                setFreeProgress(`اتصال به ${server.name}...`)
+                setFreeProgress(`اتصال به ${server.id}...`)
                 setFreeError(null)
+                setLastConnectionType('free')
                 try {
                   const result = await window.hamidsDeutsch.free.connectSpecificNode({
                     nodeId: server.id,
-                    nodeUri: server.uri,
-                    nodeName: server.name,
-                    nodeHost: server.host,
-                    nodePort: server.port,
-                    nodeProtocol: server.protocol,
                     directDomains: directDomains.domains,
                   })
                   if (result.success) {
                     setFreePhase('connected')
-                    setFreeNodeName(result.nodeName)
-                    setFreeLatencyMs(result.latencyMs)
+                    setFreeNodeName(`${server.id} ${server.flag ?? ''}`.trim())
                     setFreeError(null)
                   } else {
                     setFreePhase('error')
@@ -2126,22 +2131,17 @@ function App() {
               freePhase={freePhase}
               onConnectFreeNode={async (server) => {
                 setFreePhase('connecting')
-                setFreeProgress(`اتصال به ${server.name}...`)
+                setFreeProgress(`اتصال به ${server.id}...`)
                 setFreeError(null)
+                setLastConnectionType('free')
                 try {
                   const result = await window.hamidsDeutsch.free.connectSpecificNode({
                     nodeId: server.id,
-                    nodeUri: server.uri,
-                    nodeName: server.name,
-                    nodeHost: server.host,
-                    nodePort: server.port,
-                    nodeProtocol: server.protocol,
                     directDomains: directDomains.domains,
                   })
                   if (result.success) {
                     setFreePhase('connected')
-                    setFreeNodeName(result.nodeName)
-                    setFreeLatencyMs(result.latencyMs)
+                    setFreeNodeName(`${server.id} ${server.flag ?? ''}`.trim())
                     setFreeError(null)
                     setActivePage('home')
                   } else {
@@ -2155,16 +2155,25 @@ function App() {
                   setFreeProgress(null)
                 }
               }}
-              onRefreshFreePool={async () => {
-                setFreePoolMeta((prev) => prev ? { ...prev, poolRefreshing: true } : prev)
-                try {
-                  const result = await window.hamidsDeutsch.free.refreshPool()
-                  if (result.success) {
-                    setFreePool(result.servers)
-                    if (result.meta) setFreePoolMeta({ total: result.meta.total, displaying: result.meta.displaying, lastRefreshedAt: result.meta.lastRefreshedAt, poolRefreshing: false })
-                  }
-                } catch {
-                  setFreePoolMeta((prev) => prev ? { ...prev, poolRefreshing: false } : prev)
+              freeTest={freeTest}
+              onCrawlFreePool={async () => {
+                const result = await window.hamidsDeutsch.free.crawl()
+                if (result.success) {
+                  setFreePool(result.servers)
+                  if (result.meta) setFreePoolMeta({ total: result.meta.total, working: result.meta.working, untested: result.meta.untested, lastRefreshedAt: result.meta.lastRefreshedAt })
+                }
+              }}
+              onTestFreePool={async () => {
+                // The test disconnects the current tunnel — confirm first (spec #3).
+                const ok = window.confirm('برای آزمایش کانفیگ‌ها اتصال فعلی قطع می‌شود و باید تا پایان آزمایش صبر کنی. ادامه می‌دهی؟')
+                if (!ok) return
+                intentionalDisconnectRef.current = true
+                await window.hamidsDeutsch.free.disconnect().catch(() => {})
+                if (engineProcess.status.running) await engineProcess.stop().catch(() => {})
+                const result = await window.hamidsDeutsch.free.testStart()
+                if (result.success) {
+                  setFreePool(result.servers)
+                  if (result.meta) setFreePoolMeta({ total: result.meta.total, working: result.meta.working, untested: result.meta.untested, lastRefreshedAt: result.meta.lastRefreshedAt })
                 }
               }}
               onConnectSubNode={(node) => void prepareAndStart(node)}
@@ -2173,7 +2182,7 @@ function App() {
                 const r = await window.hamidsDeutsch.free.removeNode(nodeId)
                 if (r.success) {
                   setFreePool(r.servers)
-                  if (r.meta) setFreePoolMeta({ total: r.meta.total, displaying: r.meta.displaying, lastRefreshedAt: r.meta.lastRefreshedAt, poolRefreshing: false })
+                  if (r.meta) setFreePoolMeta({ total: r.meta.total, working: r.meta.working, untested: r.meta.untested, lastRefreshedAt: r.meta.lastRefreshedAt })
                 }
               }}
               subConnectingNodeId={subConnectingNodeId}
@@ -3292,7 +3301,7 @@ function HomePage({
             <ul className="top-server-list">
               {topFreeServers.map((s) => (
                 <li key={s.id} className="top-server-row">
-                  <span className="top-server-name">{s.name}</span>
+                  <span className="top-server-name" dir="ltr">{s.flag ?? '🏳️'} {s.id}</span>
                   <span className="top-server-latency" dir="ltr">{s.latencyMs != null ? `${s.latencyMs} ms` : '—'}</span>
                   <button
                     className="top-server-connect-btn"
@@ -4179,7 +4188,9 @@ function ServersPage({
   onClearSelectedServer,
   onOpenSubscriptions,
   onConnectFreeNode,
-  onRefreshFreePool,
+  freeTest,
+  onCrawlFreePool,
+  onTestFreePool,
   onConnectSubNode,
   onStopConnection,
   onRemoveFreeNode,
@@ -4220,7 +4231,7 @@ function ServersPage({
   >
   processRunning: boolean
   freePool: FreePoolServer[]
-  freePoolMeta: { total: number; displaying: number; lastRefreshedAt: string | null; poolRefreshing: boolean } | null
+  freePoolMeta: { total: number; working: number; untested: number; lastRefreshedAt: string | null } | null
   freePhase: FreeConfigPhase
   onCheckConfig: (node: SafeServerNode) => void
   onTestLatency: () => void
@@ -4228,7 +4239,9 @@ function ServersPage({
   onClearSelectedServer: () => void
   onOpenSubscriptions: () => void
   onConnectFreeNode: (server: FreePoolServer) => void
-  onRefreshFreePool: () => void
+  freeTest: { testing: boolean; done: number; total: number }
+  onCrawlFreePool: () => void
+  onTestFreePool: () => void
   onConnectSubNode: (node: SafeServerNode) => void
   onStopConnection: () => void
   onRemoveFreeNode: (nodeId: string) => void
@@ -4790,18 +4803,29 @@ function ServersPage({
               <h3>سرورهای رایگان ذخیره‌شده</h3>
             </div>
             <div className="free-pool-meta">
-              {freePoolMeta?.poolRefreshing && <span className="free-pool-refreshing-dot" title="در حال بروزرسانی..." />}
+              {freeTest.testing && <span className="free-pool-refreshing-dot" title="در حال آزمایش..." />}
               <span className="status-pill">
-                {freePoolMeta ? `${freePoolMeta.total} سرور ذخیره · نمایش ${freePoolMeta.displaying}` : `${freePool.length} سرور`}
-                {freePoolMeta?.lastRefreshedAt && ` · ${formatRelativeTime(freePoolMeta.lastRefreshedAt)}`}
+                {freeTest.testing
+                  ? `آزمایش ${freeTest.done}/${freeTest.total}`
+                  : freePoolMeta
+                    ? `${freePoolMeta.total} کانفیگ · ${freePoolMeta.working} سالم`
+                    : `${freePool.length} کانفیگ`}
+                {!freeTest.testing && freePoolMeta?.lastRefreshedAt && ` · ${formatRelativeTime(freePoolMeta.lastRefreshedAt)}`}
               </span>
               <button
                 className="free-pool-refresh-btn"
                 type="button"
-                disabled={freePoolMeta?.poolRefreshing || freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting'}
-                onClick={() => void onRefreshFreePool()}
-                title="دریافت مجدد سرورها از منابع"
-              >↻ دریافت مجدد</button>
+                disabled={freeTest.testing || freePhase === 'connecting'}
+                onClick={() => void onCrawlFreePool()}
+                title="جستجوی کانفیگ‌های جدید در کانال‌های تلگرام"
+              >⟳ جستجوی جدید</button>
+              <button
+                className="free-pool-refresh-btn"
+                type="button"
+                disabled={freeTest.testing || freePool.length === 0}
+                onClick={() => void onTestFreePool()}
+                title="آزمایش کارکرد همه کانفیگ‌ها (اتصال قطع می‌شود)"
+              >⚡ آزمایش کارکرد</button>
             </div>
           </div>
           {/* Search + protocol filter */}
@@ -4831,7 +4855,6 @@ function ServersPage({
             {(() => {
               const q = freeSearch.trim().toLowerCase()
               const filtered = freePool
-                .filter((s) => s.latencyMs == null || s.latencyMs >= 100)
                 .filter((s) => {
                   if (freeProtoFilter === 'all') return true
                   if (freeProtoFilter === 'reality') return (s.security ?? '').toLowerCase() === 'reality'
@@ -4840,8 +4863,8 @@ function ServersPage({
                 .filter((s) => {
                   if (!q) return true
                   return (
-                    (s.name ?? '').toLowerCase().includes(q) ||
-                    (s.host ?? '').toLowerCase().includes(q) ||
+                    s.id.includes(q) ||
+                    (s.country ?? '').toLowerCase().includes(q) ||
                     (s.protocol ?? '').toLowerCase().includes(q)
                   )
                 })
@@ -4855,17 +4878,18 @@ function ServersPage({
                 return (
                   <div key={server.id} className="free-pool-row">
                     <span className="free-pool-rank">{index + 1}</span>
+                    <span className="free-pool-flag" title={server.country ?? ''}>{server.flag ?? '🏳️'}</span>
                     <div className="free-pool-main">
-                      <strong>
-                        {server.name}
-                        {server.source === 'telegram' && <span className="free-pool-tg-badge" title="Telegram"> ✈</span>}
+                      <strong dir="ltr">
+                        {server.id}
+                        {server.working === true && <span className="free-pool-ok-dot" title="سالم"> ●</span>}
                       </strong>
-                      <small dir="ltr"><ProtocolBadge protocol={server.protocol} /> {server.host ?? '—'}{server.port ? `:${server.port}` : ''}</small>
+                      <small dir="ltr"><ProtocolBadge protocol={server.protocol ?? '—'} /> {server.country ?? '—'}</small>
                     </div>
                     {/* Colored ping bar (same style as subscription list) */}
                     <div className="free-pool-latency">
                       <span className="bpb-ping is-online" dir="ltr">
-                        {server.latencyMs != null ? `${server.latencyMs} ms` : '—'}
+                        {server.latencyMs != null ? `${server.latencyMs} ms` : server.working === null ? '—' : ''}
                       </span>
                       <span
                         className="free-pool-latency-bar"

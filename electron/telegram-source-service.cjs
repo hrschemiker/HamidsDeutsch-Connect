@@ -3,30 +3,27 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Telegram channel crawler for free proxy configs.
 //
-// Telegram is blocked in Iran, but the app only crawls AFTER the user is already
-// connected through some other method, so the fetch travels through the active
-// tunnel. We read the channel's PUBLIC web preview at https://t.me/s/<channel>,
-// which returns plain HTML (no login, no bot token needed), then paginate
-// backwards through the latest posts and pull out vless/vmess/ss/trojan/... URIs.
+// Telegram is blocked in Iran, so the app only crawls once a tunnel is already
+// up (subscription or free) — the fetch travels through the active connection.
+// We read each channel's PUBLIC web preview at https://t.me/s/<channel>, which
+// returns plain HTML (no login/bot token), paginate backwards through recent
+// posts, and pull out vless/vmess/ss/trojan/... URIs.
 //
-// Configs from this source are tagged source:'telegram' and are prioritised
-// ahead of the generic subscription lists, because this channel is hand-curated
-// and its configs tend to actually work.
+// Incremental crawls pass `sinceId` (the newest post id seen last time) so we
+// stop as soon as we reach already-seen posts and never re-import duplicates.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DEFAULT_CHANNEL = 'Spotify_Porteghali'
+const CHANNELS = ['best_internet_iran', 'Spotify_Porteghali']
 const WEB_PREVIEW_BASE = 'https://t.me/s'
 const POSTS_PER_PAGE_ESTIMATE = 20
-const FETCH_TIMEOUT_MS = 15000
+const MAX_POSTS_DEFAULT = 200
 
 const CONFIG_URI_REGEX =
   /(?:vless|vmess|trojan|ss|ssr|hysteria2|hy2|tuic|anytls):\/\/[^\s<>"'`]+/gi
 
-// data-post="Channel/12345" — used to find the oldest message id on a page so
-// we can request the page before it.
+// data-post="Channel/12345" — the message id of each rendered post.
 const POST_ID_REGEX = /data-post="[^"/]+\/(\d+)"/g
 
-/** Decode the handful of HTML entities Telegram emits in message text. */
 function decodeHtmlEntities(str) {
   return str
     .replace(/&amp;/g, '&')
@@ -40,64 +37,53 @@ function decodeHtmlEntities(str) {
     })
 }
 
-/** Strip HTML tags, turning <br> into newlines so multi-line posts split cleanly. */
 function stripHtml(html) {
-  return html
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
+  return html.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' ')
 }
 
-/** Trim trailing punctuation that commonly clings to a pasted link. */
 function cleanUri(uri) {
   return uri.replace(/[.,;)\]}>«»"']+$/, '')
 }
 
-/**
- * Extract every proxy-config URI from a raw HTML page of the web preview.
- * Returns { uris: string[], oldestId: number|null }.
- */
+/** Extract config URIs + the min/max post id from one web-preview page. */
 function extractFromPage(html) {
   const text = decodeHtmlEntities(stripHtml(html))
   const uris = []
   const seen = new Set()
-
   let m
   CONFIG_URI_REGEX.lastIndex = 0
   while ((m = CONFIG_URI_REGEX.exec(text)) !== null) {
     const uri = cleanUri(m[0])
-    if (uri.length < 12) continue
-    if (seen.has(uri)) continue
+    if (uri.length < 12 || seen.has(uri)) continue
     seen.add(uri)
     uris.push(uri)
   }
 
   let oldestId = null
+  let newestId = null
   POST_ID_REGEX.lastIndex = 0
   while ((m = POST_ID_REGEX.exec(html)) !== null) {
     const id = Number(m[1])
-    if (Number.isFinite(id) && (oldestId === null || id < oldestId)) oldestId = id
+    if (!Number.isFinite(id)) continue
+    if (oldestId === null || id < oldestId) oldestId = id
+    if (newestId === null || id > newestId) newestId = id
   }
-
-  return { uris, oldestId }
+  return { uris, oldestId, newestId }
 }
 
 /**
- * Crawl a Telegram channel's web preview for config URIs.
- *
+ * Crawl ONE channel's web preview.
  * @param {object}   opts
- * @param {string}   [opts.channel]  Channel username (no @).
- * @param {number}   [opts.maxPosts] Approx. number of recent posts to scan.
- * @param {function} opts.fetchImpl  async (url) => { ok, status, text() }. Caller
- *                                   supplies this so the fetch can be routed
- *                                   through the active tunnel.
- * @returns {Promise<{ uris: string[], postsScanned: number, pages: number }>}
+ * @param {string}   opts.channel     Channel username (no @).
+ * @param {number}   [opts.sinceId]   Only collect posts newer than this id; stop
+ *                                    paginating once we reach it. 0/undefined = full scan.
+ * @param {number}   [opts.maxPosts]  Cap on posts scanned (approx).
+ * @param {function} opts.fetchImpl   async (url) => { ok, status, text() }.
+ * @returns {Promise<{ uris: string[], newestId: number|null, pages: number }>}
  */
-async function crawlTelegramConfigs({ channel = DEFAULT_CHANNEL, maxPosts = 200, fetchImpl } = {}) {
-  if (typeof fetchImpl !== 'function') {
-    throw new Error('crawlTelegramConfigs requires a fetchImpl')
-  }
-
-  const cleanChannel = String(channel).replace(/^@/, '').trim()
+async function crawlChannel({ channel, sinceId = 0, maxPosts = MAX_POSTS_DEFAULT, fetchImpl } = {}) {
+  if (typeof fetchImpl !== 'function') throw new Error('crawlChannel requires a fetchImpl')
+  const cleanChannel = String(channel || '').replace(/^@/, '').trim()
   if (!cleanChannel) throw new Error('Telegram channel name is empty')
 
   const maxPages = Math.max(1, Math.ceil(maxPosts / POSTS_PER_PAGE_ESTIMATE))
@@ -105,7 +91,7 @@ async function crawlTelegramConfigs({ channel = DEFAULT_CHANNEL, maxPosts = 200,
   const seen = new Set()
   let before = null
   let pages = 0
-  let postsScanned = 0
+  let newestId = null
   let lastOldestId = null
 
   for (let page = 0; page < maxPages; page++) {
@@ -123,9 +109,9 @@ async function crawlTelegramConfigs({ channel = DEFAULT_CHANNEL, maxPosts = 200,
     }
     if (!html) break
 
-    const { uris, oldestId } = extractFromPage(html)
+    const { uris, oldestId, newestId: pageNewest } = extractFromPage(html)
     pages++
-    postsScanned += POSTS_PER_PAGE_ESTIMATE
+    if (pageNewest !== null && (newestId === null || pageNewest > newestId)) newestId = pageNewest
 
     for (const uri of uris) {
       if (seen.has(uri)) continue
@@ -133,17 +119,19 @@ async function crawlTelegramConfigs({ channel = DEFAULT_CHANNEL, maxPosts = 200,
       allUris.push(uri)
     }
 
-    // No older-post cursor, or we looped on the same id → we've reached the end.
+    // Reached posts we already imported last time → stop.
+    if (sinceId && oldestId !== null && oldestId <= sinceId) break
+    // No older cursor, or looping on the same id → end of channel.
     if (oldestId === null || oldestId === lastOldestId) break
     lastOldestId = oldestId
     before = oldestId
   }
 
-  return { uris: allUris, postsScanned: Math.min(postsScanned, maxPosts), pages }
+  return { uris: allUris, newestId, pages }
 }
 
 module.exports = {
-  crawlTelegramConfigs,
+  crawlChannel,
   extractFromPage, // exported for testing
-  DEFAULT_CHANNEL,
+  CHANNELS,
 }

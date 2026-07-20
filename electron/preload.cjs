@@ -259,17 +259,16 @@ contextBridge.exposeInMainWorld(
     },
 
     free: {
-      fetchAndConnect: (input) =>
-        ipcRenderer.invoke('free:fetch-and-connect', input),
+      // Crawl the two Telegram channels for new configs (through the tunnel).
+      crawl: () =>
+        ipcRenderer.invoke('free:crawl'),
 
-      connectFromPool: (input) =>
-        ipcRenderer.invoke('free:connect-from-pool', input),
+      // Run the one-by-one working test (disconnect first).
+      testStart: () =>
+        ipcRenderer.invoke('free:test-start'),
 
       connectSpecificNode: (input) =>
         ipcRenderer.invoke('free:connect-specific-node', input),
-
-      refreshPool: () =>
-        ipcRenderer.invoke('free:refresh-pool'),
 
       removeNode: (nodeId) =>
         ipcRenderer.invoke('free:remove-node', nodeId),
@@ -282,9 +281,6 @@ contextBridge.exposeInMainWorld(
 
       getPool: () =>
         ipcRenderer.invoke('free:get-pool'),
-
-      getPoolMeta: () =>
-        ipcRenderer.invoke('free:get-pool-meta'),
 
       onProgress: (callback) => {
         const listener = (_event, payload) => callback(payload)
