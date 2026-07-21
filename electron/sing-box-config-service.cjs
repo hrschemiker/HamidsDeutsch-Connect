@@ -45,6 +45,7 @@ async function createAndCheckConfig({
   upstreamProxy = null,
   utlsSettings = null,
   cfCleanIp = null,
+  clashApiPort = 9090,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -102,6 +103,7 @@ async function createAndCheckConfig({
     setSystemProxy,
     proxyDoH,
     upstreamProxy,
+    clashApiPort,
   )
 
   const runtimeDirectory = path.join(
@@ -1234,6 +1236,7 @@ function buildConfig(
   setSystemProxy = false,
   proxyDoH = false,
   upstreamProxy = null,
+  clashApiPort = 9090,
 ) {
   const rules = buildDirectRules(directDomains)
   const outbounds = []
@@ -1284,7 +1287,7 @@ function buildConfig(
     config.dns = buildProxyDnsBlock()
   }
 
-  config.experimental = { clash_api: { external_controller: '127.0.0.1:9090' } }
+  config.experimental = { clash_api: { external_controller: `127.0.0.1:${clashApiPort}` } }
 
   return config
 }

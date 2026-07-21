@@ -134,7 +134,6 @@ type PageId =
   | 'rescue'
   | 'statistics'
   | 'logs'
-  | 'guide'
   | 'settings'
   | 'tools'
 
@@ -195,7 +194,6 @@ function App() {
     { id: 'direct-sites', label: t('nav.directSites'), icon: '↗' },
     { id: 'statistics', label: t('nav.statistics'), icon: '▥' },
     { id: 'logs', label: t('nav.logs'), icon: '≡' },
-    { id: 'guide', label: t('nav.guide'), icon: '?' },
     { id: 'settings', label: t('nav.settings'), icon: '⚙' },
   ]
 
@@ -207,7 +205,6 @@ function App() {
     rescue: t('page.rescue'),
     statistics: t('page.statistics'),
     logs: t('page.logs'),
-    guide: t('page.guide'),
     settings: t('page.settings'),
     tools: t('page.tools'),
   }
@@ -278,6 +275,8 @@ function App() {
     try { return localStorage.getItem('hamidsdeutsch:ctrl-enter') !== 'false' } catch { return true }
   })
   const [closeToTray, setCloseToTray] = useState(true)
+  const [killSwitch, setKillSwitch] = useState(false)
+  const [killSwitchActive, setKillSwitchActive] = useState(false)
   useEffect(() => {
     void window.hamidsDeutsch.startup.getCloseToTray().then((r) => { setCloseToTray(r.enabled) }).catch(() => {})
   }, [])
@@ -482,7 +481,14 @@ function App() {
     })
     const unsubProgress = window.hamidsDeutsch.free.onProgress(({ message, phase }) => {
       setFreeProgress(message)
-      setFreePhase(phase)
+      // Background crawl/test emit 'fetching'/'testing' progress; don't let those
+      // hijack the phase while the user is actively connecting/connected. Only
+      // reflect terminal phases here — the connect handlers own 'connecting'.
+      setFreePhase((cur) => {
+        if (cur === 'connecting' || cur === 'connected') return cur
+        if (phase === 'connected' || phase === 'error') return phase
+        return cur
+      })
     })
     const unsubPoolUpdated = window.hamidsDeutsch.free.onPoolUpdated((payload) => {
       void window.hamidsDeutsch.free.getPool().then((r) => {
@@ -509,6 +515,17 @@ function App() {
     return () => { unsubProgress(); unsubPoolUpdated(); unsubPoolStatus() }
   }, [])
 
+  // Kill switch: load setting + react to activation/deactivation events.
+  useEffect(() => {
+    void window.hamidsDeutsch.killswitch.get().then((s) => {
+      setKillSwitch(s.enabled)
+      setKillSwitchActive(s.active)
+    }).catch(() => {})
+    const offA = window.hamidsDeutsch.killswitch.onActivated(() => setKillSwitchActive(true))
+    const offD = window.hamidsDeutsch.killswitch.onDeactivated(() => setKillSwitchActive(false))
+    return () => { offA(); offD() }
+  }, [])
+
   // Auto-update subscriptions once the first tunnel is up (their URLs are often
   // only reachable through the connection). On-open refresh is already handled
   // by useServerNodes.loadAll(); this covers the offline-at-launch case.
@@ -516,7 +533,10 @@ function App() {
   useEffect(() => {
     if (!connectionVerified || didPostConnectSubRefreshRef.current) return
     didPostConnectSubRefreshRef.current = true
-    void serverNodes.loadAll().catch(() => {})
+    // Wait for the tunnel/proxy to settle before refreshing (avoids
+    // ERR_NETWORK_CHANGED wiping the list mid-switch).
+    const timer = setTimeout(() => { void serverNodes.loadAll().catch(() => {}) }, 4000)
+    return () => clearTimeout(timer)
   }, [connectionVerified, serverNodes])
 
   // Connect to the best working free config — same path as a subscription (spec #8).
@@ -1954,9 +1974,6 @@ function App() {
               }}
             />
           )}
-          {activePage === 'guide' && (
-            <GuidePage />
-          )}
           {activePage === 'settings' && (
             <>
             <SettingsPage
@@ -2012,6 +2029,11 @@ function App() {
               onCloseToTrayToggle={async (v) => {
                 setCloseToTray(v)
                 await window.hamidsDeutsch.startup.setCloseToTray(v)
+              }}
+              killSwitch={killSwitch}
+              onKillSwitchToggle={async (v) => {
+                setKillSwitch(v)
+                await window.hamidsDeutsch.killswitch.set(v)
               }}
               standaloneDoH={standaloneDoH}
               standaloneDoHLoading={standaloneDoHLoading}
@@ -2072,6 +2094,28 @@ function App() {
       )}
     </div>
       {qrUri && <QrModal uri={qrUri} onClose={() => setQrUri(null)} />}
+      {killSwitchActive && (
+        <div className="killswitch-overlay" role="alertdialog" aria-modal="true">
+          <div className="killswitch-dialog">
+            <div className="killswitch-icon">🔒</div>
+            <h2>{lang === 'fa' ? 'اینترنت مسدود شد' : 'Internet Blocked'}</h2>
+            <p>{lang === 'fa'
+              ? 'اتصال VPN به‌طور ناگهانی قطع شد و Kill Switch فعال شده تا از نشت اطلاعات جلوگیری کند. برای وصل‌شدن دوباره تلاش کن یا اینترنت را بازگردان.'
+              : 'The VPN dropped unexpectedly and the kill switch blocked all internet to prevent leaks. Reconnect, or restore your internet.'}</p>
+            <div className="killswitch-actions">
+              <button className="primary-button" type="button" onClick={async () => {
+                await window.hamidsDeutsch.killswitch.deactivate().catch(() => {})
+                setKillSwitchActive(false)
+                void smartHeroConnect()
+              }}>{lang === 'fa' ? 'اتصال مجدد' : 'Reconnect'}</button>
+              <button className="text-button" type="button" onClick={async () => {
+                await window.hamidsDeutsch.killswitch.deactivate().catch(() => {})
+                setKillSwitchActive(false)
+              }}>{lang === 'fa' ? 'بازگرداندن اینترنت' : 'Restore internet'}</button>
+            </div>
+          </div>
+        </div>
+      )}
       </LangCtx.Provider>
     </ThemeCtx.Provider>
   )
@@ -5804,6 +5848,8 @@ function SettingsPage({
   onCtrlEnterToggle,
   closeToTray,
   onCloseToTrayToggle,
+  killSwitch,
+  onKillSwitchToggle,
   standaloneDoH,
   standaloneDoHLoading,
   onStandaloneDoHChange,
@@ -5873,6 +5919,8 @@ function SettingsPage({
   onCtrlEnterToggle: (v: boolean) => void
   closeToTray: boolean
   onCloseToTrayToggle: (v: boolean) => Promise<void>
+  killSwitch: boolean
+  onKillSwitchToggle: (v: boolean) => Promise<void>
   standaloneDoH: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard'
   standaloneDoHLoading: boolean
   onStandaloneDoHChange: (server: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard') => Promise<void>
@@ -6224,6 +6272,13 @@ function SettingsPage({
           description={lang === 'fa' ? 'با بستن پنجره، برنامه به‌جای خروج، در سینی سیستم باقی می‌ماند.' : 'Closing the window hides the app to the system tray instead of quitting.'}
           checked={closeToTray}
           onChange={(v) => void onCloseToTrayToggle(v)}
+        />
+
+        <SettingRow
+          title={lang === 'fa' ? 'قطع اضطراری اینترنت (Kill Switch)' : 'Internet Kill Switch'}
+          description={lang === 'fa' ? 'اگر اتصال VPN به‌طور ناگهانی و بدون زدن دکمه قطع، قطع شود، کل اینترنت دستگاه مسدود می‌شود تا نشتی رخ ندهد. (نیازمند اجرا به‌صورت Administrator)' : 'If the VPN drops unexpectedly (not via Disconnect), all device internet is blocked to prevent leaks. (Requires running as Administrator.)'}
+          checked={killSwitch}
+          onChange={(v) => void onKillSwitchToggle(v)}
         />
 
         {/* ── DNS over HTTPS ──────────────────────────────────────────────── */}
@@ -6827,176 +6882,6 @@ function ConnectionHistorySection() {
 }
 
 
-function GuidePage() {
-  const t = useT()
-
-  return (
-    <div className="page-stack">
-
-      {/* ── Method 0: Free Config ──────────────────────────────────── */}
-      <section className="panel-card guide-section">
-        <div className="panel-heading">
-          <div>
-            <span className="panel-kicker">{t('guide.method0.kicker')}</span>
-            <h3>{t('guide.method0.title')}</h3>
-          </div>
-          <span className="guide-badge guide-badge-free">{t('guide.method0.badge')}</span>
-        </div>
-        <p className="guide-desc">{t('guide.method0.desc')}</p>
-        <ol className="guide-steps">
-          <li>{t('guide.method0.step1')}</li>
-          <li>{t('guide.method0.step2')}</li>
-          <li>{t('guide.method0.step3')}</li>
-          <li>{t('guide.method0.step4')}</li>
-        </ol>
-        <div className="guide-note">{t('guide.method0.note')}</div>
-      </section>
-
-      {/* ── Method 1: GitHub Codespace ─────────────────────────────── */}
-      <section className="panel-card guide-section">
-        <div className="panel-heading">
-          <div>
-            <span className="panel-kicker">{t('guide.method1.kicker')}</span>
-            <h3>{t('guide.method1.title')}</h3>
-          </div>
-          <span className="guide-badge guide-badge-gh">{t('guide.method1.badge')}</span>
-        </div>
-        <p className="guide-desc">{t('guide.method1.desc')}</p>
-        <ol className="guide-steps">
-          <li>{t('guide.method1.step1')}</li>
-          <li>{t('guide.method1.step2')}</li>
-          <li>{t('guide.method1.step3')}</li>
-          <li>{t('guide.method1.step4')}</li>
-          <li>{t('guide.method1.step5')}</li>
-          <li>{t('guide.method1.step6')}</li>
-          <li>{t('guide.method1.step7')}</li>
-          <li>{t('guide.method1.step8')}</li>
-          <li>{t('guide.method1.step9')}</li>
-          <li>{t('guide.method1.step10')}</li>
-          <li>{t('guide.method1.step11')}</li>
-          <li>{t('guide.method1.step12')}</li>
-          <li>{t('guide.method1.step13')}</li>
-          <li>{t('guide.method1.step14')}</li>
-        </ol>
-        <div className="guide-note">{t('guide.method1.note')}</div>
-      </section>
-
-      {/* ── Method 2: V2Ray Subscription ──────────────────────────── */}
-      <section className="panel-card guide-section">
-        <div className="panel-heading">
-          <div>
-            <span className="panel-kicker">{t('guide.method2.kicker')}</span>
-            <h3>{t('guide.method2.title')}</h3>
-          </div>
-          <span className="guide-badge guide-badge-v2">{t('guide.method2.badge')}</span>
-        </div>
-        <p className="guide-desc">{t('guide.method2.desc')}</p>
-        <ol className="guide-steps">
-          <li>{t('guide.method2.step1')}</li>
-          <li>{t('guide.method2.step2')}</li>
-          <li>{t('guide.method2.step3')}</li>
-          <li>{t('guide.method2.step4')}</li>
-          <li>{t('guide.method2.step5')}</li>
-        </ol>
-      </section>
-
-      {/* ── Method 3: BPB + Cloudflare ─────────────────────────────── */}
-      <section className="panel-card guide-section">
-        <div className="panel-heading">
-          <div>
-            <span className="panel-kicker">{t('guide.method3.kicker')}</span>
-            <h3>{t('guide.method3.title')}</h3>
-          </div>
-          <span className="guide-badge guide-badge-cf">{t('guide.method3.badge')}</span>
-        </div>
-        <p className="guide-desc">{t('guide.method3.desc')}</p>
-        <ol className="guide-steps">
-          <li>{t('guide.method3.step1')}</li>
-          <li>{t('guide.method3.step2')}</li>
-          <li>{t('guide.method3.step3')}</li>
-          <li>{t('guide.method3.step4')}</li>
-          <li>{t('guide.method3.step5')}</li>
-          <li>{t('guide.method3.step6')}</li>
-          <li>{t('guide.method3.step7')}</li>
-          <li>{t('guide.method3.step8')}</li>
-        </ol>
-        <div className="guide-note">{t('guide.method3.note')}</div>
-      </section>
-
-      {/* ── Method: Cloudflare WARP ────────────────────────────────── */}
-      <section className="panel-card guide-section">
-        <div className="panel-heading">
-          <div>
-            <span className="panel-kicker">{t('guide.warp.kicker')}</span>
-            <h3>{t('guide.warp.title')}</h3>
-          </div>
-          <span className="guide-badge guide-badge-free">{t('guide.warp.badge')}</span>
-        </div>
-        <p className="guide-desc">{t('guide.warp.desc')}</p>
-        <ol className="guide-steps">
-          <li>{t('guide.warp.step1')}</li>
-          <li>{t('guide.warp.step2')}</li>
-          <li>{t('guide.warp.step3')}</li>
-        </ol>
-        <div className="guide-note">{t('guide.warp.note')}</div>
-      </section>
-
-      {/* ── Method: Zeus Panel ─────────────────────────────────────── */}
-      <section className="panel-card guide-section">
-        <div className="panel-heading">
-          <div>
-            <span className="panel-kicker">{t('guide.zeus.kicker')}</span>
-            <h3>{t('guide.zeus.title')}</h3>
-          </div>
-          <span className="guide-badge guide-badge-cf">{t('guide.zeus.badge')}</span>
-        </div>
-        <p className="guide-desc">{t('guide.zeus.desc')}</p>
-        <ol className="guide-steps">
-          <li>{t('guide.zeus.step1')}</li>
-          <li>{t('guide.zeus.step2')}</li>
-          <li>{t('guide.zeus.step3')}</li>
-          <li>{t('guide.zeus.step4')}</li>
-          <li>{t('guide.zeus.step5')}</li>
-          <li>{t('guide.zeus.step6')}</li>
-          <li>{t('guide.zeus.step7')}</li>
-        </ol>
-        <div className="guide-note">{t('guide.zeus.note')}</div>
-      </section>
-
-      {/* ── Keyboard Shortcut ──────────────────────────────────────── */}
-      <section className="panel-card guide-section">
-        <div className="panel-heading">
-          <div>
-            <span className="panel-kicker">{t('guide.shortcut.kicker')}</span>
-            <h3>{t('guide.shortcut.title')}</h3>
-          </div>
-          <span className="guide-badge" style={{ fontFamily: 'monospace', letterSpacing: '0.04em' }}>Ctrl+Enter</span>
-        </div>
-        <p className="guide-desc">{t('guide.shortcut.desc')}</p>
-      </section>
-
-      {/* ── Method 4: Browser Extension ────────────────────────────── */}
-      <section className="panel-card guide-section">
-        <div className="panel-heading">
-          <div>
-            <span className="panel-kicker">{t('guide.method4.kicker')}</span>
-            <h3>{t('guide.method4.title')}</h3>
-          </div>
-          <span className="guide-badge guide-badge-ext">{t('guide.method4.badge')}</span>
-        </div>
-        <p className="guide-desc">{t('guide.method4.desc')}</p>
-        <ol className="guide-steps">
-          <li>{t('guide.method4.step1')}</li>
-          <li>{t('guide.method4.step2')}</li>
-          <li>{t('guide.method4.step3')}</li>
-          <li>{t('guide.method4.step4')}</li>
-          <li>{t('guide.method4.step5')}</li>
-          <li>{t('guide.method4.step6')}</li>
-        </ol>
-      </section>
-    </div>
-  )
-}
 
 function SettingRow({
   title,

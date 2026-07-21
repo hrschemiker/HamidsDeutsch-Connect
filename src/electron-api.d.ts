@@ -773,6 +773,14 @@ declare global {
         run: () => Promise<{ success: boolean; mbps: number | null; bytes: number; elapsedSec: number; error: string | null }>
       }
 
+      killswitch: {
+        get: () => Promise<{ enabled: boolean; active: boolean }>
+        set: (enabled: boolean) => Promise<{ enabled: boolean; error?: string }>
+        deactivate: () => Promise<{ success: boolean; error: string | null }>
+        onActivated: (callback: (payload: { firewall: boolean }) => void) => () => void
+        onDeactivated: (callback: (payload: unknown) => void) => () => void
+      }
+
       geoblock: {
         test: () => Promise<GeoBlockResult>
       }

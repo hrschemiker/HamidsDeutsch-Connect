@@ -485,7 +485,7 @@ button {
 .hero-card {
   display: grid;
   min-height: 330px;
-  grid-template-columns: 1.15fr 0.85fr;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 0.3fr);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 22px;
@@ -6637,16 +6637,59 @@ button {
   display: block;
   width: 100%;
   margin: 4px 0 18px;
-  border-radius: 16px;
-  overflow: hidden;
   line-height: 0;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-  transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
-.promo-banner:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22);
+/* ── Kill switch overlay ──────────────────────────────────────────────────── */
+.killswitch-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 7, 13, 0.82);
+  backdrop-filter: blur(6px);
+  padding: 24px;
+}
+
+.killswitch-dialog {
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  padding: 30px 26px;
+  border: 1px solid rgba(224, 85, 85, 0.4);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+
+.killswitch-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+
+.killswitch-dialog h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  color: var(--red);
+}
+
+.killswitch-dialog p {
+  margin: 0 0 22px;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.killswitch-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.killswitch-actions .primary-button {
+  width: 100%;
 }
 
 .promo-banner-img {

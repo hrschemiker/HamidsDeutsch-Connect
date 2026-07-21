@@ -237,6 +237,22 @@ contextBridge.exposeInMainWorld(
       },
     },
 
+    killswitch: {
+      get: () => ipcRenderer.invoke('killswitch:get'),
+      set: (enabled) => ipcRenderer.invoke('killswitch:set', enabled),
+      deactivate: () => ipcRenderer.invoke('killswitch:deactivate'),
+      onActivated: (callback) => {
+        const listener = (_event, payload) => callback(payload)
+        ipcRenderer.on('killswitch:activated', listener)
+        return () => ipcRenderer.removeListener('killswitch:activated', listener)
+      },
+      onDeactivated: (callback) => {
+        const listener = (_event, payload) => callback(payload)
+        ipcRenderer.on('killswitch:deactivated', listener)
+        return () => ipcRenderer.removeListener('killswitch:deactivated', listener)
+      },
+    },
+
     speedtest: {
       run: () => ipcRenderer.invoke('speedtest:run'),
     },

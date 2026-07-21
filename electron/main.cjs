@@ -375,6 +375,17 @@ function parseAllProtocols(content) {
   return parseSubscriptionNodeRecords(content)
 }
 
+// Lift an active kill-switch block once a fresh connection is up.
+async function liftKillSwitchOnConnect() {
+  try {
+    const ks = require('./kill-switch.cjs')
+    if (ks.isKillSwitchActive()) {
+      await ks.deactivateKillSwitch()
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('killswitch:deactivated', {})
+    }
+  } catch { /* best effort */ }
+}
+
 // Clean-IP: return the best scanned Cloudflare IP ONLY when the feature is
 // enabled in settings; otherwise null so connections use the server as-is.
 async function resolveCfCleanIp(userDataPath) {
@@ -519,6 +530,9 @@ async function spawnTestEngine(uri) {
     configFileName: 'test.json',
     localPort: TEST_PORT,
     setSystemProxy: false,
+    // Isolated control port so test engines never clash with the main
+    // connection's clash_api on 9090 (which would block real connects).
+    clashApiPort: 9099,
   }).catch(() => ({ success: false }))
   if (!res.success) return null
   const { spawn } = require('node:child_process')
@@ -587,6 +601,7 @@ async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOp
   if (!uri) return { success: false, error: 'کانفیگ رایگان پیدا نشد.' }
 
   if (getProcessStatus().running) {
+    expectedEngineStop = true
     try { await stopLocalProxy({ userDataPath }) } catch {}
   }
 
@@ -625,10 +640,12 @@ async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOp
     if (cfCleanIp) {
       // Verify the clean-IP tunnel actually passes traffic; else retry as-is.
       const relay = await probeRelay(2080).catch(() => ({ ok: false }))
-      if (!relay.ok) { await stopLocalProxy({ userDataPath }).catch(() => {}); continue }
+      if (!relay.ok) { expectedEngineStop = true; await stopLocalProxy({ userDataPath }).catch(() => {}); continue }
     }
     freeConfigState.phase = 'connected'
     freeConfigState.nodeId = nodeId ?? null
+    expectedEngineStop = false
+    await liftKillSwitchOnConnect()
     return { success: true, nodeId: nodeId ?? null, error: null }
   }
   return { success: false, error: 'اتصال به کانفیگ رایگان ناموفق بود.' }
@@ -648,8 +665,28 @@ function startTelegramCrawler() { /* folded into startFreeAutomation */ }
 
 // On disconnect, automatically run the free-config connectivity test (spec #9):
 // once the tunnel is down, quietly test any untested configs in the background.
-setProcessExitCallback(() => {
+// True when the engine is being stopped on purpose (Disconnect / switching
+// servers) — used so the kill switch only fires on genuine drops.
+let expectedEngineStop = false
+
+setProcessExitCallback(({ code } = {}) => {
+  const wasExpected = expectedEngineStop
+  expectedEngineStop = false
   freeConfigState.phase = 'idle'
+
+  // Kill switch: an UNEXPECTED drop (not the Disconnect button) blocks all
+  // internet until the user reconnects or turns the feature off.
+  if (!wasExpected && code !== 0) {
+    const { getKillSwitchEnabled, activateKillSwitch } = require('./kill-switch.cjs')
+    getKillSwitchEnabled(app.getPath('userData')).then(async (enabled) => {
+      if (!enabled) return
+      const res = await activateKillSwitch()
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('killswitch:activated', { firewall: res.success })
+      }
+    }).catch(() => {})
+  }
+
   setTimeout(() => {
     if (isAnyConnectionActive() || testInFlight) return
     getFreePoolMeta()
@@ -1292,6 +1329,11 @@ function registerIpcHandlers() {
               ),
           })
 
+        if (result.success) {
+          expectedEngineStop = false // a live connection — a later drop is unexpected
+          await liftKillSwitchOnConnect()
+        }
+
         console.log(
           '[Engine] Local proxy start:',
           result.success,
@@ -1407,6 +1449,7 @@ function registerIpcHandlers() {
       _event,
       keepLocalProxy,
     ) => {
+      expectedEngineStop = true
       try {
         const result =
           await deactivateSystemProxy({
@@ -1447,6 +1490,7 @@ function registerIpcHandlers() {
     'engine:stop-local-proxy',
     async () => {
       activeConnectionParams = null
+      expectedEngineStop = true // Disconnect button / server switch — not a drop.
       try {
         const result =
           await stopLocalProxy({
@@ -2521,6 +2565,7 @@ function registerIpcHandlers() {
     freeConfigState.nodeName = null
     freeConfigState.latencyMs = null
     freeConfigState.error = null
+    expectedEngineStop = true
     try {
       await stopLocalProxy({ userDataPath: app.getPath('userData') })
       setVirtualLocationConnected(false)
@@ -2528,6 +2573,27 @@ function registerIpcHandlers() {
     } catch (err) {
       return { success: false, error: err?.message ?? 'قطع اتصال سرور رایگان ناموفق بود.' }
     }
+  })
+
+  // ── Kill switch ─────────────────────────────────────────────────────────────
+  ipcMain.handle('killswitch:get', async () => {
+    const ks = require('./kill-switch.cjs')
+    return {
+      enabled: await ks.getKillSwitchEnabled(app.getPath('userData')).catch(() => false),
+      active: ks.isKillSwitchActive(),
+    }
+  })
+
+  ipcMain.handle('killswitch:set', async (_event, enabled) => {
+    const ks = require('./kill-switch.cjs')
+    return ks.setKillSwitchEnabled(app.getPath('userData'), Boolean(enabled)).catch((e) => ({ enabled: false, error: e?.message }))
+  })
+
+  // User chose to restore internet after the kill switch fired.
+  ipcMain.handle('killswitch:deactivate', async () => {
+    const ks = require('./kill-switch.cjs')
+    const res = await ks.deactivateKillSwitch().catch((e) => ({ success: false, error: e?.message }))
+    return res
   })
 
   // ── CF IP Scanner ──────────────────────────────────────────────────────────

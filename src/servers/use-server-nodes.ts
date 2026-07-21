@@ -265,16 +265,22 @@ export function useServerNodes(
           requestVersion ===
           requestVersionRef.current
         ) {
-          setState({
-            loading: false,
-            refreshingSubscriptionId:
-              null,
-            checkedAt,
-            nodes,
-            error,
-            failedSubscriptionCount:
-              failures.length,
-            subscriptionInfoMap,
+          setState((current) => {
+            // A refresh that fails everything (e.g. ERR_NETWORK_CHANGED while the
+            // proxy is switching) must NOT wipe the servers we already have.
+            const keepPrevious = allFailed && current.nodes.length > 0
+            return {
+              loading: false,
+              refreshingSubscriptionId: null,
+              checkedAt,
+              nodes: keepPrevious ? current.nodes : nodes,
+              error: keepPrevious ? null : error,
+              failedSubscriptionCount: failures.length,
+              subscriptionInfoMap:
+                keepPrevious && Object.keys(subscriptionInfoMap).length === 0
+                  ? current.subscriptionInfoMap
+                  : subscriptionInfoMap,
+            }
           })
         }
 
