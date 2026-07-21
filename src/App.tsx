@@ -2731,23 +2731,6 @@ function HomePage({
         </div>
       )}
 
-      {/* Promo banner — links to the Manfaz VPN Telegram. Hidden gracefully if
-          banner.png is not present so there is no broken-image placeholder. */}
-      <a
-        className="promo-banner"
-        href="https://t.me/manfazvpn"
-        target="_blank"
-        rel="noopener noreferrer"
-        title="Manfaz VPN — https://t.me/manfazvpn"
-      >
-        <img
-          src="banner.png"
-          alt="Manfaz VPN"
-          className="promo-banner-img"
-          onError={(e) => { (e.currentTarget.closest('.promo-banner') as HTMLElement | null)?.style.setProperty('display', 'none') }}
-        />
-      </a>
-
       <section className="connection-choice-grid">
         <ConnectionChoiceCard
           title={t('home.fastest.title')}

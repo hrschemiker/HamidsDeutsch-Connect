@@ -3269,6 +3269,20 @@ app.whenReady().then(async () => {
     )
   }
 
+  // Kill switch: on a fresh launch nothing is connected yet, so a leftover
+  // block-all-outbound firewall rule (from a crash / force-kill while the
+  // tunnel was up) must never survive. Always clear it on startup — the switch
+  // re-arms only when an actual live connection drops unexpectedly.
+  try {
+    const ks = require('./kill-switch.cjs')
+    await ks.deactivateKillSwitch()
+  } catch (error) {
+    console.error(
+      '[Engine] Startup kill-switch cleanup failed:',
+      error instanceof Error ? error.message : 'Unknown error',
+    )
+  }
+
   try {
     await ensureVirtualLocationExtension(
       app.getPath(
@@ -3345,6 +3359,12 @@ app.on(
 
     event.preventDefault()
     isQuitting = true
+
+    // Quitting is an expected engine stop — never let it look like a drop and
+    // arm the kill switch. Also lift any active block so closing the app can
+    // never leave the machine without internet.
+    expectedEngineStop = true
+    void require('./kill-switch.cjs').deactivateKillSwitch().catch(() => {})
 
     if (freeBackgroundTimer) { clearInterval(freeBackgroundTimer); freeBackgroundTimer = null }
     if (cfScanIntervalTimer) { clearInterval(cfScanIntervalTimer); cfScanIntervalTimer = null }

@@ -28,6 +28,7 @@
 }
 
 [data-theme="light"] {
+  color-scheme: light;
   --background: #f4f4f2;
   --surface: #ffffff;
   --surface-soft: #f0f0ee;
@@ -392,6 +393,21 @@ button {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.application-shell-top .main-area > main::-webkit-scrollbar {
+  width: 10px;
+}
+.application-shell-top .main-area > main::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+.application-shell-top .main-area > main::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .app-footer {
