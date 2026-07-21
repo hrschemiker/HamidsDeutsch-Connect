@@ -192,7 +192,6 @@ function App() {
   const navigationItems: NavigationItem[] = [
     { id: 'home', label: t('nav.home'), icon: '⌂' },
     { id: 'servers', label: t('nav.servers'), icon: '◉' },
-    { id: 'subscriptions', label: t('nav.subscriptions'), icon: '↧' },
     { id: 'direct-sites', label: t('nav.directSites'), icon: '↗' },
     { id: 'statistics', label: t('nav.statistics'), icon: '▥' },
     { id: 'logs', label: t('nav.logs'), icon: '≡' },
@@ -1779,6 +1778,32 @@ function App() {
           )}
 
           {activePage === 'servers' && (
+            <>
+            <SubscriptionsPage
+              loading={subscriptions.loading}
+              subscriptions={subscriptions.subscriptions}
+              loadError={subscriptions.error}
+              onAddSubscription={subscriptions.addSubscription}
+              onAddManualNodeFromSub={async (uri) => {
+                const result = await window.hamidsDeutsch.servers.addManualNode(uri)
+                if (result.success) {
+                  await subscriptions.refresh()
+                }
+                return result
+              }}
+              onRemoveSubscription={subscriptions.removeSubscription}
+              onInspectSubscription={subscriptions.inspectSubscription}
+              onLoadServers={async (subscriptionId) => {
+                const result = await serverNodes.loadFromSubscription(subscriptionId)
+                if (result.success) {
+                  automaticLatencyTestKey.current = null
+                  return { success: true as const, error: null }
+                }
+                return { success: false as const, error: result.error ?? 'دریافت سرورها ناموفق بود.' }
+              }}
+              loadingServerSubscriptionId={serverNodes.refreshingSubscriptionId}
+              subscriptionInfoMap={serverNodes.subscriptionInfoMap}
+            />
             <ServersPage
               loading={serverNodes.loading}
               nodes={serverNodes.nodes}
@@ -1809,7 +1834,7 @@ function App() {
               onTestLatency={() => void latency.testAll()}
               onSelectServer={selectedServer.selectServer}
               onClearSelectedServer={selectedServer.clearSelectedServer}
-              onOpenSubscriptions={() => setActivePage('subscriptions')}
+              onOpenSubscriptions={() => setActivePage('servers')}
               freePool={freePool}
               freePoolMeta={freePoolMeta}
               freePhase={freePhase}
@@ -1891,51 +1916,7 @@ function App() {
                 setHiddenNodeIds((prev) => [...prev, compositeId])
               }}
             />
-          )}
-
-          {activePage === 'subscriptions' && (
-            <SubscriptionsPage
-              loading={subscriptions.loading}
-              subscriptions={subscriptions.subscriptions}
-              loadError={subscriptions.error}
-              onAddSubscription={subscriptions.addSubscription}
-              onAddManualNodeFromSub={async (uri) => {
-                const result = await window.hamidsDeutsch.servers.addManualNode(uri)
-                if (result.success) {
-                  await subscriptions.refresh()
-                }
-                return result
-              }}
-              onRemoveSubscription={subscriptions.removeSubscription}
-              onInspectSubscription={subscriptions.inspectSubscription}
-              onLoadServers={async (subscriptionId) => {
-                const result =
-                  await serverNodes.loadFromSubscription(
-                    subscriptionId,
-                  )
-
-                if (result.success) {
-                  automaticLatencyTestKey.current = null
-                  setActivePage('servers')
-
-                  return {
-                    success: true as const,
-                    error: null,
-                  }
-                }
-
-                return {
-                  success: false as const,
-                  error:
-                    result.error ??
-                    'دریافت سرورها ناموفق بود.',
-                }
-              }}
-              loadingServerSubscriptionId={
-                serverNodes.refreshingSubscriptionId
-              }
-              subscriptionInfoMap={serverNodes.subscriptionInfoMap}
-            />
+            </>
           )}
 
           {activePage === 'direct-sites' && (
@@ -2055,7 +2036,7 @@ function App() {
             />
             <ToolsPage
               directDomains={directDomains.domains}
-              onNavigateToSubscriptions={() => setActivePage('subscriptions')}
+              onNavigateToSubscriptions={() => setActivePage('servers')}
             />
             </>
           )}
@@ -4528,17 +4509,28 @@ function SubInfoCard({ info }: {
   }
   const expireDate = info.expire ? new Date(info.expire) : null
   const daysLeft = expireDate ? Math.ceil((expireDate.getTime() - Date.now()) / 86400000) : null
+  const remainGb = total > 0 ? Math.max(0, total - used) : null
+  // Bar colour by how much is left (gold → amber → red as it depletes).
+  const barColor = pct === null ? 'var(--gold)' : pct < 70 ? 'var(--green)' : pct < 90 ? 'var(--gold)' : 'var(--red)'
+  const dayColor = daysLeft === null ? 'var(--text-soft)' : daysLeft <= 0 ? 'var(--red)' : daysLeft <= 3 ? 'var(--red)' : daysLeft <= 7 ? 'var(--gold)' : 'var(--green)'
+  if (pct === null && daysLeft === null) return null
   return (
     <div className="sub-info-card">
       {pct !== null && (
-        <div className="sub-info-row">
-          <span>{lang === 'fa' ? 'مصرف' : 'Usage'}: {fmtGb(used)} / {fmtGb(total)} ({pct}%)</span>
-          <div className="sub-info-bar"><div className="sub-info-bar-fill" style={{ width: `${pct}%` }} /></div>
+        <div className="sub-info-usage">
+          <div className="sub-info-usage-head">
+            <span className="sub-info-label">{lang === 'fa' ? 'حجم باقی‌مانده' : 'Data left'}</span>
+            <strong dir="ltr">{fmtGb(remainGb)} <span className="sub-info-of">/ {fmtGb(total)}</span></strong>
+          </div>
+          <div className="sub-info-bar">
+            <div className="sub-info-bar-fill" style={{ width: `${100 - pct}%`, background: barColor }} />
+          </div>
         </div>
       )}
       {daysLeft !== null && (
-        <div className="sub-info-row">
-          <span>{lang === 'fa' ? 'انقضا' : 'Expiry'}: {daysLeft > 0 ? (lang === 'fa' ? `${daysLeft} روز` : `${daysLeft} days`) : (lang === 'fa' ? 'منقضی' : 'Expired')}</span>
+        <div className="sub-info-days" style={{ color: dayColor, borderColor: 'color-mix(in srgb, currentColor 32%, transparent)' }}>
+          <span className="sub-info-days-num" dir="ltr">{daysLeft > 0 ? daysLeft : 0}</span>
+          <span className="sub-info-days-label">{daysLeft > 0 ? (lang === 'fa' ? 'روز مانده' : 'days left') : (lang === 'fa' ? 'منقضی' : 'expired')}</span>
         </div>
       )}
     </div>
