@@ -1509,10 +1509,8 @@ function App() {
   return (
     <ThemeCtx.Provider value={{ theme, setTheme }}>
       <LangCtx.Provider value={{ lang, setLang }}>
-    <div className="application-shell" data-theme={theme} dir={lang === 'fa' ? 'rtl' : 'ltr'}>
-      <aside
-        className="sidebar"
-      >
+    <div className="application-shell application-shell-top" data-theme={theme} dir={lang === 'fa' ? 'rtl' : 'ltr'}>
+      <header className="topnav">
         <div className="brand">
           <div className="brand-mark"><img src="logo.png" alt="Manfaz VPN" className="brand-logo-img" /></div>
           <div className="brand-text">
@@ -1521,7 +1519,7 @@ function App() {
           </div>
         </div>
 
-        <nav className="navigation" aria-label={t('nav.settings')}>
+        <nav className="navigation navigation-top" aria-label={t('nav.settings')}>
           {navigationItems.map((item) => (
             <button
               className={
@@ -1543,32 +1541,20 @@ function App() {
           ))}
         </nav>
 
-        <div className="sidebar-footer">
-          <div className="engine-status">
-            <span
-              className={
-                connectionVerified
-                  ? 'engine-status-dot engine-status-dot-ready'
-                  : 'engine-status-dot'
-              }
-            />
-            <div>
-              <strong>{t('engineCore', 'هسته برنامه')}</strong>
-              <span>
-                {connectionVerified
-                  ? `${t('status.connected')} · ${ipVerification.result.proxyIp ?? 'IP'}`
-                  : engineProcess.status.ready
-                    ? `Proxy ${engineProcess.status.localPort}`
-                    : engine.info?.healthy
-                      ? `sing-box ${engine.info.version}`
-                      : t('home.core.unavailable')}
-              </span>
-            </div>
-          </div>
-          <div className="version">{t('version', 'نسخه ۰.۱.۰')}</div>
-          <div className="made-by">Presented with ❤️ by Hamidreza</div>
+        <div className="topnav-meta">
+          <span
+            className={
+              connectionVerified
+                ? 'engine-status-dot engine-status-dot-ready'
+                : 'engine-status-dot'
+            }
+            title={connectionVerified
+              ? `${t('status.connected')} · ${ipVerification.result.proxyIp ?? 'IP'}`
+              : engine.info?.healthy ? `sing-box ${engine.info.version}` : t('home.core.unavailable')}
+          />
+          <span className="topnav-version">{t('version', 'نسخه ۰.۱.۰')}</span>
         </div>
-      </aside>
+      </header>
 
       <section className="main-area">
         <header className="topbar">

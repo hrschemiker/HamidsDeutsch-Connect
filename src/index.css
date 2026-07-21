@@ -1,9 +1,58 @@
-@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800;900&display=swap');
+/* Bundled IRANSansXFaNum (offline — no external font CDN). */
+@font-face {
+  font-family: 'IRANSansX';
+  src: url('./fonts/IRANSansXFaNum-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IRANSansX';
+  src: url('./fonts/IRANSansXFaNum-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IRANSansX';
+  src: url('./fonts/IRANSansXFaNum-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IRANSansX';
+  src: url('./fonts/IRANSansXFaNum-DemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IRANSansX';
+  src: url('./fonts/IRANSansXFaNum-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IRANSansX';
+  src: url('./fonts/IRANSansXFaNum-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IRANSansX';
+  src: url('./fonts/IRANSansXFaNum-Black.ttf') format('truetype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 html {
   color-scheme: dark;
   font-family:
-    'Vazirmatn',
+    'IRANSansX',
     Tahoma,
     Arial,
     sans-serif;
@@ -24,7 +73,7 @@ body,
 button,
 input {
   font-family:
-    'Vazirmatn',
+    'IRANSansX',
     Tahoma,
     Arial,
     sans-serif;

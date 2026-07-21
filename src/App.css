@@ -257,6 +257,74 @@ button {
   font-size: 15px;
 }
 
+/* ── Top horizontal navigation ─────────────────────────────────────────────── */
+.application-shell-top {
+  grid-template-columns: none;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 22px;
+  border-bottom: 1px solid var(--border);
+  background: var(--sidebar-bg, var(--surface));
+  overflow: hidden;
+}
+
+.application-shell-top .brand {
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.navigation-top {
+  flex: 1 1 auto;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  justify-content: center;
+}
+.navigation-top::-webkit-scrollbar { display: none; }
+
+.navigation-top .navigation-item {
+  width: auto;
+  flex: 0 0 auto;
+  gap: 7px;
+  padding: 8px 13px;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+
+.navigation-top .navigation-item:hover {
+  transform: translateY(-1px);
+}
+
+.navigation-top .navigation-item-active {
+  box-shadow: inset 0 -2px 0 rgba(242, 192, 85, 0.65);
+}
+
+.navigation-top .navigation-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 14px;
+}
+
+.topnav-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.topnav-version {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .sidebar-footer {
   padding-top: 18px;
   border-top: 1px solid var(--border);
