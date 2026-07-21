@@ -10,7 +10,7 @@
 [![Electron](https://img.shields.io/badge/Electron-v42-47848F?logo=electron&logoColor=white)](https://electronjs.org)
 [![sing‑box](https://img.shields.io/badge/sing--box-v1.13-FF6B35)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.5.1-f2c055)](../../releases/latest)
+[![Version](https://img.shields.io/badge/Version-2.6.0-f2c055)](../../releases/latest)
 
 [**⬇ Download Latest Release**](../../releases/latest)
 
@@ -20,7 +20,7 @@
 
 ## What is it?
 
-Manfaz VPN is a Windows desktop application that gets you past internet censorship. It wraps [sing-box](https://github.com/SagerNet/sing-box) in a clean UI and supports six different connection methods — from free public servers to fully auto-deployed private panels on Cloudflare Workers — all manageable from a single window.
+Manfaz VPN is a Windows desktop application that gets you past internet censorship. It wraps [sing-box](https://github.com/SagerNet/sing-box) in a clean UI with two connection methods — your own V2Ray subscription, and a self-updating pool of free configs curated from Telegram — all in a single window.
 
 ---
 
@@ -29,11 +29,7 @@ Manfaz VPN is a Windows desktop application that gets you past internet censorsh
 | | Method | Cost | Setup |
 |---|---|---|---|
 | 📋 | **V2Ray Subscription** | Free / Paid | Paste a subscription URL |
-| 🆓 | **Free Servers** | Free | Zero — just click |
-| ☁️ | **BPB Panel** | Free | Cloudflare account |
-| ⚡ | **Zeus Panel** | Free | Cloudflare account |
-| 🌀 | **Cloudflare WARP** | Free | One-time account creation |
-| 🐙 | **GitHub Codespace** | Free (120h/mo) | GitHub account |
+| 🆓 | **Free Configs** | Free | Zero — just click |
 
 ---
 
@@ -54,7 +50,7 @@ Manfaz VPN is a Windows desktop application that gets you past internet censorsh
 
 ## Installation
 
-1. Go to [**Releases**](../../releases/latest) and download `Manfaz-VPN-Setup-2.5.1-x64.exe`
+1. Go to [**Releases**](../../releases/latest) and download `Manfaz-VPN-Setup-2.6.0-x64.exe`
 2. Run the installer — no extra dependencies required
 3. The app launches automatically after installation
 
@@ -76,69 +72,15 @@ The app automatically swaps `workers.dev` server IPs with the fastest clean Clou
 </details>
 
 <details>
-<summary><b>🆓 Free Servers</b></summary>
+<summary><b>🆓 Free Configs (Telegram-powered)</b></summary>
 
-Click **Free Server** on the home screen. The app fetches configs from public repositories, tests them, and connects to the fastest one automatically.
+Free configs are curated from two Telegram channels and kept fresh automatically:
 
-On disconnect it finds a replacement without any action from you.
+1. **First run:** connect once through your own **subscription**. As soon as you're online, the app reads the latest ~200 posts of each channel *through your tunnel* (Telegram is blocked in Iran, so this only works once you're connected) and stores every config it finds.
+2. **Testing:** press **Test** — the app warns you it will disconnect, then connects to each config one-by-one, keeps the ones that actually pass traffic, and deletes the rest.
+3. **From then on:** every time you connect (subscription *or* free), it looks for new posts and saves them; every time you disconnect or reopen the app, it re-tests.
 
-**Telegram auto-source:** while you are connected through *any* method, the app quietly reads the latest ~200 posts of a curated Telegram configs channel through your active tunnel (Telegram is blocked in Iran, so this only works once you're already connected). Working configs it finds are added to your pool and shown first, so your next free connection uses fresh, hand-picked servers.
-
-</details>
-
-<details>
-<summary><b>☁️ BPB Panel — Auto Deploy</b></summary>
-
-BPB is a free VLESS/Trojan proxy panel that runs on Cloudflare Workers.
-
-**Prerequisite:** A free [Cloudflare](https://cloudflare.com) account
-
-1. Open the **BPB** menu item (left sidebar) — this is where setup and settings live
-2. Click **Login to Cloudflare** — a browser window opens
-3. Authorize the app in Cloudflare
-4. Click **Deploy Panel** — the app creates the Worker automatically
-5. Back on the **home screen**, the **BPB Panel** button now connects (and stops) directly — no need to reopen the menu
-
-</details>
-
-<details>
-<summary><b>⚡ Zeus Panel — Auto Deploy</b></summary>
-
-Zeus is a free VLESS panel that runs on Cloudflare Workers. The app handles the entire deployment — no manual steps.
-
-**Prerequisite:** A free [Cloudflare](https://cloudflare.com) account
-
-1. Open the **Zeus Panel** menu item (left sidebar) — this is where setup and settings live
-2. Click **Login to Cloudflare & Deploy Panel**
-3. Log into Cloudflare in the browser that opens
-4. The app automatically creates a D1 database, deploys the Worker, creates your account, and generates a subscription URL
-5. Back on the **home screen**, the **Zeus Panel** button now connects (and stops) directly
-
-</details>
-
-<details>
-<summary><b>🌀 Cloudflare WARP</b></summary>
-
-WARP is a free WireGuard tunnel to Cloudflare's network — no panel or subscription needed.
-
-1. Open **Tools** → **WARP** and click **Create Account** (one time only)
-2. Click **Cloudflare WARP** on the home screen to connect
-
-</details>
-
-<details>
-<summary><b>🐙 GitHub Codespace</b></summary>
-
-Runs a private proxy inside a GitHub Codespace — no VPS or external server required.
-
-**Prerequisite:** A free [GitHub](https://github.com) account
-
-1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens (classic)**
-2. Generate a token with `repo` and `codespace` scopes
-3. In the app go to **Settings** → **GitHub**, enter your token and save
-4. Click **GitHub Codespace** on the home screen
-
-> Free GitHub accounts include 120 hours/month of Codespace usage.
+Configs are shown as a random 6-digit id plus the **country flag** of the server IP — never a name. Connecting to a free config is identical to connecting to a subscription config.
 
 </details>
 
