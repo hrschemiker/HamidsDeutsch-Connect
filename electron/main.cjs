@@ -375,6 +375,19 @@ function parseAllProtocols(content) {
   return parseSubscriptionNodeRecords(content)
 }
 
+// Clean-IP: return the best scanned Cloudflare IP ONLY when the feature is
+// enabled in settings; otherwise null so connections use the server as-is.
+async function resolveCfCleanIp(userDataPath) {
+  try {
+    const settings = await getCfAutoScanSettings(userDataPath).catch(() => ({ enabled: true }))
+    if (settings && settings.enabled === false) return null
+    const cache = await getCfScanCache(userDataPath).catch(() => null)
+    return cache?.bestIp ?? null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Crawl both Telegram channels for NEW configs (since the stored post-id cursor),
  * resolve each server's country flag offline, and add them to the pool.
@@ -577,38 +590,48 @@ async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOp
     try { await stopLocalProxy({ userDataPath }) } catch {}
   }
 
-  const [upstreamProxy, utlsSettings, cfScanCache] = await Promise.all([
+  const [upstreamProxy, utlsSettings, cleanIp] = await Promise.all([
     getUpstreamProxy(userDataPath).catch(() => null),
     getUTlsSettings(userDataPath).catch(() => null),
-    getCfScanCache(userDataPath).catch(() => null),
+    resolveCfCleanIp(userDataPath),
   ])
 
-  const configResult = await createAndCheckConfig({
-    subscriptionUrl: 'https://t.me',
-    nodeId: nodeId ?? 'free',
-    nodeUri: uri,
-    enginePath,
-    userDataPath,
-    directDomains: Array.isArray(directDomains) ? directDomains : [],
-    rescueOptions,
-    localPort: 2080,
-    setSystemProxy: true,
-    proxyDoH: proxyDoHEnabled,
-    upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
-    utlsSettings,
-    cfCleanIp: cfScanCache?.bestIp ?? null,
-  }).catch((e) => ({ success: false, error: e?.message }))
-
-  if (!configResult.success) {
-    return { success: false, error: configResult.error ?? 'کانفیگ رایگان معتبر نبود.' }
+  async function build(cfCleanIp) {
+    return createAndCheckConfig({
+      subscriptionUrl: 'https://t.me',
+      nodeId: nodeId ?? 'free',
+      nodeUri: uri,
+      enginePath,
+      userDataPath,
+      directDomains: Array.isArray(directDomains) ? directDomains : [],
+      rescueOptions,
+      localPort: 2080,
+      setSystemProxy: true,
+      proxyDoH: proxyDoHEnabled,
+      upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
+      utlsSettings,
+      cfCleanIp,
+    }).catch((e) => ({ success: false, error: e?.message }))
   }
-  await backupWindowsProxyState(userDataPath).catch(() => {})
-  const started = await startLocalProxy({ enginePath, userDataPath, configPath: configResult.configPath })
-  if (!started.success) return { success: false, error: started.error ?? 'اتصال ناموفق بود.' }
 
-  freeConfigState.phase = 'connected'
-  freeConfigState.nodeId = nodeId ?? null
-  return { success: true, nodeId: nodeId ?? null, error: null }
+  await backupWindowsProxyState(userDataPath).catch(() => {})
+
+  // Try via the clean IP first; if it doesn't relay, fall back to the server as-is.
+  for (const cfCleanIp of (cleanIp ? [cleanIp, null] : [null])) {
+    const configResult = await build(cfCleanIp)
+    if (!configResult.success) continue
+    const started = await startLocalProxy({ enginePath, userDataPath, configPath: configResult.configPath })
+    if (!started.success) continue
+    if (cfCleanIp) {
+      // Verify the clean-IP tunnel actually passes traffic; else retry as-is.
+      const relay = await probeRelay(2080).catch(() => ({ ok: false }))
+      if (!relay.ok) { await stopLocalProxy({ userDataPath }).catch(() => {}); continue }
+    }
+    freeConfigState.phase = 'connected'
+    freeConfigState.nodeId = nodeId ?? null
+    return { success: true, nodeId: nodeId ?? null, error: null }
+  }
+  return { success: false, error: 'اتصال به کانفیگ رایگان ناموفق بود.' }
 }
 
 // Automation: crawl for new configs shortly after any connection comes up;
@@ -1974,10 +1997,10 @@ function registerIpcHandlers() {
           )
         }
 
-        const [upstreamProxy, utlsSettings, cfScanCache] = await Promise.all([
+        const [upstreamProxy, utlsSettings, cleanIp] = await Promise.all([
           getUpstreamProxy(app.getPath('userData')).catch(() => null),
           getUTlsSettings(app.getPath('userData')).catch(() => null),
-          getCfScanCache(app.getPath('userData')).catch(() => null),
+          resolveCfCleanIp(app.getPath('userData')),
         ])
 
         const effectiveRescueOptions = utlsSettings?.fragmentEnabled
@@ -1999,7 +2022,7 @@ function registerIpcHandlers() {
           proxyDoH: proxyDoHEnabled,
           upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
           utlsSettings,
-          cfCleanIp: cfScanCache?.bestIp ?? null,
+          cfCleanIp: cleanIp,
         }
         const result =
           await createAndCheckConfig(configParams)

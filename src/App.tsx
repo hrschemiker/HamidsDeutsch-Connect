@@ -510,6 +510,16 @@ function App() {
     return () => { unsubProgress(); unsubPoolUpdated(); unsubPoolStatus() }
   }, [])
 
+  // Auto-update subscriptions once the first tunnel is up (their URLs are often
+  // only reachable through the connection). On-open refresh is already handled
+  // by useServerNodes.loadAll(); this covers the offline-at-launch case.
+  const didPostConnectSubRefreshRef = useRef(false)
+  useEffect(() => {
+    if (!connectionVerified || didPostConnectSubRefreshRef.current) return
+    didPostConnectSubRefreshRef.current = true
+    void serverNodes.loadAll().catch(() => {})
+  }, [connectionVerified, serverNodes])
+
   // Connect to the best working free config — same path as a subscription (spec #8).
   async function connectFreeConfig() {
     setFreePhase('connecting')
