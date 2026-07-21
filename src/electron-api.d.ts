@@ -646,48 +646,6 @@ declare global {
           Promise<CurrentIpResult>
       }
 
-      bpb: {
-        getProfile: () =>
-          Promise<BpbProfileResult>
-
-        saveProfile: (
-          input: BpbProfile,
-        ) => Promise<BpbProfileResult>
-
-        loadNodes: (
-          type: BpbType,
-        ) => Promise<BpbLoadNodesResult>
-
-        connect: (
-          input: BpbConnectInput,
-        ) => Promise<BpbConnectResult>
-
-        disconnect: () =>
-          Promise<BpbDisconnectResult>
-
-        getStatus: () =>
-          Promise<BpbStatus>
-
-        autoDiscover: (
-          panelUrl?: string,
-        ) => Promise<BpbAutoDiscoveryResult>
-
-        quickConnect: (
-          input?: {
-            panelUrl?: string
-            directDomains?: string[]
-            rescueOptions?: RescueSettings | null
-          },
-        ) => Promise<BpbQuickConnectResult>
-
-        cloudflare: {
-          getStatus: () => Promise<{ connected: boolean; accountName: string | null; deployed: boolean; panelUrl: string | null; projectName: string | null }>
-          login: () => Promise<{ success: boolean; accountId: string | null; accountName: string | null; error: string | null }>
-          deploy: () => Promise<{ success: boolean; profile: BpbProfile | null; deployment: { projectName: string; kvId: string; panelUrl: string; workerSha256: string } | null; error: string | null }>
-          updatePanel: () => Promise<{ success: boolean; panelUrl: string | null; error: string | null }>
-          onProgress: (callback: (progress: { stage: string; message: string; at: string; panelUrl?: string }) => void) => () => void
-        }
-      }
 
       subscriptions: {
         list: () => Promise<
@@ -858,40 +816,7 @@ declare global {
         }>
       }
 
-      codespace: {
-        getStatus: () => Promise<CodespaceStatus>
 
-        setup: (token: string) => Promise<{
-          success: boolean
-          username: string | null
-          error: string | null
-        }>
-
-        clearToken: () => Promise<{ success: boolean }>
-
-        connect: (directDomains: string[]) => Promise<{
-          success: boolean
-          codespaceName: string | null
-          host: string | null
-          error: string | null
-        }>
-
-        disconnect: () => Promise<{
-          success: boolean
-          error: string | null
-        }>
-
-        onProgress: (
-          callback: (payload: { step: string; message: string }) => void,
-        ) => () => void
-      }
-
-      warp: {
-        getAccount: () => Promise<{ success: boolean; account: WarpAccount | null; error?: string }>
-        createAccount: () => Promise<{ success: boolean; account?: WarpAccount; error?: string }>
-        deleteAccount: () => Promise<{ success: boolean; error?: string }>
-        connect: (input: { directDomains?: string[] }) => Promise<{ success: boolean; error?: string }>
-      }
 
       tools: {
         cfScan: (input?: { port?: number }) => Promise<CfScanResult>
@@ -914,14 +839,6 @@ declare global {
         import: (backup: SettingsBackup) => Promise<{ success: boolean; error?: string }>
       }
 
-      zeus: {
-        buildSubUrl: (input: { panelDomain: string; username?: string; uuid?: string }) => Promise<{ success: boolean; url?: string; error?: string }>
-        getStatus: () => Promise<{ connected: boolean; needsReauth?: boolean; accountName: string | null; deployed: boolean; workerUrl: string | null; workerDomain: string | null; username: string | null; subUrl: string | null; deployedAt: string | null }>
-        login: () => Promise<{ success: boolean; accountId?: string; accountName?: string; error?: string | null }>
-        deploy: () => Promise<{ success: boolean; workerUrl?: string; subUrl?: string; username?: string; error?: string | null }>
-        updatePanel: () => Promise<{ success: boolean; error?: string | null }>
-        onProgress: (callback: (payload: { stage: string; message: string; at: string }) => void) => () => void
-      }
     }
   }
 

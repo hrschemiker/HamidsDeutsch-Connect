@@ -1060,8 +1060,6 @@ function App() {
     setSubConnectingStep('در حال قطع اتصال قبلی...')
     setLastConnectionType('subscription')
 
-    // Stop whatever is currently connected — including the separate BPB process.
-    await window.hamidsDeutsch.bpb.disconnect().catch(() => {})
     if (engineProcess.status.running) {
       await engineProcess.stop()
     }
@@ -6514,7 +6512,6 @@ function SettingsPage({
 
       <ExportImportSection />
 
-      <GitHubSection />
 
       <ConnectionHistorySection />
 
@@ -6852,135 +6849,6 @@ function ConnectionHistorySection() {
   )
 }
 
-function GitHubSection() {
-  const t = useT()
-  const [token, setToken] = useState('')
-  const [status, setStatus] = useState<{
-    hasToken: boolean
-    username: string | null
-    repoCreated: boolean
-    lastCodespaceName: string | null
-    lastCodespaceState: string | null
-  } | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
-
-  useEffect(() => {
-    void window.hamidsDeutsch.codespace.getStatus().then((s) => setStatus(s))
-  }, [])
-
-  async function handleSetup() {
-    if (!token.trim() || busy) return
-    setBusy(true)
-    setMessage(null)
-    const result = await window.hamidsDeutsch.codespace.setup(token.trim())
-    setBusy(false)
-    if (result.success) {
-      setToken('')
-      setMessage({ type: 'success', text: `${t('github.connected')}: @${result.username}` })
-      const s = await window.hamidsDeutsch.codespace.getStatus()
-      setStatus(s)
-    } else {
-      setMessage({ type: 'error', text: result.error ?? t('github.setupFailed') })
-    }
-  }
-
-  async function handleClear() {
-    if (busy) return
-    setBusy(true)
-    setMessage(null)
-    await window.hamidsDeutsch.codespace.clearToken()
-    setBusy(false)
-    setMessage({ type: 'success', text: t('github.tokenCleared') })
-
-    const s = await window.hamidsDeutsch.codespace.getStatus()
-    setStatus(s)
-  }
-
-  return (
-    <section className="panel-card">
-      <div className="panel-heading">
-        <div>
-          <span className="panel-kicker">GitHub Codespace</span>
-          <h3>{t('github.title')}</h3>
-        </div>
-        {status?.hasToken && (
-          <span className="count-badge">{t('github.connected')}</span>
-        )}
-        <InfoButton
-          fa="برای استفاده از اتصال Codespace، یک Personal Access Token با دسترسی‌های codespace و repo وارد کن. توکن به‌صورت رمزگذاری‌شده ذخیره می‌شود و هیچ‌گاه به‌صورت متن ساده نگهداری نخواهد شد."
-          en="To use Codespace connection, enter a Personal Access Token with codespace and repo scopes. The token is stored encrypted and never kept in plain text."
-        />
-      </div>
-
-      {status?.hasToken ? (
-        <div className="github-status-grid">
-          <div>
-            <span>{t('github.account')}</span>
-            <strong dir="ltr">@{status.username ?? '—'}</strong>
-          </div>
-          <div>
-            <span>{t('github.repo')}</span>
-            <strong>{status.repoCreated ? t('github.repoCreated') : t('github.repoNotCreated')}</strong>
-          </div>
-          {status.lastCodespaceName && (
-            <div>
-              <span>{t('github.lastCodespace')}</span>
-              <strong dir="ltr">{status.lastCodespaceName}</strong>
-            </div>
-          )}
-          {status.lastCodespaceState && (
-            <div>
-              <span>{t('github.status')}</span>
-              <strong dir="ltr">{status.lastCodespaceState}</strong>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="github-token-field">
-          <input
-            type="password"
-            placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-            value={token}
-            disabled={busy}
-            onChange={(e) => setToken(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void handleSetup() }}
-            dir="ltr"
-          />
-        </div>
-      )}
-
-      {message && (
-        <div className={message.type === 'success' ? 'inline-notice' : 'inline-error'}>
-          {message.text}
-        </div>
-      )}
-
-      <div className="github-section-actions">
-        {!status?.hasToken && (
-          <button
-            className="primary-button compact-primary"
-            type="button"
-            disabled={busy || !token.trim()}
-            onClick={() => void handleSetup()}
-          >
-            {busy ? t('github.saving') : t('github.save')}
-          </button>
-        )}
-        {status?.hasToken && (
-          <button
-            className="remove-domain-button"
-            type="button"
-            disabled={busy}
-            onClick={() => void handleClear()}
-          >
-            {t('github.remove')}
-          </button>
-        )}
-      </div>
-    </section>
-  )
-}
 
 function GuidePage() {
   const t = useT()

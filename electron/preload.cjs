@@ -101,70 +101,6 @@ contextBridge.exposeInMainWorld(
         ),
     },
 
-    bpb: {
-      getProfile: () =>
-        ipcRenderer.invoke(
-          'bpb:get-profile',
-        ),
-
-      saveProfile: (input) =>
-        ipcRenderer.invoke(
-          'bpb:save-profile',
-          input,
-        ),
-
-      loadNodes: (type) =>
-        ipcRenderer.invoke(
-          'bpb:load-nodes',
-          {
-            type,
-          },
-        ),
-
-      connect: (input) =>
-        ipcRenderer.invoke(
-          'bpb:connect',
-          input,
-        ),
-
-      disconnect: () =>
-        ipcRenderer.invoke(
-          'bpb:disconnect',
-        ),
-
-      getStatus: () =>
-        ipcRenderer.invoke(
-          'bpb:get-status',
-        ),
-
-      autoDiscover: (
-        panelUrl,
-      ) =>
-        ipcRenderer.invoke(
-          'bpb:auto-discover',
-          panelUrl,
-        ),
-
-      quickConnect: (
-        input,
-      ) =>
-        ipcRenderer.invoke(
-          'bpb:quick-connect',
-          input,
-        ),
-
-      cloudflare: {
-        getStatus: () => ipcRenderer.invoke('bpb-cloudflare:get-status'),
-        login: () => ipcRenderer.invoke('bpb-cloudflare:login'),
-        deploy: () => ipcRenderer.invoke('bpb-cloudflare:deploy'),
-        updatePanel: () => ipcRenderer.invoke('bpb-cloudflare:update-panel'),
-        onProgress: (callback) => {
-          const listener = (_event, payload) => callback(payload)
-          ipcRenderer.on('bpb-cloudflare:progress', listener)
-          return () => ipcRenderer.removeListener('bpb-cloudflare:progress', listener)
-        },
-      },
-    },
 
     subscriptions: {
       list: () =>
@@ -342,12 +278,6 @@ contextBridge.exposeInMainWorld(
       setProxyDoH: (enabled) => ipcRenderer.invoke('doh:set-proxy-doh', enabled),
     },
 
-    warp: {
-      getAccount: () => ipcRenderer.invoke('warp:get-account'),
-      createAccount: () => ipcRenderer.invoke('warp:create-account'),
-      deleteAccount: () => ipcRenderer.invoke('warp:delete-account'),
-      connect: (input) => ipcRenderer.invoke('warp:connect', input),
-    },
 
     tools: {
       cfScan: (input) => ipcRenderer.invoke('tools:cf-scan', input),
@@ -366,52 +296,6 @@ contextBridge.exposeInMainWorld(
       import: (backup) => ipcRenderer.invoke('settings:import', backup),
     },
 
-    zeus: {
-      buildSubUrl: (input) => ipcRenderer.invoke('zeus:build-sub-url', input),
-      getStatus: () => ipcRenderer.invoke('zeus:get-status'),
-      login: () => ipcRenderer.invoke('zeus:login'),
-      deploy: () => ipcRenderer.invoke('zeus:deploy'),
-      updatePanel: () => ipcRenderer.invoke('zeus:update-panel'),
-      onProgress: (callback) => {
-        const listener = (_event, payload) => callback(payload)
-        ipcRenderer.on('zeus:progress', listener)
-        return () => ipcRenderer.removeListener('zeus:progress', listener)
-      },
-    },
 
-    codespace: {
-      getStatus: () =>
-        ipcRenderer.invoke(
-          'codespace:get-status',
-        ),
-
-      setup: (token) =>
-        ipcRenderer.invoke(
-          'codespace:setup',
-          token,
-        ),
-
-      clearToken: () =>
-        ipcRenderer.invoke(
-          'codespace:clear-token',
-        ),
-
-      connect: (directDomains) =>
-        ipcRenderer.invoke(
-          'codespace:connect',
-          directDomains,
-        ),
-
-      disconnect: () =>
-        ipcRenderer.invoke(
-          'codespace:disconnect',
-        ),
-
-      onProgress: (callback) => {
-        const listener = (_event, payload) => callback(payload)
-        ipcRenderer.on('codespace:progress', listener)
-        return () => ipcRenderer.removeListener('codespace:progress', listener)
-      },
-    },
   },
 )
