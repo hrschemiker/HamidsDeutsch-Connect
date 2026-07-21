@@ -2669,6 +2669,35 @@ function registerIpcHandlers() {
     return res
   })
 
+  // ── Network repair ──────────────────────────────────────────────────────────
+  // One-click fix for a machine left in a bad state by a hard-kill: clears a
+  // stuck local system proxy (127.0.0.1:2080), kills orphan sing-box engines
+  // holding the ports, and removes any leftover kill-switch firewall block.
+  ipcMain.handle('network:repair', async () => {
+    const steps = { proxy: false, engines: false, killswitch: false }
+    try {
+      // Stop our own engine first so we don't fight it.
+      expectedEngineStop = true
+      await stopLocalProxy({ userDataPath: app.getPath('userData') }).catch(() => {})
+    } catch {}
+    try {
+      const { forceDisableLocalManualProxy } = require('./windows-proxy-state.cjs')
+      await forceDisableLocalManualProxy()
+      steps.proxy = true
+    } catch {}
+    try {
+      const { freeEnginePorts } = require('./sing-box-process-manager.cjs')
+      freeEnginePorts()
+      steps.engines = true
+    } catch {}
+    try {
+      await require('./kill-switch.cjs').deactivateKillSwitch()
+      steps.killswitch = true
+    } catch {}
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('killswitch:deactivated', {})
+    return { success: true, steps }
+  })
+
   // ── CF IP Scanner ──────────────────────────────────────────────────────────
 
   ipcMain.handle('tools:cf-scan', async (_event, { port } = {}) => {

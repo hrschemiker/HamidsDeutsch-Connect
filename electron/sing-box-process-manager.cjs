@@ -1470,4 +1470,5 @@ module.exports = {
   disposeProcessManager,
   emergencyDispose,
   setProcessExitCallback,
+  freeEnginePorts,
 }

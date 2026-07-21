@@ -156,8 +156,15 @@ async function recoverStaleWindowsProxyState(
     )
 
   if (!fs.existsSync(backupPath)) {
+    // No backup to restore — but a previous hard-kill (crash, Task Manager, an
+    // unclean quit) may have left OUR local proxy (127.0.0.1:2080) enabled
+    // system-wide. That silently breaks EVERY app fetch — subscription server
+    // lists, IP checks — while other VPNs (TUN-based) keep working, which is
+    // exactly the "only Manfaz is broken" symptom. Surgically clear it; this
+    // touches the proxy only when it still points at our port.
+    await forceDisableLocalManualProxy().catch(() => {})
     return {
-      recovered: false,
+      recovered: true,
     }
   }
 
@@ -529,4 +536,5 @@ module.exports = {
   restoreWindowsProxyState,
   recoverStaleWindowsProxyState,
   discardWindowsProxyBackup,
+  forceDisableLocalManualProxy,
 }

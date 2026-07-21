@@ -651,6 +651,8 @@ declare global {
 
         getCurrentIp: () =>
           Promise<CurrentIpResult>
+
+        repair: () => Promise<{ success: boolean; steps: { proxy: boolean; engines: boolean; killswitch: boolean } }>
       }
 
 

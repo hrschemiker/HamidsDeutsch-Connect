@@ -4776,6 +4776,38 @@ function formatInspectionDate(
   }
 }
 
+function NetworkRepairRow({ lang }: { lang: 'fa' | 'en' }) {
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+
+  async function repair() {
+    if (busy) return
+    setBusy(true)
+    setDone(false)
+    try {
+      await window.hamidsDeutsch.network.repair()
+      setDone(true)
+      setTimeout(() => setDone(false), 4000)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="setting-row">
+      <div>
+        <strong>{lang === 'fa' ? 'تعمیر شبکه' : 'Repair network'}</strong>
+        <span>{lang === 'fa'
+          ? 'اگر بعد از یک قطع ناگهانی، سرورهای اشتراک لود نمی‌شوند یا اتصال روی «تعیین IP» می‌ماند، این را بزن: پروکسی گیرکرده‌ی ویندوز پاک می‌شود، موتورهای باقی‌مانده بسته می‌شوند و قفل اضطراری برداشته می‌شود.'
+          : 'If subscriptions won’t load or a connection hangs on "verifying IP" after a hard stop, run this: it clears a stuck Windows proxy, kills orphan engines, and lifts any kill-switch block.'}</span>
+      </div>
+      <button className="secondary-button" type="button" onClick={() => void repair()} disabled={busy}>
+        {busy ? (lang === 'fa' ? 'در حال تعمیر…' : 'Repairing…') : done ? (lang === 'fa' ? '✓ انجام شد' : '✓ Done') : (lang === 'fa' ? 'اجرا' : 'Run')}
+      </button>
+    </div>
+  )
+}
+
 type SplitApp = { name: string; processName: string; path: string; icon: string | null }
 
 function SplitTunnelSection() {
@@ -6387,6 +6419,8 @@ function SettingsPage({
           checked={killSwitch}
           onChange={(v) => void onKillSwitchToggle(v)}
         />
+
+        <NetworkRepairRow lang={lang} />
 
         {/* ── DNS over HTTPS ──────────────────────────────────────────────── */}
         <div className="settings-section-divider">

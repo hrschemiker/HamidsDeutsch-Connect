@@ -99,6 +99,9 @@ contextBridge.exposeInMainWorld(
         ipcRenderer.invoke(
           'network:get-current-ip',
         ),
+
+      repair: () =>
+        ipcRenderer.invoke('network:repair'),
     },
 
 
