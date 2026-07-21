@@ -481,6 +481,13 @@ type FreeConfigStatus = {
   userDisconnected: boolean
 }
 
+type SplitApp = {
+  name: string
+  processName: string
+  path: string
+  icon: string | null
+}
+
 type FreePoolServer = {
   id: string
   uri: string
@@ -771,6 +778,12 @@ declare global {
 
       speedtest: {
         run: () => Promise<{ success: boolean; mbps: number | null; bytes: number; elapsedSec: number; error: string | null }>
+      }
+
+      apps: {
+        list: () => Promise<SplitApp[]>
+        add: () => Promise<{ success: boolean; apps: SplitApp[] }>
+        remove: (processName: string) => Promise<{ success: boolean; apps: SplitApp[] }>
       }
 
       killswitch: {

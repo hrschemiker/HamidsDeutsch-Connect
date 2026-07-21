@@ -2174,6 +2174,9 @@ function registerIpcHandlers() {
           )
         }
 
+        const { getProcessNames } = require('./split-tunnel-store.cjs')
+        const directApps = await getProcessNames(app.getPath('userData')).catch(() => [])
+
         const result =
           await createAndCheckTunConfig({
             subscriptionUrl,
@@ -2187,6 +2190,7 @@ function registerIpcHandlers() {
               ),
             directDomains,
             rescueOptions,
+            directApps,
           })
 
         console.log(
@@ -2573,6 +2577,41 @@ function registerIpcHandlers() {
     } catch (err) {
       return { success: false, error: err?.message ?? 'قطع اتصال سرور رایگان ناموفق بود.' }
     }
+  })
+
+  // ── Split tunneling (per-app bypass) ────────────────────────────────────────
+  ipcMain.handle('apps:list', async () => {
+    const { getApps } = require('./split-tunnel-store.cjs')
+    return getApps(app.getPath('userData')).catch(() => [])
+  })
+
+  ipcMain.handle('apps:add', async () => {
+    const { dialog } = require('electron')
+    const { addApp } = require('./split-tunnel-store.cjs')
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: 'انتخاب برنامه',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Programs', extensions: ['exe'] }],
+      defaultPath: process.env['ProgramFiles'] || undefined,
+    })
+    if (res.canceled || !res.filePaths?.length) return { success: false, apps: await require('./split-tunnel-store.cjs').getApps(app.getPath('userData')).catch(() => []) }
+    for (const p of res.filePaths) {
+      const processName = path.basename(p)
+      const name = processName.replace(/\.exe$/i, '')
+      let icon = null
+      try {
+        const img = await app.getFileIcon(p, { size: 'normal' })
+        icon = img?.isEmpty?.() ? null : img.toDataURL()
+      } catch {}
+      await addApp(app.getPath('userData'), { name, processName, path: p, icon }).catch(() => {})
+    }
+    return { success: true, apps: await require('./split-tunnel-store.cjs').getApps(app.getPath('userData')).catch(() => []) }
+  })
+
+  ipcMain.handle('apps:remove', async (_event, processName) => {
+    const { removeApp, getApps } = require('./split-tunnel-store.cjs')
+    await removeApp(app.getPath('userData'), processName).catch(() => {})
+    return { success: true, apps: await getApps(app.getPath('userData')).catch(() => []) }
   })
 
   // ── Kill switch ─────────────────────────────────────────────────────────────

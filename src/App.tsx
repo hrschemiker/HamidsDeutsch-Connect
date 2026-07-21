@@ -2063,6 +2063,11 @@ function App() {
             </>
           )}
         </main>
+        <footer className="app-footer">
+          <span>Made with <span className="app-footer-heart">♥</span> by{' '}
+            <a href="https://github.com/hrschemiker/HamidsDeutsch-Connect" target="_blank" rel="noopener noreferrer" className="app-footer-link">Hamidreza</a>
+          </span>
+        </footer>
       </section>
       {toastMessage && (
         <div className="toast" role="status" aria-live="polite">
@@ -4738,6 +4743,74 @@ function formatInspectionDate(
   }
 }
 
+type SplitApp = { name: string; processName: string; path: string; icon: string | null }
+
+function SplitTunnelSection() {
+  const { lang } = useContext(LangCtx)
+  const [apps, setApps] = useState<SplitApp[]>([])
+  const [adding, setAdding] = useState(false)
+
+  useEffect(() => {
+    void window.hamidsDeutsch.apps.list().then(setApps).catch(() => {})
+  }, [])
+
+  async function handleAdd() {
+    if (adding) return
+    setAdding(true)
+    try {
+      const r = await window.hamidsDeutsch.apps.add()
+      if (r?.apps) setApps(r.apps)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  async function handleRemove(processName: string) {
+    const r = await window.hamidsDeutsch.apps.remove(processName)
+    if (r?.apps) setApps(r.apps)
+  }
+
+  return (
+    <section className="panel-card split-tunnel-card">
+      <div className="panel-heading">
+        <div>
+          <span className="panel-kicker">{lang === 'fa' ? 'اتصال با فیلتر' : 'Filtered connection'}</span>
+          <h3>{lang === 'fa' ? 'برنامه‌های بدون تونل' : 'Apps that bypass the VPN'}</h3>
+        </div>
+        <span className="count-badge">{apps.length}</span>
+      </div>
+
+      <p className="split-tunnel-desc">
+        {lang === 'fa'
+          ? 'کل ترافیک از VPN رد می‌شود، به‌جز برنامه‌هایی که این‌جا اضافه می‌کنی (مثل اپ‌های بانکی یا سرویس‌های داخلی). فقط در حالت TUN اعمال می‌شود.'
+          : 'All traffic goes through the VPN except the apps you add here (e.g. banking or local services). Applies in TUN mode only.'}
+      </p>
+
+      <button className="split-add-btn" type="button" onClick={() => void handleAdd()} disabled={adding}>
+        <span className="split-add-icon">＋</span>
+        {adding ? (lang === 'fa' ? 'در حال افزودن…' : 'Adding…') : (lang === 'fa' ? 'افزودن برنامه' : 'Add app')}
+      </button>
+
+      {apps.length === 0 ? (
+        <div className="split-empty">
+          <div className="split-empty-icon">🧩</div>
+          <p>{lang === 'fa' ? 'هنوز برنامه‌ای اضافه نشده' : 'No apps added yet'}</p>
+        </div>
+      ) : (
+        <div className="split-app-grid">
+          {apps.map((a) => (
+            <div className="split-app-chip" key={a.processName} title={a.path}>
+              {a.icon ? <img className="split-app-icon" src={a.icon} alt="" /> : <span className="split-app-icon split-app-icon-fallback">▣</span>}
+              <span className="split-app-name">{a.name}</span>
+              <button className="split-app-remove" type="button" aria-label="remove" onClick={() => void handleRemove(a.processName)}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function DirectSitesPage({
   domains,
   onAddDomain,
@@ -4860,11 +4933,12 @@ function DirectSitesPage({
 
   return (
     <div className="page-stack">
+      <SplitTunnelSection />
       <section className="panel-card">
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
-              Split Tunnel
+              {t('direct.add.kicker', 'دامنه‌های مستقیم')}
             </span>
             <h3>
               {t('direct.add.title')}

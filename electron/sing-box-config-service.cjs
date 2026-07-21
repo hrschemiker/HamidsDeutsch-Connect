@@ -159,6 +159,7 @@ async function createAndCheckTunConfig({
   localPort = 2080,
   setSystemProxy = false,
   utlsSettings = null,
+  directApps = [],
 }) {
   validateRequest({
     subscriptionUrl,
@@ -215,6 +216,7 @@ async function createAndCheckTunConfig({
       normalizedDirectDomains,
       localPort,
       setSystemProxy,
+      directApps,
     )
 
   const runtimeDirectory = path.join(
@@ -1311,12 +1313,20 @@ function buildTunConfig(
   directDomains,
   localPort = 2080,
   setSystemProxy = false,
+  directApps = [],
 ) {
+  // Split tunneling: the selected apps bypass the tunnel (go direct); everything
+  // else routes through the proxy (final: 'proxy'). Matched by process basename.
+  const appNames = Array.isArray(directApps)
+    ? Array.from(new Set(directApps.map((a) => String(a).trim().toLowerCase()).filter(Boolean))).slice(0, 200)
+    : []
+
   const rules = [
     {
       ip_is_private: true,
       outbound: 'direct',
     },
+    ...(appNames.length > 0 ? [{ process_name: appNames, outbound: 'direct' }] : []),
     ...buildDirectRules(directDomains),
   ]
 

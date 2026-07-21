@@ -237,6 +237,12 @@ contextBridge.exposeInMainWorld(
       },
     },
 
+    apps: {
+      list: () => ipcRenderer.invoke('apps:list'),
+      add: () => ipcRenderer.invoke('apps:add'),
+      remove: (processName) => ipcRenderer.invoke('apps:remove', processName),
+    },
+
     killswitch: {
       get: () => ipcRenderer.invoke('killswitch:get'),
       set: (enabled) => ipcRenderer.invoke('killswitch:set', enabled),
