@@ -203,6 +203,10 @@ contextBridge.exposeInMainWorld(
       testStart: () =>
         ipcRenderer.invoke('free:test-start'),
 
+      // Stop an in-flight working test so a connection can be established.
+      stopTesting: () =>
+        ipcRenderer.invoke('free:stop-testing'),
+
       connectSpecificNode: (input) =>
         ipcRenderer.invoke('free:connect-specific-node', input),
 

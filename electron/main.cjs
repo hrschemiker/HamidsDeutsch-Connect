@@ -315,6 +315,7 @@ const TEST_PER_CONFIG_TIMEOUT = 5000
 let crawlInFlight = false
 let lastCrawlAt = 0
 let testInFlight = false
+let testAbort = false
 let telegramCrawlTimer = null
 let freeBackgroundTimer = null
 
@@ -547,6 +548,7 @@ async function spawnTestEngine(uri) {
 async function testAllFreeConfigs() {
   if (testInFlight) return { tested: 0, removed: 0, skipped: 'busy' }
   testInFlight = true
+  testAbort = false
   freeConfigState.testing = true
   try {
     const all = await getAllFreePool().catch(() => [])
@@ -554,6 +556,9 @@ async function testAllFreeConfigs() {
     freeConfigState.testDone = 0
     await sendFreePoolStatus()
     for (const cfg of all) {
+      // Stop cleanly if the user chose to connect (testing and connecting are
+      // mutually exclusive so a test engine can never disrupt a real connect).
+      if (testAbort) break
       freeConfigState.testDone++
       sendFreeProgress(`آزمایش کانفیگ‌ها: ${freeConfigState.testDone}/${freeConfigState.testTotal}`, 'testing')
       let child = null
@@ -571,15 +576,35 @@ async function testAllFreeConfigs() {
       }
       if (freeConfigState.testDone % 10 === 0) await sendFreePoolStatus()
     }
+    if (testAbort) {
+      await sendFreePoolStatus()
+      sendFreeProgress('آزمایش برای برقراری اتصال متوقف شد.', 'idle')
+      return { tested: freeConfigState.testDone, removed: 0, skipped: 'aborted' }
+    }
     const removed = await pruneFreeDead().catch(() => 0)
     await sendFreePoolStatus()
     sendFreeProgress(`آزمایش کامل شد. ${removed} کانفیگ بی‌کار حذف شد.`, 'idle')
     return { tested: all.length, removed, skipped: null }
   } finally {
     testInFlight = false
+    testAbort = false
     freeConfigState.testing = false
     await sendFreePoolStatus()
   }
+}
+
+/**
+ * Stop an in-flight free-config test and wait for the loop to unwind. Called
+ * before any connect so testing and connecting never overlap.
+ */
+async function stopFreeTesting() {
+  if (!testInFlight) return { stopped: true, wasTesting: false }
+  testAbort = true
+  const start = Date.now()
+  while (testInFlight && Date.now() - start < 5000) {
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  return { stopped: !testInFlight, wasTesting: true }
 }
 
 /**
@@ -588,6 +613,9 @@ async function testAllFreeConfigs() {
  */
 async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOptions = null }) {
   const { createAndCheckConfig } = require('./sing-box-config-service.cjs')
+  // Never connect while a test is running — stop it first so a leftover test
+  // engine can't disrupt the real connection.
+  await stopFreeTesting()
   freeConfigState.userDisconnected = false
   const enginePath = getEnginePath()
   const userDataPath = app.getPath('userData')
@@ -1319,6 +1347,7 @@ function registerIpcHandlers() {
     'engine:start-local-proxy',
     async () => {
       try {
+        await stopFreeTesting()
         const result =
           await startLocalProxy({
             enginePath:
@@ -2274,6 +2303,11 @@ function registerIpcHandlers() {
     } catch (err) {
       return { success: false, servers: [], meta: null, error: err?.message ?? 'آزمایش کانفیگ‌ها ناموفق بود.' }
     }
+  })
+
+  // Stop an in-flight free-config test so a connection can be established.
+  ipcMain.handle('free:stop-testing', async () => {
+    return stopFreeTesting()
   })
 
   // Connect to a free config — identical path to a subscription connect (spec #8).

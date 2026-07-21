@@ -748,6 +748,8 @@ declare global {
 
         testStart: () => Promise<FreePoolResult>
 
+        stopTesting: () => Promise<{ stopped: boolean; wasTesting: boolean }>
+
         connectSpecificNode: (input: {
           nodeId?: string
           nodeUri?: string

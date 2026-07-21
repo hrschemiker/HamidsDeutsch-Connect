@@ -393,21 +393,14 @@ button {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
+  /* Scrolling works, but the scrollbar itself is hidden (no side bar). */
+  scrollbar-width: none; /* Firefox */
 }
 
 .application-shell-top .main-area > main::-webkit-scrollbar {
-  width: 10px;
-}
-.application-shell-top .main-area > main::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 8px;
-  border: 3px solid transparent;
-  background-clip: padding-box;
-}
-.application-shell-top .main-area > main::-webkit-scrollbar-track {
-  background: transparent;
+  width: 0;
+  height: 0;
+  display: none; /* Chromium/WebKit */
 }
 
 .app-footer {

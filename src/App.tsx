@@ -240,6 +240,10 @@ function App() {
   const [freePool, setFreePool] = useState<FreePoolServer[]>([])
   const [freePoolMeta, setFreePoolMeta] = useState<{ total: number; working: number; untested: number; lastRefreshedAt: string | null } | null>(null)
   const [freeTest, setFreeTest] = useState<{ testing: boolean; done: number; total: number }>({ testing: false, done: 0, total: 0 })
+  // Testing and connecting are mutually exclusive. When the user tries to connect
+  // mid-test we ask first; accepting stops the test, declining keeps it running.
+  const [testStopPrompt, setTestStopPrompt] = useState(false)
+  const testStopResolver = useRef<((accepted: boolean) => void) | null>(null)
 
   // Engine update notification
   const [engineUpdateAvailable, setEngineUpdateAvailable] = useState(false)
@@ -541,6 +545,7 @@ function App() {
 
   // Connect to the best working free config — same path as a subscription (spec #8).
   async function connectFreeConfig() {
+    if (!(await confirmStopTestingIfNeeded())) return
     setFreePhase('connecting')
     setFreeProgress('در حال اتصال به کانفیگ رایگان...')
     setFreeError(null)
@@ -1079,9 +1084,31 @@ function App() {
     })
   }
 
+  // Returns true if it's OK to connect now. If a free-config test is running,
+  // asks the user first: accept → stop the test and proceed; decline → keep
+  // testing and abort the connect.
+  function confirmStopTestingIfNeeded(): Promise<boolean> {
+    if (!freeTest.testing) return Promise.resolve(true)
+    return new Promise<boolean>((resolve) => {
+      testStopResolver.current = resolve
+      setTestStopPrompt(true)
+    })
+  }
+
+  async function resolveTestStop(accepted: boolean) {
+    setTestStopPrompt(false)
+    const resolve = testStopResolver.current
+    testStopResolver.current = null
+    if (accepted) {
+      await window.hamidsDeutsch.free.stopTesting().catch(() => {})
+    }
+    resolve?.(accepted)
+  }
+
   async function prepareAndStart(
     node: SafeServerNode,
   ) {
+    if (!(await confirmStopTestingIfNeeded())) return
     setConnectionActionError(null)
     setSubConnectingNodeId(node.id)
     setSubConnectingStep('در حال قطع اتصال قبلی...')
@@ -1122,6 +1149,8 @@ function App() {
     ) {
       return
     }
+
+    if (!(await confirmStopTestingIfNeeded())) return
 
     automaticConnectionBusyRef.current = true
     setAutomaticConnectionRunning(true)
@@ -1279,6 +1308,7 @@ function App() {
   //   3. BPB Panel (if panelUrl saved) → quick-connect
   //   4. GitHub Codespace (if token saved)
   async function smartHeroConnect() {
+    if (!(await confirmStopTestingIfNeeded())) return
     // Priority 1: user has valid subscription servers
     if (serverNodes.nodes.some((n) => n.valid)) {
       void connectToFirstHealthyServer()
@@ -2099,6 +2129,26 @@ function App() {
       )}
     </div>
       {qrUri && <QrModal uri={qrUri} onClose={() => setQrUri(null)} />}
+      {testStopPrompt && (
+        <div className="killswitch-overlay" role="alertdialog" aria-modal="true">
+          <div className="killswitch-dialog">
+            <div className="killswitch-icon">◎</div>
+            <h2>{lang === 'fa' ? 'آزمایش کانفیگ‌ها در جریان است' : 'Testing in progress'}</h2>
+            <p>{lang === 'fa'
+              ? 'همین حالا در حال آزمایش دانلود/آپلود کانفیگ‌های رایگان هستیم. برای برقراری اتصال باید آزمایش متوقف شود. متوقف کنیم و وصل شویم؟'
+              : 'Free configs are being download/upload tested right now. Connecting will stop the test. Stop testing and connect?'}</p>
+            <div className="killswitch-actions">
+              <button className="primary-button" type="button" onClick={() => void resolveTestStop(true)}>
+                {lang === 'fa' ? 'توقف آزمایش و اتصال' : 'Stop test & connect'}
+              </button>
+              <button className="text-button" type="button" onClick={() => void resolveTestStop(false)}>
+                {lang === 'fa' ? 'ادامه آزمایش' : 'Keep testing'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {killSwitchActive && (
         <div className="killswitch-overlay" role="alertdialog" aria-modal="true">
           <div className="killswitch-dialog">
