@@ -58,11 +58,19 @@ async function addManualNode(uri) {
   return node
 }
 
-async function removeManualNode(nodeId) {
+async function removeManualNode(idOrUri) {
   const store = await readStore()
-  const next = store.nodes.filter((n) => n.id !== nodeId)
+  // The list shown in the UI derives its node id from a stable hash of the URI
+  // (subscription-parser), NOT the store UUID — so accept either the store id or
+  // the URI itself so deletes from the UI actually match a stored node.
+  const next = store.nodes.filter((n) => n.id !== idOrUri && n.uri !== idOrUri)
   if (next.length === store.nodes.length) throw new Error('سرور پیدا نشد.')
   await writeStore({ ...store, nodes: next })
+  return { success: true }
+}
+
+async function clearManualNodes() {
+  await writeStore({ version: 1, nodes: [] })
   return { success: true }
 }
 
@@ -77,5 +85,6 @@ module.exports = {
   listManualNodes,
   addManualNode,
   removeManualNode,
+  clearManualNodes,
   getManualNodeUri,
 }

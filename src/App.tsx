@@ -1841,7 +1841,11 @@ function App() {
                 }
                 return result
               }}
-              onRemoveSubscription={subscriptions.removeSubscription}
+              onRemoveSubscription={async (subscriptionId) => {
+                const result = await subscriptions.removeSubscription(subscriptionId)
+                if (result.success) void serverNodes.loadAll().catch(() => {})
+                return result
+              }}
               onInspectSubscription={subscriptions.inspectSubscription}
               onLoadServers={async (subscriptionId) => {
                 const result = await serverNodes.loadFromSubscription(subscriptionId)
@@ -1922,6 +1926,36 @@ function App() {
                   if (result.meta) setFreePoolMeta({ total: result.meta.total, working: result.meta.working, untested: result.meta.untested, lastRefreshedAt: result.meta.lastRefreshedAt })
                 }
               }}
+              onDeepCrawlFreePool={async () => {
+                // Requires an active tunnel (Telegram is blocked in Iran).
+                if (!appHeroConnected) {
+                  setToastMessage('برای بررسی کامل کانال‌ها ابتدا باید متصل باشی.')
+                  if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+                  toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500)
+                  return
+                }
+                const result = await window.hamidsDeutsch.free.crawlDeep()
+                if (result.success) {
+                  setFreePool(result.servers)
+                  if (result.meta) setFreePoolMeta({ total: result.meta.total, working: result.meta.working, untested: result.meta.untested, lastRefreshedAt: result.meta.lastRefreshedAt })
+                  setToastMessage(`بررسی کامل انجام شد. ${result.added ?? 0} کانفیگ جدید اضافه شد.`)
+                  if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+                  toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500)
+                }
+              }}
+              onRefreshFreePings={async () => {
+                // Re-measures ping — disconnects like the working test does.
+                const ok = window.confirm('برای بروزرسانی پینگ کانفیگ‌های سالم، اتصال فعلی قطع می‌شود. ادامه می‌دهی؟')
+                if (!ok) return
+                intentionalDisconnectRef.current = true
+                await window.hamidsDeutsch.free.disconnect().catch(() => {})
+                if (engineProcess.status.running) await engineProcess.stop().catch(() => {})
+                const result = await window.hamidsDeutsch.free.refreshPings()
+                if (result.success) {
+                  setFreePool(result.servers)
+                  if (result.meta) setFreePoolMeta({ total: result.meta.total, working: result.meta.working, untested: result.meta.untested, lastRefreshedAt: result.meta.lastRefreshedAt })
+                }
+              }}
               onTestFreePool={async () => {
                 // The test disconnects the current tunnel — confirm first (spec #3).
                 const ok = window.confirm('برای آزمایش کانفیگ‌ها اتصال فعلی قطع می‌شود و باید تا پایان آزمایش صبر کنی. ادامه می‌دهی؟')
@@ -1957,6 +1991,7 @@ function App() {
                 const result = await window.hamidsDeutsch.servers.removeManualNode(nodeId)
                 if (result.success) {
                   await subscriptions.refresh()
+                  void serverNodes.loadAll().catch(() => {})
                 }
                 return result
               }}
@@ -3771,6 +3806,8 @@ function ServersPage({
   onConnectFreeNode,
   freeTest,
   onCrawlFreePool,
+  onDeepCrawlFreePool,
+  onRefreshFreePings,
   onTestFreePool,
   onConnectSubNode,
   onStopConnection,
@@ -3822,6 +3859,8 @@ function ServersPage({
   onConnectFreeNode: (server: FreePoolServer) => void
   freeTest: { testing: boolean; done: number; total: number }
   onCrawlFreePool: () => void
+  onDeepCrawlFreePool: () => void
+  onRefreshFreePings: () => void
   onTestFreePool: () => void
   onConnectSubNode: (node: SafeServerNode) => void
   onStopConnection: () => void
@@ -4407,6 +4446,20 @@ function ServersPage({
                 onClick={() => void onTestFreePool()}
                 title="آزمایش کارکرد همه کانفیگ‌ها (اتصال قطع می‌شود)"
               >⚡ آزمایش کارکرد</button>
+              <button
+                className="free-pool-refresh-btn"
+                type="button"
+                disabled={freeTest.testing || freePhase === 'connecting'}
+                onClick={() => void onDeepCrawlFreePool()}
+                title="بررسی کامل ۲۰۰ پست آخر هر دو کانال بدون محدودیت (حتی پست‌های قبلاً بررسی‌شده) — نیازمند اتصال فعال"
+              >⤓ بررسی کامل کانال‌ها</button>
+              <button
+                className="free-pool-refresh-btn"
+                type="button"
+                disabled={freeTest.testing || (freePoolMeta?.working ?? 0) === 0}
+                onClick={() => void onRefreshFreePings()}
+                title="بروزرسانی پینگ کانفیگ‌های سالم باقی‌مانده (اتصال قطع می‌شود)"
+              >⟲ بروزرسانی پینگ</button>
             </div>
           </div>
           {/* Search + protocol filter */}

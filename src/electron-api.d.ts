@@ -752,6 +752,10 @@ declare global {
 
         stopTesting: () => Promise<{ stopped: boolean; wasTesting: boolean }>
 
+        crawlDeep: () => Promise<FreePoolResult>
+
+        refreshPings: () => Promise<FreePoolResult>
+
         connectSpecificNode: (input: {
           nodeId?: string
           nodeUri?: string

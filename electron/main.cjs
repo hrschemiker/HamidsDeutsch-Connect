@@ -42,6 +42,7 @@ const {
   listManualNodes,
   addManualNode,
   removeManualNode,
+  clearManualNodes,
   getManualNodeUri,
 } = require('./manual-node-store.cjs')
 
@@ -405,7 +406,7 @@ async function resolveCfCleanIp(userDataPath) {
  * resolve each server's country flag offline, and add them to the pool.
  * Runs only while a tunnel is up. Throttled unless force=true.
  */
-async function crawlFreeConfigs({ force = false } = {}) {
+async function crawlFreeConfigs({ force = false, deep = false } = {}) {
   if (crawlInFlight) return { added: 0, skipped: 'busy' }
   if (!force && Date.now() - lastCrawlAt < CRAWL_MIN_INTERVAL_MS) return { added: 0, skipped: 'throttled' }
   if (!isAnyConnectionActive()) return { added: 0, skipped: 'offline' }
@@ -414,11 +415,15 @@ async function crawlFreeConfigs({ force = false } = {}) {
   try {
     const { crawlChannel } = require('./telegram-source-service.cjs')
     const geoip = require('./geoip-service.cjs')
-    sendFreeProgress('در حال جستجوی کانفیگ‌های جدید در تلگرام...', 'fetching')
+    sendFreeProgress(deep
+      ? 'بررسی کامل ۲۰۰ پست آخر هر دو کانال تلگرام...'
+      : 'در حال جستجوی کانفیگ‌های جدید در تلگرام...', 'fetching')
 
     const collected = []
     for (const channel of TELEGRAM_CHANNELS) {
-      const sinceId = await getFreeChannelId(channel).catch(() => 0)
+      // Deep crawl ignores the newest-post-id cursor: re-scan ALL recent posts
+      // even if already seen (dedup by URI still prevents duplicates on import).
+      const sinceId = deep ? 0 : await getFreeChannelId(channel).catch(() => 0)
       let res
       try {
         res = await crawlChannel({ channel, sinceId, maxPosts: TELEGRAM_MAX_POSTS, fetchImpl: tunneledFetch })
@@ -605,6 +610,56 @@ async function stopFreeTesting() {
     await new Promise((r) => setTimeout(r, 100))
   }
   return { stopped: !testInFlight, wasTesting: true }
+}
+
+/**
+ * Re-measure latency for ONLY the configs that already passed the working test
+ * and are still in the pool (working === true). Does not crawl or delete —
+ * just refreshes each surviving config's ping.
+ */
+async function refreshWorkingPings() {
+  if (testInFlight) return { tested: 0, skipped: 'busy' }
+  testInFlight = true
+  testAbort = false
+  freeConfigState.testing = true
+  try {
+    const all = await getAllFreePool().catch(() => [])
+    const working = all.filter((c) => c.working === true)
+    freeConfigState.testTotal = working.length
+    freeConfigState.testDone = 0
+    await sendFreePoolStatus()
+    if (working.length === 0) {
+      sendFreeProgress('کانفیگ کارآمدی برای بروزرسانی پینگ وجود ندارد.', 'idle')
+      return { tested: 0, skipped: null }
+    }
+    for (const cfg of working) {
+      if (testAbort) break
+      freeConfigState.testDone++
+      sendFreeProgress(`بروزرسانی پینگ: ${freeConfigState.testDone}/${working.length}`, 'testing')
+      let child = null
+      try {
+        child = await spawnTestEngine(cfg.uri)
+        if (!child) continue // keep it as-is; couldn't re-measure this round
+        await new Promise((r) => setTimeout(r, 1200))
+        const { ok, ms } = await probeRelay(TEST_PORT)
+        await setFreeTestResult(cfg.id, ok, ms).catch(() => {})
+      } catch {
+        // Leave the config untouched on a transient error.
+      } finally {
+        try { child?.kill() } catch {}
+        await new Promise((r) => setTimeout(r, 150))
+      }
+      if (freeConfigState.testDone % 5 === 0) await sendFreePoolStatus()
+    }
+    await sendFreePoolStatus()
+    sendFreeProgress(testAbort ? 'بروزرسانی پینگ متوقف شد.' : 'بروزرسانی پینگ کامل شد.', 'idle')
+    return { tested: freeConfigState.testDone, skipped: null }
+  } finally {
+    testInFlight = false
+    testAbort = false
+    freeConfigState.testing = false
+    await sendFreePoolStatus()
+  }
 }
 
 /**
@@ -1690,9 +1745,20 @@ function registerIpcHandlers() {
     'servers:remove-manual-node',
     async (_event, nodeId) => {
       try {
-        await removeManualNode(nodeId)
+        // The UI node id is a stable hash of the URI (parser), not the store id.
+        // Map it back to the stored URI, then delete by URI (removeManualNode
+        // also accepts the raw store id as a fallback).
+        const { parseSubscriptionNodeRecords } = require('./subscription-parser.cjs')
+        const manualNodes = await listManualNodes()
+        let target = nodeId
+        for (const n of manualNodes) {
+          const recs = parseSubscriptionNodeRecords(n.uri)
+          if (recs.some((r) => r.id === nodeId || r.node?.id === nodeId)) { target = n.uri; break }
+        }
+        await removeManualNode(target)
         const remaining = await listManualNodes()
-        replaceSubscriptionNodes(MANUAL_SUBSCRIPTION_ID, remaining)
+        const records = parseSubscriptionNodeRecords(remaining.map((n) => n.uri).join('\n'))
+        replaceSubscriptionNodes(MANUAL_SUBSCRIPTION_ID, records)
         return { success: true }
       } catch (err) {
         return { success: false, error: err instanceof Error ? err.message : 'خطا در حذف سرور' }
@@ -1772,6 +1838,14 @@ function registerIpcHandlers() {
       subscriptionId,
     ) => {
       try {
+        // The "manual servers" row is a virtual subscription that isn't in the
+        // subscription store — deleting it means clearing all manual nodes.
+        if (subscriptionId === MANUAL_SUBSCRIPTION_ID) {
+          await clearManualNodes()
+          removeSubscriptionNodes(MANUAL_SUBSCRIPTION_ID)
+          return { success: true, error: null }
+        }
+
         await removeSubscription(
           subscriptionId,
         )
@@ -2308,6 +2382,29 @@ function registerIpcHandlers() {
   // Stop an in-flight free-config test so a connection can be established.
   ipcMain.handle('free:stop-testing', async () => {
     return stopFreeTesting()
+  })
+
+  // Force a DEEP crawl: ignore throttle + cursor, re-scan the last 200 posts of
+  // both channels (even already-seen) and import any new configs. One-shot.
+  ipcMain.handle('free:crawl-deep', async () => {
+    try {
+      const result = await crawlFreeConfigs({ force: true, deep: true })
+      const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
+      return { success: true, added: result.added, skipped: result.skipped, servers, meta, error: null }
+    } catch (err) {
+      return { success: false, added: 0, servers: [], meta: null, error: err?.message ?? 'بررسی کامل کانال‌ها ناموفق بود.' }
+    }
+  })
+
+  // Re-measure ping for the free configs that already passed the working test.
+  ipcMain.handle('free:refresh-pings', async () => {
+    try {
+      const result = await refreshWorkingPings()
+      const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
+      return { success: true, ...result, servers, meta, error: null }
+    } catch (err) {
+      return { success: false, servers: [], meta: null, error: err?.message ?? 'بروزرسانی پینگ ناموفق بود.' }
+    }
   })
 
   // Connect to a free config — identical path to a subscription connect (spec #8).

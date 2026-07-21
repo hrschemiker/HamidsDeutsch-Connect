@@ -210,6 +210,14 @@ contextBridge.exposeInMainWorld(
       stopTesting: () =>
         ipcRenderer.invoke('free:stop-testing'),
 
+      // One-shot deep crawl: ignore throttle + cursor, re-scan 200 posts/channel.
+      crawlDeep: () =>
+        ipcRenderer.invoke('free:crawl-deep'),
+
+      // Re-measure ping of the configs that passed the working test.
+      refreshPings: () =>
+        ipcRenderer.invoke('free:refresh-pings'),
+
       connectSpecificNode: (input) =>
         ipcRenderer.invoke('free:connect-specific-node', input),
 

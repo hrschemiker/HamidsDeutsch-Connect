@@ -6900,16 +6900,20 @@ button {
   display: flex;
   align-items: stretch;
   gap: 12px;
+  width: 100%;
   margin-top: 10px;
 }
 
+/* Days badge sits on the LEFT; the usage box stretches to fill the rest. */
 .sub-info-usage {
   flex: 1 1 auto;
+  order: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   justify-content: center;
-  padding: 11px 14px;
+  padding: 12px 16px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface-soft);
@@ -6953,16 +6957,17 @@ button {
 
 .sub-info-days {
   flex: 0 0 auto;
-  min-width: 78px;
+  order: 2;
+  min-width: 74px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 1px;
-  padding: 10px 14px;
-  border: 1px solid var(--border);
+  padding: 10px 16px;
+  border: 1px solid currentColor;
   border-radius: 12px;
-  background: var(--surface-soft);
+  background: color-mix(in srgb, currentColor 12%, transparent);
 }
 
 .sub-info-days-num {
