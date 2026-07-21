@@ -194,8 +194,6 @@ function App() {
     { id: 'servers', label: t('nav.servers'), icon: '◉' },
     { id: 'subscriptions', label: t('nav.subscriptions'), icon: '↧' },
     { id: 'direct-sites', label: t('nav.directSites'), icon: '↗' },
-    { id: 'rescue', label: t('nav.rescue'), icon: '✦' },
-    { id: 'tools', label: t('nav.tools'), icon: '⬡' },
     { id: 'statistics', label: t('nav.statistics'), icon: '▥' },
     { id: 'logs', label: t('nav.logs'), icon: '≡' },
     { id: 'guide', label: t('nav.guide'), icon: '?' },
@@ -1716,7 +1714,7 @@ function App() {
               onRetestLatency={() => void latency.testAll()}
               onOpenServers={() => setActivePage('servers')}
               onOpenDirectSites={() => setActivePage('direct-sites')}
-              onOpenRescue={() => setActivePage('rescue')}
+              onOpenRescue={() => setActivePage('settings')}
               onOpenSettings={() => setActivePage('settings')}
               freePhase={freePhase}
               freeNodeName={freeNodeName}
@@ -1732,7 +1730,7 @@ function App() {
               geoBlockTrigger={geoBlockTrigger}
               dataLoading={serverNodes.loading || subscriptions.loading}
               trafficSpeed={trafficSpeed}
-              onNavigateToTools={() => setActivePage('tools')}
+              onNavigateToTools={() => setActivePage('settings')}
               onShowQr={async (compositeId: string) => {
                 const parts = compositeId.split('::')
                 const subscriptionId = parts[0]
@@ -1954,22 +1952,6 @@ function App() {
             />
           )}
 
-          {activePage === 'rescue' && (
-            <RescuePage
-              settings={
-                rescueSettings.settings
-              }
-              onUpdate={
-                rescueSettings.update
-              }
-              onReset={
-                rescueSettings.reset
-              }
-              connected={
-                connectionVerified
-              }
-            />
-          )}
           {activePage === 'statistics' && (
             <StatisticsPage
               summary={
@@ -1999,6 +1981,7 @@ function App() {
             <GuidePage />
           )}
           {activePage === 'settings' && (
+            <>
             <SettingsPage
               settings={
                 connectionSettings.settings
@@ -2067,12 +2050,18 @@ function App() {
                 await window.hamidsDeutsch.doh.setProxyDoH(v)
               }}
             />
-          )}
-          {activePage === 'tools' && (
+            {/* Merged: Rescue Center + Tools now live under the Settings tab */}
+            <RescuePage
+              settings={rescueSettings.settings}
+              onUpdate={rescueSettings.update}
+              onReset={rescueSettings.reset}
+              connected={connectionVerified}
+            />
             <ToolsPage
               directDomains={directDomains.domains}
               onNavigateToSubscriptions={() => setActivePage('subscriptions')}
             />
+            </>
           )}
         </main>
       </section>

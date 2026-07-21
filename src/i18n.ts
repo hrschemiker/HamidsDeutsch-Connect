@@ -22,7 +22,7 @@ export const TR: Record<Lang, Record<string, string>> = {
     'nav.statistics': 'آمار',
     'nav.logs': 'گزارش',
     'nav.guide': 'راهنما',
-    'nav.settings': 'تنظیمات',
+    'nav.settings': 'تنظیمات و ابزارها',
 
     // ── Page titles ──────────────────────────────────────────────────────────
     'page.home': 'خانه',
@@ -34,7 +34,7 @@ export const TR: Record<Lang, Record<string, string>> = {
     'page.statistics': 'آمار اتصال',
     'page.logs': 'گزارش برنامه',
     'page.guide': 'راهنمای اتصال',
-    'page.settings': 'تنظیمات',
+    'page.settings': 'تنظیمات، ابزارها و مرکز نجات',
 
     // ── Status ───────────────────────────────────────────────────────────────
     'status.connected': 'متصل',
@@ -691,7 +691,7 @@ export const TR: Record<Lang, Record<string, string>> = {
     'nav.statistics': 'Statistics',
     'nav.logs': 'Logs',
     'nav.guide': 'Guide',
-    'nav.settings': 'Settings',
+    'nav.settings': 'Settings & Tools',
 
     // ── Page titles ───────────────────────────────────────────────────────────
     'page.home': 'Home',
@@ -703,7 +703,7 @@ export const TR: Record<Lang, Record<string, string>> = {
     'page.statistics': 'Statistics',
     'page.logs': 'Application Logs',
     'page.guide': 'Connection Guide',
-    'page.settings': 'Settings',
+    'page.settings': 'Settings, Tools & Rescue',
 
     // ── Status ────────────────────────────────────────────────────────────────
     'status.connected': 'Connected',
