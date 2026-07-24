@@ -711,13 +711,13 @@ button {
   align-items: center;
   gap: 13px;
   padding: 12px 17px;
-  border: 1px solid rgba(242, 192, 85, 0.32);
+  border: 1px solid rgba(0, 212, 170, 0.34);
   border-radius: 13px;
-  background: var(--gold);
-  color: #1d1607;
+  background: var(--teal);
+  color: #0a1628;
   cursor: pointer;
   text-align: right;
-  box-shadow: 0 14px 36px rgba(242, 192, 85, 0.16);
+  box-shadow: 0 14px 36px rgba(0, 212, 170, 0.15);
   transition:
     transform 160ms ease,
     box-shadow 160ms ease;
@@ -725,7 +725,7 @@ button {
 
 .connect-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 18px 42px rgba(242, 192, 85, 0.24);
+  box-shadow: 0 18px 42px rgba(0, 212, 170, 0.22);
 }
 
 .connect-button-active {
@@ -1017,8 +1017,8 @@ button {
 }
 
 .primary-button {
-  background: var(--gold);
-  color: #211908;
+  background: var(--teal);
+  color: #0a1628;
 }
 
 .primary-button:disabled {
