@@ -1,6 +1,6 @@
 appId: com.hamidsdeutsch.connect
-productName: HamidsDeutsch Connect
-copyright: Copyright © 2026 HamidsDeutsch
+productName: Manfaz VPN
+copyright: Copyright © 2026 Manfaz VPN
 
 directories:
   output: release
@@ -32,9 +32,9 @@ win:
       arch:
         - x64
   icon: build/icon.ico
-  executableName: HamidsDeutsch Connect
+  executableName: Manfaz VPN
   requestedExecutionLevel: asInvoker
-  artifactName: HamidsDeutsch-Connect-Setup-${version}-x64.${ext}
+  artifactName: Manfaz-VPN-Setup-${version}-x64.${ext}
   verifyUpdateCodeSignature: false
 
 nsis:
@@ -44,8 +44,8 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: HamidsDeutsch Connect
-  uninstallDisplayName: HamidsDeutsch Connect
+  shortcutName: Manfaz VPN
+  uninstallDisplayName: Manfaz VPN
   runAfterFinish: true
   deleteAppDataOnUninstall: false
   displayLanguageSelector: false

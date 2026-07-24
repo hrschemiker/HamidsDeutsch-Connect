@@ -82,16 +82,34 @@ function ConfirmDialog({
   onCancel: () => void
 }) {
   const t = useT()
+  const confirmRef = useRef<HTMLButtonElement>(null)
   const okLabel = confirmLabel ?? t('btn.confirm')
   const noLabel = cancelLabel ?? t('btn.cancel')
+
+  useEffect(() => {
+    confirmRef.current?.focus()
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') onCancel()
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [onCancel])
+
   return (
-    <div className="confirm-overlay" onClick={onCancel}>
-      <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
-        <p className="confirm-title">{title}</p>
-        <p className="confirm-message">{message}</p>
+    <div className="confirm-overlay" onClick={onCancel} role="presentation">
+      <div
+        className="confirm-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        aria-describedby="confirm-dialog-message"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="confirm-title" id="confirm-dialog-title">{title}</p>
+        <p className="confirm-message" id="confirm-dialog-message">{message}</p>
         <div className="confirm-actions">
           <button className="confirm-cancel-btn" type="button" onClick={onCancel}>{noLabel}</button>
-          <button className="confirm-ok-btn" type="button" onClick={onConfirm}>{okLabel}</button>
+          <button ref={confirmRef} className="confirm-ok-btn" type="button" onClick={onConfirm}>{okLabel}</button>
         </div>
       </div>
     </div>
@@ -244,6 +262,25 @@ function App() {
   // mid-test we ask first; accepting stops the test, declining keeps it running.
   const [testStopPrompt, setTestStopPrompt] = useState(false)
   const testStopResolver = useRef<((accepted: boolean) => void) | null>(null)
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    title: string
+    message: string
+  } | null>(null)
+  const pendingConfirmationResolver = useRef<((accepted: boolean) => void) | null>(null)
+
+  function requestConfirmation(title: string, message: string): Promise<boolean> {
+    pendingConfirmationResolver.current?.(false)
+    setPendingConfirmation({ title, message })
+    return new Promise((resolve) => {
+      pendingConfirmationResolver.current = resolve
+    })
+  }
+
+  function resolvePendingConfirmation(accepted: boolean) {
+    pendingConfirmationResolver.current?.(accepted)
+    pendingConfirmationResolver.current = null
+    setPendingConfirmation(null)
+  }
 
   // Engine update notification
   const [engineUpdateAvailable, setEngineUpdateAvailable] = useState(false)
@@ -1555,6 +1592,9 @@ function App() {
       window.clearTimeout(initialTimer)
       window.clearInterval(intervalId)
     }
+  // Method-level dependencies are intentionally stable; the containing hook
+  // objects are recreated and would restart this watchdog every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     connectionVerified,
     engineProcess.busy,
@@ -1945,7 +1985,12 @@ function App() {
               }}
               onRefreshFreePings={async () => {
                 // Re-measures ping — disconnects like the working test does.
-                const ok = window.confirm('برای بروزرسانی پینگ کانفیگ‌های سالم، اتصال فعلی قطع می‌شود. ادامه می‌دهی؟')
+                const ok = await requestConfirmation(
+                  lang === 'fa' ? 'به‌روزرسانی پینگ‌ها' : 'Refresh latency',
+                  lang === 'fa'
+                    ? 'اتصال فعلی قطع می‌شود و پینگ کانفیگ‌های سالم دوباره اندازه‌گیری خواهد شد. ادامه می‌دهی؟'
+                    : 'The current connection will stop while healthy configs are measured again. Continue?',
+                )
                 if (!ok) return
                 intentionalDisconnectRef.current = true
                 await window.hamidsDeutsch.free.disconnect().catch(() => {})
@@ -1958,7 +2003,12 @@ function App() {
               }}
               onTestFreePool={async () => {
                 // The test disconnects the current tunnel — confirm first (spec #3).
-                const ok = window.confirm('برای آزمایش کانفیگ‌ها اتصال فعلی قطع می‌شود و باید تا پایان آزمایش صبر کنی. ادامه می‌دهی؟')
+                const ok = await requestConfirmation(
+                  lang === 'fa' ? 'آزمایش کانفیگ‌ها' : 'Test configurations',
+                  lang === 'fa'
+                    ? 'اتصال فعلی قطع می‌شود و آزمایش ممکن است چند دقیقه طول بکشد. می‌توانی هر زمان آن را متوقف کنی.'
+                    : 'The current connection will stop and testing may take a few minutes. You can stop it at any time.',
+                )
                 if (!ok) return
                 intentionalDisconnectRef.current = true
                 await window.hamidsDeutsch.free.disconnect().catch(() => {})
@@ -2164,6 +2214,14 @@ function App() {
       )}
     </div>
       {qrUri && <QrModal uri={qrUri} onClose={() => setQrUri(null)} />}
+      {pendingConfirmation && (
+        <ConfirmDialog
+          title={pendingConfirmation.title}
+          message={pendingConfirmation.message}
+          onConfirm={() => resolvePendingConfirmation(true)}
+          onCancel={() => resolvePendingConfirmation(false)}
+        />
+      )}
       {testStopPrompt && (
         <div className="killswitch-overlay" role="alertdialog" aria-modal="true">
           <div className="killswitch-dialog">
@@ -2529,15 +2587,7 @@ function HomePage({
         { icon: '✓', label: 'تأیید IP', status: connected && isConnected ? 'done' : connected ? 'active' : 'idle' },
       ]
     }
-    if (false || false) {
-      const done = false
-      return [
-        { icon: '⬡', label: 'ساخت Codespace', status: false ? 'active' : done ? 'done' : 'idle' },
-        { icon: '⇄', label: 'اتصال تونل', status: false ? 'active' : done ? 'done' : 'idle' },
-        { icon: '✓', label: 'تأیید IP', status: done && isConnected ? 'done' : done ? 'active' : 'idle' },
-      ]
-    }
-    if (isConnecting || activeMethod === 'subscription' || false || false || false) {
+    if (isConnecting || activeMethod === 'subscription') {
       return [
         { icon: '◌', label: 'شروع sing-box', status: processBusy && !processStatus.ready ? 'active' : (processStatus.ready || isConnected) ? 'done' : 'idle' },
         { icon: '⇄', label: 'پراکسی محلی', status: processStatus.ready && !isConnected ? 'active' : isConnected ? 'done' : 'idle' },
@@ -2548,7 +2598,7 @@ function HomePage({
   }
 
   const subStages = getSubStages()
-  const showStages = subStages.length > 0 && (isConnecting || false ||
+  const showStages = subStages.length > 0 && (isConnecting ||
     freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' ||
     (heroConnected && subStages.some(s => s.status !== 'idle')))
 
@@ -2728,11 +2778,9 @@ function HomePage({
             <div className="hero-mode-pill">
               {freePhase === 'connected'
                 ? t('hero.modeFree')
-                : false
-                  ? t('hero.modeCodespace')
-                  : lastConnectionType === 'bpb'
-                    ? 'BPB Panel'
-                    : t('hero.modeSubscription')}
+                : lastConnectionType === 'bpb'
+                  ? 'BPB Panel'
+                  : t('hero.modeSubscription')}
             </div>
           )}
         </div>
@@ -2761,11 +2809,9 @@ function HomePage({
               <strong dir="ltr">
                 {ipVerificationResult.proxyIp
                   ? ipVerificationResult.proxyIp
-                  : false && null
-                    ? null
-                    : heroConnected
-                      ? t('stats.confirmed')
-                      : '—'}
+                  : heroConnected
+                    ? t('stats.confirmed')
+                    : '—'}
               </strong>
               {ipVerificationResult.proxyIp && (
                 <CopyButton text={ipVerificationResult.proxyIp} />
@@ -2778,13 +2824,11 @@ function HomePage({
           <div>
             <span className="statistic-label">{t('stats.currentServer')}</span>
             <strong>
-              {false && null
-                ? null
-                : activeMethod === 'free' && freeNodeName
-                  ? freeNodeName
-                  : false
-                    ? 'BPB Panel'
-                    : selectedServer?.name ?? '—'}
+              {activeMethod === 'free' && freeNodeName
+                ? freeNodeName
+                : lastConnectionType === 'bpb'
+                  ? 'BPB Panel'
+                  : selectedServer?.name ?? '—'}
             </strong>
           </div>
         </article>
@@ -2857,11 +2901,6 @@ function HomePage({
           onSecondaryAction={onRetestLatency}
         />
       </section>
-
-      {/* Codespace progress shown inline when active */}
-      {false && null && (
-        <div className="codespace-progress">{null}</div>
-      )}
 
       {switchConfirm && (
         <ConfirmDialog
@@ -3107,7 +3146,9 @@ function friendlyError(raw: string | null | undefined): string {
 // ── formatRelativeTime ─────────────────────────────────────────────────────────
 
 function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
+  const timestamp = new Date(iso).getTime()
+  if (!Number.isFinite(timestamp)) return '—'
+  const diff = Math.max(0, Date.now() - timestamp)
   const mins = Math.floor(diff / 60000)
   if (mins < 1) return 'همین الان'
   if (mins < 60) return `${mins} دقیقه پیش`
@@ -3119,20 +3160,45 @@ function formatRelativeTime(iso: string): string {
 // ── CopyButton ────────────────────────────────────────────────────────────────
 
 function CopyButton({ text }: { text: string }) {
+  const { lang } = useContext(LangCtx)
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (resetTimer.current) clearTimeout(resetTimer.current)
+  }, [])
+
   if (!text) return null
   return (
     <button
       className={`copy-btn${copied ? ' copy-btn-done' : ''}`}
       type="button"
-      aria-label="Copy"
-      onClick={() => {
-        void navigator.clipboard.writeText(text)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1600)
+      aria-label={copyFailed
+        ? (lang === 'fa' ? 'کپی ناموفق بود' : 'Copy failed')
+        : copied
+          ? (lang === 'fa' ? 'کپی شد' : 'Copied')
+          : (lang === 'fa' ? 'کپی' : 'Copy')}
+      title={copyFailed
+        ? (lang === 'fa' ? 'کپی ناموفق بود' : 'Copy failed')
+        : (lang === 'fa' ? 'کپی' : 'Copy')}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text)
+          setCopied(true)
+          setCopyFailed(false)
+        } catch {
+          setCopied(false)
+          setCopyFailed(true)
+        }
+        if (resetTimer.current) clearTimeout(resetTimer.current)
+        resetTimer.current = setTimeout(() => {
+          setCopied(false)
+          setCopyFailed(false)
+        }, 1800)
       }}
     >
-      {copied ? '✓' : '⎘'}
+      {copyFailed ? '!' : copied ? '✓' : '⎘'}
     </button>
   )
 }
@@ -3921,28 +3987,6 @@ function ServersPage({
     )
   }
 
-  if (nodes.length === 0) {
-    return (
-      <section className="empty-state">
-        <div className="empty-state-icon empty-state-icon-servers">◉</div>
-        <h2>{t('servers.empty.title')}</h2>
-        <p>{t('servers.empty.desc')}</p>
-        <ol className="empty-state-steps">
-          <li>{t('servers.empty.step1', 'به تب «اشتراک‌ها» بروید')}</li>
-          <li>{t('servers.empty.step2', 'لینک اشتراک V2Ray را وارد کنید')}</li>
-          <li>{t('servers.empty.step3', 'سرورها به‌طور خودکار بارگذاری می‌شوند')}</li>
-        </ol>
-        <button
-          className="primary-button"
-          type="button"
-          onClick={onOpenSubscriptions}
-        >
-          {t('servers.goSubs')}
-        </button>
-      </section>
-    )
-  }
-
   const validNodes = nodes.filter(
     (node) => node.valid,
   )
@@ -4019,7 +4063,23 @@ function ServersPage({
 
   return (
     <div className="page-stack">
-      <section className="panel-card">
+      {nodes.length === 0 ? (
+        <section className="empty-state">
+          <div className="empty-state-icon empty-state-icon-servers">◉</div>
+          <h2>{t('servers.empty.title')}</h2>
+          <p>{t('servers.empty.desc')}</p>
+          <ol className="empty-state-steps">
+            <li>{t('servers.empty.step1', 'از فرم بالای صفحه یک اشتراک اضافه کنید')}</li>
+            <li>{t('servers.empty.step2', 'یا یک لینک سرور دستی وارد کنید')}</li>
+            <li>{t('servers.empty.step3', 'برای گزینه‌های بدون اشتراک از مخزن رایگان پایین استفاده کنید')}</li>
+          </ol>
+          <button className="primary-button" type="button" onClick={onOpenSubscriptions}>
+            {t('servers.goSubs')}
+          </button>
+        </section>
+      ) : (
+        <>
+        <section className="panel-card">
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
@@ -4399,7 +4459,9 @@ function ServersPage({
             </article>
           )
         })}
-      </section>
+        </section>
+        </>
+      )}
 
       {switchConfirm && (
         <ConfirmDialog
@@ -4415,8 +4477,7 @@ function ServersPage({
         />
       )}
 
-      {(true) && (
-        <section className="free-pool-section">
+      <section className="free-pool-section">
           <div className="panel-heading">
             <div>
               <span className="panel-kicker free-pool-kicker">مخزن رایگان</span>
@@ -4554,7 +4615,6 @@ function ServersPage({
             })()}
           </div>
         </section>
-      )}
     </div>
   )
 }
@@ -7015,6 +7075,8 @@ function ConnectionHistorySection() {
       groups[seen.get(label)!].entries.push(e)
     }
     return groups
+  // The label helper intentionally reads the current locale for this render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries])
 
   return (
@@ -7567,21 +7629,34 @@ function UTlsSection() {
 
 function QrModal({ uri, onClose }: { uri: string; onClose: () => void }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
+    closeRef.current?.focus()
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleEscape)
     import('qrcode').then((QRCode) => {
       QRCode.default.toDataURL(uri, { width: 280, margin: 2 })
         .then((url) => setDataUrl(url))
         .catch(() => {})
     }).catch(() => {})
-  }, [uri])
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [uri, onClose])
 
   return (
-    <div className="qr-modal-backdrop" onClick={onClose}>
-      <div className="qr-modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className="qr-modal-backdrop" onClick={onClose} role="presentation">
+      <div
+        className="qr-modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="qr-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="qr-modal-header">
-          <span>QR Code</span>
-          <button className="qr-modal-close" onClick={onClose}>✕</button>
+          <span id="qr-modal-title">QR Code</span>
+          <button ref={closeRef} className="qr-modal-close" type="button" onClick={onClose} aria-label="Close">✕</button>
         </div>
         {dataUrl
           ? <img src={dataUrl} alt="QR Code" className="qr-modal-img" />

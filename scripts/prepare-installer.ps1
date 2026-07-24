@@ -38,7 +38,7 @@ $Package.name =
 $Package |
   Add-Member `
     -NotePropertyName productName `
-    -NotePropertyValue 'HamidsDeutsch Connect' `
+    -NotePropertyValue 'Manfaz VPN' `
     -Force
 
 $Package |
@@ -50,7 +50,7 @@ $Package |
 $Package |
   Add-Member `
     -NotePropertyName author `
-    -NotePropertyValue 'HamidsDeutsch' `
+    -NotePropertyValue 'Manfaz VPN' `
     -Force
 
 $Package |

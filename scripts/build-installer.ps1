@@ -41,7 +41,7 @@ $ReleaseDirectory =
 $Installer =
   Get-ChildItem `
     -LiteralPath $ReleaseDirectory `
-    -Filter 'HamidsDeutsch-Connect-Setup-*-x64.exe' `
+    -Filter 'Manfaz-VPN-Setup-*-x64.exe' `
     -File |
   Sort-Object LastWriteTime -Descending |
   Select-Object -First 1

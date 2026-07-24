@@ -148,7 +148,7 @@ function Invoke-CapturedCommand {
 }
 
 Write-Host ''
-Write-Host 'HamidsDeutsch Connect — Release Preflight' -ForegroundColor Cyan
+Write-Host 'Manfaz VPN — Release Preflight' -ForegroundColor Cyan
 Write-Host "Project: $ProjectRoot"
 Write-Host ''
 
@@ -429,7 +429,7 @@ $Overall =
   }
 
 $Header = @"
-HamidsDeutsch Connect — Release Preflight Report
+Manfaz VPN — Release Preflight Report
 Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss K')
 Project: $ProjectRoot
 Overall: $Overall

@@ -127,6 +127,8 @@ export function useServerNodes(
   const loadAll =
     useCallback(
       async (): Promise<LoadResult> => {
+        // Deliberately invalidate this callback when subscription identities change.
+        void subscriptionsKey
         const currentSubscriptions =
           subscriptionsRef.current
 
@@ -299,6 +301,8 @@ export function useServerNodes(
       async (
         subscriptionId: string,
       ): Promise<LoadResult> => {
+        // Keep this lookup aligned with subscription additions and removals.
+        void subscriptionsKey
         const subscription =
           subscriptionsRef.current.find(
             (item) =>

@@ -50,7 +50,7 @@ Manfaz VPN is a Windows desktop application that gets you past internet censorsh
 
 ## Installation
 
-1. Go to [**Releases**](../../releases/latest) and download `Manfaz-VPN-Setup-2.10.0-x64.exe`
+1. Go to [**Releases**](../../releases/latest) and download `Manfaz-VPN-Setup-2.12.0-x64.exe`
 2. Run the installer — no extra dependencies required
 3. The app launches automatically after installation
 
