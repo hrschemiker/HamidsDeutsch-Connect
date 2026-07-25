@@ -214,6 +214,7 @@ function scheduleCfScanInterval(intervalHours) {
 let closeToTrayEnabled = true
 let standaloneDoHServer = 'off'   // 'off' | 'cloudflare' | 'google'
 let proxyDoHEnabled = false
+let autoUpdateEnabled = true
 
 function getAppSettingsPath() {
   return path.join(app.getPath('userData'), 'HamidsDeutsch-Connect', 'app-settings.json')
@@ -229,10 +230,12 @@ async function loadAppSettings() {
     closeToTrayEnabled = parsed.closeToTray !== false
     standaloneDoHServer = parsed.standaloneDoHServer ?? 'off'
     proxyDoHEnabled = parsed.proxyDoHEnabled === true
+    autoUpdateEnabled = parsed.autoUpdateEnabled !== false
   } catch {
     closeToTrayEnabled = true
     standaloneDoHServer = 'off'
     proxyDoHEnabled = false
+    autoUpdateEnabled = true
   }
 }
 
@@ -244,6 +247,7 @@ async function saveAppSettings() {
     closeToTray: closeToTrayEnabled,
     standaloneDoHServer,
     proxyDoHEnabled,
+    autoUpdateEnabled,
   }, null, 2), 'utf8')
 }
 
@@ -406,6 +410,10 @@ async function resolveCfCleanIp(userDataPath) {
 async function prepareKillSwitchReconnect() {
   try {
     const ks = require('./kill-switch.cjs')
+    // A connection attempt is never protected yet. The switch is armed only
+    // after the renderer verifies that traffic is genuinely going through the
+    // tunnel, preventing startup/config-check exits from cutting the internet.
+    ks.setKillSwitchArmed(false)
     const wasActive = await ks.refreshKillSwitchActive()
     if (!wasActive) return { success: true, wasActive: false }
     const result = await ks.deactivateKillSwitch()
@@ -784,20 +792,25 @@ setProcessExitCallback(({ code } = {}) => {
   const wasExpected = expectedEngineStop
   expectedEngineStop = false
   freeConfigState.phase = 'idle'
+  if (wasExpected) {
+    require('./kill-switch.cjs').setKillSwitchArmed(false)
+  }
 
   // Kill switch: an UNEXPECTED drop (not the Disconnect button) blocks all
   // internet until the user reconnects or turns the feature off.
   if (!wasExpected && code !== 0) {
-    const { getKillSwitchEnabled, activateKillSwitch } = require('./kill-switch.cjs')
-    getKillSwitchEnabled(app.getPath('userData')).then(async (enabled) => {
-      if (!enabled) return
-      const res = await activateKillSwitch()
-      if (res.success && mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('killswitch:activated', { firewall: res.success })
-      } else if (!res.success) {
-        console.error('[KillSwitch] Activation failed:', res.error)
-      }
-    }).catch(() => {})
+    const { getKillSwitchEnabled, isKillSwitchArmed, activateKillSwitch } = require('./kill-switch.cjs')
+    if (isKillSwitchArmed()) {
+      getKillSwitchEnabled(app.getPath('userData')).then(async (enabled) => {
+        if (!enabled) return
+        const res = await activateKillSwitch()
+        if (res.success && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('killswitch:activated', { firewall: res.success })
+        } else if (!res.success && !res.skipped) {
+          console.error('[KillSwitch] Activation failed:', res.error)
+        }
+      }).catch(() => {})
+    }
   }
 
   setTimeout(() => {
@@ -1295,7 +1308,12 @@ function registerIpcHandlers() {
   ipcMain.handle(
     'system:set-virtual-location-connected',
     async (_event, connected) => {
-      setVirtualLocationConnected(connected === true)
+      const verified = connected === true
+      setVirtualLocationConnected(verified)
+      require('./kill-switch.cjs').setKillSwitchArmed(verified)
+      if (verified) {
+        void retryAutoUpdateAfterConnection()
+      }
       return { success: true }
     },
   )
@@ -1320,10 +1338,15 @@ function registerIpcHandlers() {
             const enginePath = getEnginePath()
             const userDataPath = app.getPath('userData')
             await backupWindowsProxyState(userDataPath).catch(() => {})
+            expectedEngineStop = true
+            require('./kill-switch.cjs').setKillSwitchArmed(false)
             await stopLocalProxy({ userDataPath }).catch(() => {})
-            await startLocalProxy({ enginePath, userDataPath, configPath: newConfigResult.configPath })
-            activeConnectionParams = { ...activeConnectionParams, directDomains: newDomains }
-            if (mainWindow && !mainWindow.isDestroyed()) {
+            const restarted = await startLocalProxy({ enginePath, userDataPath, configPath: newConfigResult.configPath })
+            expectedEngineStop = false
+            if (restarted.success) {
+              activeConnectionParams = { ...activeConnectionParams, directDomains: newDomains }
+            }
+            if (restarted.success && mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('bypass:reloaded', { domainCount: newDomains.length })
             }
           }
@@ -2584,9 +2607,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle('geoblock:test', async () => {
     const GEO_TARGETS = [
+      { name: 'Gemini', domain: 'gemini.google.com', path: '/' },
+      { name: 'Telegram', domain: 'web.telegram.org', path: '/' },
       { name: 'X (Twitter)', domain: 'x.com', path: '/' },
       { name: 'Instagram', domain: 'instagram.com', path: '/' },
-      { name: 'Facebook', domain: 'facebook.com', path: '/' },
     ]
     const PROXY_PORT = 2080
     const TIMEOUT_MS = 8000
@@ -2594,6 +2618,7 @@ function registerIpcHandlers() {
     async function testViaProxy(domain, path) {
       return new Promise((resolve) => {
         const net = require('node:net')
+        const tls = require('node:tls')
         const socket = new net.Socket()
         let resolved = false
         let buffer = ''
@@ -2604,16 +2629,43 @@ function registerIpcHandlers() {
         socket.connect(PROXY_PORT, '127.0.0.1', () => {
           socket.write(`CONNECT ${domain}:443 HTTP/1.1\r\nHost: ${domain}:443\r\n\r\n`)
         })
-        socket.on('data', (chunk) => {
+        const onConnectData = (chunk) => {
           buffer += chunk.toString()
+          if (!buffer.includes('\r\n\r\n')) return
+          socket.off('data', onConnectData)
           const firstLine = buffer.split('\r\n')[0] ?? ''
-          if (firstLine.includes('200')) {
-            done(true, 200)
-          } else {
+          if (!/\s200\s/.test(firstLine)) {
             const m = firstLine.match(/HTTP\/\d+\.?\d*\s+(\d+)/)
             done(false, m ? parseInt(m[1]) : null)
+            return
           }
-        })
+
+          const secure = tls.connect({
+            socket,
+            servername: domain,
+            rejectUnauthorized: true,
+          }, () => {
+            secure.write(
+              `GET ${path} HTTP/1.1\r\nHost: ${domain}\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) ManfazVPN/${app.getVersion()}\r\nAccept: text/html,*/*\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n`,
+            )
+          })
+          let responseHead = ''
+          secure.on('data', (data) => {
+            responseHead += data.toString('latin1')
+            if (!responseHead.includes('\r\n')) return
+            const statusMatch = responseHead.match(/^HTTP\/\d(?:\.\d)?\s+(\d{3})/)
+            if (!statusMatch) return
+            const status = Number(statusMatch[1])
+            // Redirects are a valid service response. 401 and 429 also prove
+            // the service is reachable; 403 is the geo/exit-IP failure we need
+            // to expose instead of falsely declaring the proxy healthy.
+            done((status >= 200 && status < 400) || status === 401 || status === 429, status)
+            secure.destroy()
+          })
+          secure.on('error', () => done(false, null))
+          secure.setTimeout(TIMEOUT_MS, () => done(false, null))
+        }
+        socket.on('data', onConnectData)
         socket.on('timeout', () => done(false, null))
         socket.on('error', () => done(false, null))
       })
@@ -2719,11 +2771,48 @@ function registerIpcHandlers() {
     return { success: true, proxyDoHEnabled, error: null }
   })
 
+  ipcMain.handle('app:update-get-settings', () => ({
+    enabled: autoUpdateEnabled,
+    currentVersion: app.getVersion(),
+    state: { ...autoUpdateState },
+  }))
+
+  ipcMain.handle('app:update-set-enabled', async (_event, enabled) => {
+    autoUpdateEnabled = enabled === true
+    await saveAppSettings()
+    if (autoUpdateEnabled) void checkForAppUpdate('manual')
+    return { success: true, enabled: autoUpdateEnabled }
+  })
+
+  ipcMain.handle('app:check-for-update', async () => checkForAppUpdate('manual'))
+
+  ipcMain.handle('app:download-update', async () => {
+    if (!autoUpdateState.availableVersion) {
+      return { success: false, error: 'No update is currently available.' }
+    }
+    try {
+      autoUpdateState.phase = 'downloading'
+      sendAutoUpdateState()
+      await autoUpdater.downloadUpdate()
+      return { success: true, error: null }
+    } catch (error) {
+      autoUpdateState.phase = 'error'
+      autoUpdateState.error = error instanceof Error ? error.message : 'Update download failed.'
+      sendAutoUpdateState()
+      return { success: false, error: autoUpdateState.error }
+    }
+  })
+
   ipcMain.handle('app:install-update', () => {
     try {
-      autoUpdater.quitAndInstall()
+      if (autoUpdateState.phase !== 'ready') {
+        return { success: false, error: 'The update has not finished downloading.' }
+      }
+      autoUpdater.quitAndInstall(false, true)
+      return { success: true, error: null }
     } catch (err) {
       console.error('[Updater] quitAndInstall error:', err?.message)
+      return { success: false, error: err?.message ?? 'Could not install the update.' }
     }
   })
 
@@ -3384,14 +3473,76 @@ for (
 
 // ── Auto-Update ───────────────────────────────────────────────────────────────
 
+const autoUpdateState = {
+  phase: 'idle',
+  availableVersion: null,
+  percent: 0,
+  error: null,
+  retryAfterConnection: false,
+  lastCheckedAt: null,
+}
+let autoUpdateCheckInFlight = null
+
+function sendAutoUpdateState() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app:update-state', { ...autoUpdateState })
+  }
+}
+
+async function checkForAppUpdate(reason = 'scheduled') {
+  if (isDevelopment || !autoUpdateEnabled) {
+    return { success: false, skipped: true, reason: isDevelopment ? 'development' : 'disabled' }
+  }
+  if (autoUpdateCheckInFlight) return autoUpdateCheckInFlight
+
+  autoUpdateCheckInFlight = (async () => {
+    autoUpdateState.phase = 'checking'
+    autoUpdateState.error = null
+    sendAutoUpdateState()
+    try {
+      const result = await autoUpdater.checkForUpdates()
+      autoUpdateState.lastCheckedAt = new Date().toISOString()
+      autoUpdateState.retryAfterConnection = false
+      if (!result?.updateInfo || result.updateInfo.version === app.getVersion()) {
+        autoUpdateState.phase = 'idle'
+      }
+      sendAutoUpdateState()
+      return { success: true, updateInfo: result?.updateInfo ?? null, reason }
+    } catch (error) {
+      autoUpdateState.phase = 'error'
+      autoUpdateState.error = error instanceof Error ? error.message : 'Update check failed.'
+      autoUpdateState.retryAfterConnection = true
+      sendAutoUpdateState()
+      return { success: false, error: autoUpdateState.error, reason }
+    } finally {
+      autoUpdateCheckInFlight = null
+    }
+  })()
+
+  return autoUpdateCheckInFlight
+}
+
+async function retryAutoUpdateAfterConnection() {
+  if (!autoUpdateEnabled || !autoUpdateState.retryAfterConnection) return
+  await checkForAppUpdate('connection-restored')
+}
+
 function setupAutoUpdater() {
   if (isDevelopment) return
 
-  autoUpdater.autoDownload = true
-  autoUpdater.autoInstallOnAppQuit = true
+  // Discovery is automatic, but downloading is always an explicit user
+  // decision. Once downloaded, installation is also confirmed separately.
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
+  autoUpdater.autoRunAppAfterInstall = true
 
   autoUpdater.on('update-available', (info) => {
     console.log('[Updater] Update available:', info.version)
+    autoUpdateState.phase = 'available'
+    autoUpdateState.availableVersion = info.version
+    autoUpdateState.percent = 0
+    autoUpdateState.error = null
+    sendAutoUpdateState()
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('app:update-available', {
         version: info.version,
@@ -3400,34 +3551,49 @@ function setupAutoUpdater() {
     }
   })
 
+  autoUpdater.on('update-not-available', () => {
+    autoUpdateState.phase = 'idle'
+    autoUpdateState.availableVersion = null
+    autoUpdateState.percent = 0
+    autoUpdateState.error = null
+    sendAutoUpdateState()
+  })
+
+  autoUpdater.on('download-progress', (progress) => {
+    autoUpdateState.phase = 'downloading'
+    autoUpdateState.percent = Math.max(0, Math.min(100, Math.round(progress.percent ?? 0)))
+    sendAutoUpdateState()
+  })
+
   autoUpdater.on('update-downloaded', (info) => {
     console.log('[Updater] Update downloaded:', info.version)
+    autoUpdateState.phase = 'ready'
+    autoUpdateState.availableVersion = info.version
+    autoUpdateState.percent = 100
+    autoUpdateState.error = null
+    sendAutoUpdateState()
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('app:update-downloaded', {
         version: info.version,
       })
     }
-    dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      title: 'آپدیت آماده است',
-      message: `نسخه ${info.version} دانلود شد. بعد از بستن برنامه نصب می‌شود.`,
-      buttons: ['نصب و ری‌استارت', 'بعداً'],
-      defaultId: 0,
-    }).then(({ response }) => {
-      if (response === 0) autoUpdater.quitAndInstall()
-    }).catch(() => {})
   })
 
   autoUpdater.on('error', (err) => {
     console.error('[Updater] Error:', err?.message ?? err)
+    autoUpdateState.phase = 'error'
+    autoUpdateState.error = err?.message ?? String(err)
+    autoUpdateState.retryAfterConnection = true
+    sendAutoUpdateState()
   })
 
-  // Check for updates 10 seconds after launch, then every 4 hours
+  // Check quietly as soon as the window is ready. If GitHub is blocked, the
+  // failed check is retried exactly when a verified VPN connection comes up.
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch(() => {})
-  }, 10000)
+    void checkForAppUpdate('startup')
+  }, 1500)
   setInterval(() => {
-    autoUpdater.checkForUpdates().catch(() => {})
+    void checkForAppUpdate('scheduled')
   }, 4 * 60 * 60 * 1000)
 }
 

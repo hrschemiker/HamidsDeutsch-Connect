@@ -6,7 +6,7 @@
 
 ### A focused Windows client for resilient, verifiable connectivity.
 
-[![Version](https://img.shields.io/badge/version-2.13.0-087f72?style=flat-square)](../../releases/latest)
+[![Version](https://img.shields.io/badge/version-2.14.0-087f72?style=flat-square)](../../releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](https://microsoft.com/windows)
 [![sing-box](https://img.shields.io/badge/sing--box-1.13-1f2937?style=flat-square)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/license-MIT-f2c055?style=flat-square)](LICENSE)
@@ -23,9 +23,10 @@ Manfaz turns sing-box into a clean desktop workflow: add a subscription, choose 
 
 - **Verified connections** — public-IP confirmation after every connection attempt.
 - **Two paths online** — personal subscriptions and a self-refreshing free-config pool.
-- **Resilient routing** — System Proxy, TUN, fallback control, smart reconnect, and upstream proxy chaining.
+- **Resilient routing** — System Proxy, full-device TUN, DNS-aware direct routes, fallback control, smart reconnect, and upstream proxy chaining.
 - **Censorship tooling** — native TLS record/handshake fragmentation, uTLS, ECH, SNI override, and clean Cloudflare IP discovery.
-- **Safe recovery** — Windows proxy restoration, orphan-engine cleanup, and a recoverable Kill Switch.
+- **Safe recovery** — Windows proxy restoration, orphan-engine cleanup, and a verified-session Kill Switch that never arms during connection setup.
+- **Permission-first updates** — background release discovery, post-connection retry, explicit download consent, progress reporting, and one-click restart.
 - **Useful diagnostics** — live traffic, latency ranking, connection history, and structured logs.
 
 ## Quick start
@@ -57,6 +58,7 @@ Use the lightest option that works:
 
 ## Built-in tools
 
+- Real service-access checks for Gemini, Telegram, X, and Instagram
 - Cloudflare clean-IP scanner with optional background scheduling
 - Subscription format converter
 - SOCKS5 / HTTP upstream proxy
@@ -78,7 +80,7 @@ The Windows installer is written to `release/`. GitHub releases contain the tagg
 
 ## Security notes
 
-- Kill Switch uses a Windows Firewall outbound rule and releases it before a reconnect attempt so the VPN engine can recover.
+- Kill Switch arms only after a connection is verified, treats an absent firewall rule as a clean state, and releases safely before reconnecting.
 - Custom SNI values are validated and should match a certificate accepted by the destination.
 - Imported backups accept only Manfaz-owned settings files.
 - No connection is marked successful until public-IP verification passes.

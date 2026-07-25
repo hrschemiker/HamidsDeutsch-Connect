@@ -813,9 +813,18 @@ declare global {
       }
 
       updater: {
+        getSettings: () => Promise<{
+          enabled: boolean
+          currentVersion: string
+          state: AppUpdateState
+        }>
+        setEnabled: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean }>
+        checkForUpdate: () => Promise<{ success: boolean; updateInfo?: { version: string } | null; error?: string }>
+        downloadUpdate: () => Promise<{ success: boolean; error: string | null }>
+        onState: (callback: (payload: AppUpdateState) => void) => () => void
         onUpdateAvailable: (callback: (payload: { version: string; releaseNotes: string | null }) => void) => () => void
         onUpdateDownloaded: (callback: (payload: { version: string }) => void) => () => void
-        installUpdate: () => Promise<void>
+        installUpdate: () => Promise<{ success: boolean; error: string | null }>
       }
 
       startup: {
@@ -943,6 +952,15 @@ type GeoBlockTarget = {
 type GeoBlockResult = {
   results: GeoBlockTarget[]
   testedAt: string
+}
+
+type AppUpdateState = {
+  phase: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'
+  availableVersion: string | null
+  percent: number
+  error: string | null
+  retryAfterConnection: boolean
+  lastCheckedAt: string | null
 }
 
 type ConnectionHistoryEntry = {

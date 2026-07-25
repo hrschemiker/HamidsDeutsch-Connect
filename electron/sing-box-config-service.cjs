@@ -1212,7 +1212,23 @@ function buildDirectRules(directDomains) {
   ]
 }
 
-function buildProxyDnsBlock() {
+function buildDnsRules(directDomains) {
+  if (!directDomains || directDomains.length === 0) return []
+  return [
+    {
+      domain: directDomains,
+      action: 'route',
+      server: 'dns-direct',
+    },
+    {
+      domain_suffix: directDomains,
+      action: 'route',
+      server: 'dns-direct',
+    },
+  ]
+}
+
+function buildProxyDnsBlock(directDomains = []) {
   return {
     servers: [
       {
@@ -1226,6 +1242,7 @@ function buildProxyDnsBlock() {
         type: 'local',
       },
     ],
+    rules: buildDnsRules(directDomains),
     final: 'dns-proxy',
     independent_cache: true,
   }
@@ -1286,7 +1303,7 @@ function buildConfig(
   }
 
   if (proxyDoH) {
-    config.dns = buildProxyDnsBlock()
+    config.dns = buildProxyDnsBlock(directDomains)
   }
 
   config.experimental = { clash_api: { external_controller: `127.0.0.1:${clashApiPort}` } }
@@ -1322,6 +1339,13 @@ function buildTunConfig(
     : []
 
   const rules = [
+    // Capture DNS before routing domain rules. Without this, Windows resolves a
+    // bypass host outside sing-box and TUN only sees the resulting IP, so the
+    // Direct Sites domain rule can never match.
+    {
+      protocol: 'dns',
+      action: 'hijack-dns',
+    },
     {
       ip_is_private: true,
       outbound: 'direct',
@@ -1362,12 +1386,15 @@ function buildTunConfig(
     ],
 
     outbounds: [
-      proxyOutbound,
+      { ...proxyOutbound, domain_resolver: 'dns-direct' },
       {
         type: 'direct',
         tag: 'direct',
+        domain_resolver: 'dns-direct',
       },
     ],
+
+    dns: buildProxyDnsBlock(directDomains),
 
     route: {
       rules,

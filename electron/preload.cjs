@@ -289,6 +289,15 @@ contextBridge.exposeInMainWorld(
     },
 
     updater: {
+      getSettings: () => ipcRenderer.invoke('app:update-get-settings'),
+      setEnabled: (enabled) => ipcRenderer.invoke('app:update-set-enabled', enabled),
+      checkForUpdate: () => ipcRenderer.invoke('app:check-for-update'),
+      downloadUpdate: () => ipcRenderer.invoke('app:download-update'),
+      onState: (callback) => {
+        const listener = (_event, payload) => callback(payload)
+        ipcRenderer.on('app:update-state', listener)
+        return () => ipcRenderer.removeListener('app:update-state', listener)
+      },
       onUpdateAvailable: (callback) => {
         const listener = (_event, payload) => callback(payload)
         ipcRenderer.on('app:update-available', listener)

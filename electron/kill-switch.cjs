@@ -17,6 +17,7 @@ const RULE_NAME = 'ManfazVPN Kill Switch'
 const SETTINGS_FILE = 'kill-switch.json'
 
 let active = false
+let armed = false
 
 function settingsPath(userDataPath) {
   return path.join(userDataPath, 'HamidsDeutsch-Connect', SETTINGS_FILE)
@@ -52,6 +53,15 @@ function isKillSwitchActive() {
   return active
 }
 
+function setKillSwitchArmed(value) {
+  armed = value === true
+  return armed
+}
+
+function isKillSwitchArmed() {
+  return armed
+}
+
 async function refreshKillSwitchActive() {
   if (process.platform !== 'win32') {
     active = false
@@ -75,9 +85,13 @@ async function refreshKillSwitchActive() {
 /** Block all outbound traffic via a Windows Firewall rule (best-effort). */
 async function activateKillSwitch() {
   if (process.platform !== 'win32') return { success: false, error: 'unsupported platform' }
+  if (!armed) return { success: false, skipped: true, error: 'kill switch is not armed' }
   try {
-    // Remove any stale rule first, then add a fresh block-all-outbound rule.
-    await execFileAsync('netsh', ['advfirewall', 'firewall', 'delete', 'rule', `name=${RULE_NAME}`], { windowsHide: true, timeout: 8000 }).catch(() => {})
+    // `netsh delete rule` exits non-zero when the rule does not exist. Treat
+    // absence as the desired state instead of surfacing a false command error.
+    if (await refreshKillSwitchActive()) {
+      await execFileAsync('netsh', ['advfirewall', 'firewall', 'delete', 'rule', `name=${RULE_NAME}`], { windowsHide: true, timeout: 8000 })
+    }
     await execFileAsync('netsh', ['advfirewall', 'firewall', 'add', 'rule', `name=${RULE_NAME}`, 'dir=out', 'action=block', 'enable=yes', 'profile=any'], { windowsHide: true, timeout: 8000 })
     active = true
     return { success: true, error: null }
@@ -94,6 +108,10 @@ async function deactivateKillSwitch() {
     return { success: true, error: null }
   }
   try {
+    if (!(await refreshKillSwitchActive())) {
+      active = false
+      return { success: true, error: null, alreadyInactive: true }
+    }
     await execFileAsync('netsh', ['advfirewall', 'firewall', 'delete', 'rule', `name=${RULE_NAME}`], { windowsHide: true, timeout: 8000 })
     active = false
     return { success: true, error: null }
@@ -109,5 +127,7 @@ module.exports = {
   activateKillSwitch,
   deactivateKillSwitch,
   isKillSwitchActive,
+  setKillSwitchArmed,
+  isKillSwitchArmed,
   refreshKillSwitchActive,
 }

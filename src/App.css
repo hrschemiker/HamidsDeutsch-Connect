@@ -6941,6 +6941,33 @@ body {
   font-size: 15px;
 }
 
+.navigation-icon svg,
+.pb-icon svg,
+.info-btn svg {
+  display: block;
+}
+
+.pb-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.settings-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.update-state-ready,
+.update-state-available {
+  color: var(--accent-strong);
+}
+
+.update-state-error {
+  color: var(--danger);
+}
+
 button,
 [role="button"],
 input,

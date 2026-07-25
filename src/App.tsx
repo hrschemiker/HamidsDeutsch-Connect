@@ -25,6 +25,7 @@ import { useWindowsElevation } from './system/use-windows-elevation'
 import { useRescueSettings } from './rescue/use-rescue-settings'
 import { useConnectionSettings } from './settings/use-connection-settings'
 import { useConnectionDiagnostics } from './diagnostics/use-connection-diagnostics'
+import { BrandIcon, type BrandIconName } from './components/BrandIcon'
 import './App.css'
 
 // ── Free Config types ────────────────────────────────────────────────────────
@@ -131,7 +132,7 @@ function InfoButton({ fa, en }: { fa: string; en: string }) {
         onClick={() => setOpen((v) => !v)}
         title={lang === 'fa' ? 'توضیحات' : 'Info'}
       >
-        ?
+        <BrandIcon name="info" size={16} />
       </button>
       {open && (
         <span className="info-panel" role="note">
@@ -158,7 +159,7 @@ type PageId =
 type NavigationItem = {
   id: PageId
   label: string
-  icon: string
+  icon: BrandIconName
 }
 
 type PublicServer = {
@@ -207,12 +208,12 @@ function App() {
     TR[lang]?.[key] ?? fallback ?? TR['en']?.[key] ?? TR['fa'][key] ?? key
 
   const navigationItems: NavigationItem[] = [
-    { id: 'home', label: t('nav.home'), icon: '⌂' },
-    { id: 'servers', label: t('nav.servers'), icon: '◉' },
-    { id: 'direct-sites', label: t('nav.directSites'), icon: '↗' },
-    { id: 'statistics', label: t('nav.statistics'), icon: '▥' },
-    { id: 'logs', label: t('nav.logs'), icon: '≡' },
-    { id: 'settings', label: t('nav.settings'), icon: '⚙' },
+    { id: 'home', label: t('nav.home'), icon: 'home' },
+    { id: 'servers', label: t('nav.servers'), icon: 'servers' },
+    { id: 'direct-sites', label: t('nav.directSites'), icon: 'route' },
+    { id: 'statistics', label: t('nav.statistics'), icon: 'chart' },
+    { id: 'logs', label: t('nav.logs'), icon: 'logs' },
+    { id: 'settings', label: t('nav.settings'), icon: 'settings' },
   ]
 
   const pageTitles: Record<PageId, string> = {
@@ -366,17 +367,30 @@ function App() {
     window.hamidsDeutsch.servers.getHiddenNodes().then(setHiddenNodeIds).catch(() => {})
   }, [])
 
-  const [updateInfo, setUpdateInfo] = useState<{ version: string; ready: boolean } | null>(null)
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true)
+  const [updateState, setUpdateState] = useState<{
+    phase: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'
+    availableVersion: string | null
+    percent: number
+    error: string | null
+    retryAfterConnection: boolean
+    lastCheckedAt: string | null
+  }>({
+    phase: 'idle',
+    availableVersion: null,
+    percent: 0,
+    error: null,
+    retryAfterConnection: false,
+    lastCheckedAt: null,
+  })
 
   useEffect(() => {
     if (!window.hamidsDeutsch.updater) return
-    const unsubAvail = window.hamidsDeutsch.updater.onUpdateAvailable(({ version }) => {
-      setUpdateInfo({ version, ready: false })
-    })
-    const unsubDownloaded = window.hamidsDeutsch.updater.onUpdateDownloaded(({ version }) => {
-      setUpdateInfo({ version, ready: true })
-    })
-    return () => { unsubAvail(); unsubDownloaded() }
+    void window.hamidsDeutsch.updater.getSettings().then((result) => {
+      setAutoUpdateEnabled(result.enabled)
+      setUpdateState(result.state)
+    }).catch(() => {})
+    return window.hamidsDeutsch.updater.onState(setUpdateState)
   }, [])
 
   const connectionVerified =
@@ -496,8 +510,8 @@ function App() {
   }, [appHeroConnected])
 
   useEffect(() => {
-    void window.hamidsDeutsch.system.setVirtualLocationConnected(connectionVerified)
-  }, [connectionVerified])
+    void window.hamidsDeutsch.system.setVirtualLocationConnected(appHeroConnected)
+  }, [appHeroConnected])
 
   useEffect(() => {
     void window.hamidsDeutsch.system.setDirectDomains(directDomains.domains)
@@ -1631,7 +1645,7 @@ function App() {
               title={item.label}
               onClick={() => setActivePage(item.id)}
             >
-              <span className="navigation-icon">{item.icon}</span>
+              <span className="navigation-icon"><BrandIcon name={item.icon} size={19} /></span>
               <span className="navigation-label">{item.label}</span>
               {item.id === 'settings' && engineUpdateAvailable && (
                 <span className="nav-update-dot" title="به‌روزرسانی موجود است" />
@@ -2162,6 +2176,15 @@ function App() {
                   toastTimerRef.current = setTimeout(() => setToastMessage(null), 4200)
                 }
               }}
+              autoUpdateEnabled={autoUpdateEnabled}
+              updateState={updateState}
+              onAutoUpdateToggle={async (v) => {
+                const result = await window.hamidsDeutsch.updater.setEnabled(v)
+                if (result.success) setAutoUpdateEnabled(result.enabled)
+              }}
+              onCheckAppUpdate={() => window.hamidsDeutsch.updater.checkForUpdate()}
+              onDownloadAppUpdate={() => window.hamidsDeutsch.updater.downloadUpdate()}
+              onInstallAppUpdate={() => window.hamidsDeutsch.updater.installUpdate()}
               standaloneDoH={standaloneDoH}
               standaloneDoHLoading={standaloneDoHLoading}
               onStandaloneDoHChange={async (server) => {
@@ -2198,15 +2221,15 @@ function App() {
       </section>
       {toastMessage && (
         <div className="toast" role="status" aria-live="polite">
-          <span className="toast-icon">✓</span>
+          <span className="toast-icon"><BrandIcon name="check" size={18} /></span>
           <span>{toastMessage}</span>
         </div>
       )}
-      {updateInfo && (
+      {updateState.availableVersion && ['available', 'downloading', 'ready'].includes(updateState.phase) && (
         <div className="update-banner" role="status">
-          {updateInfo.ready ? (
+          {updateState.phase === 'ready' ? (
             <>
-              <span>نسخه {updateInfo.version} آماده نصب است</span>
+              <span>نسخه {updateState.availableVersion} آماده نصب است</span>
               <button
                 type="button"
                 className="update-banner-btn"
@@ -2214,12 +2237,19 @@ function App() {
               >
                 نصب و ری‌استارت
               </button>
-              <button type="button" className="update-banner-dismiss" onClick={() => setUpdateInfo(null)}>✕</button>
+              <button type="button" className="update-banner-dismiss" onClick={() => setUpdateState((s) => ({ ...s, availableVersion: null }))}>×</button>
+            </>
+          ) : updateState.phase === 'available' ? (
+            <>
+              <span>نسخه {updateState.availableVersion} منتشر شده است</span>
+              <button type="button" className="update-banner-btn" onClick={() => void window.hamidsDeutsch.updater.downloadUpdate()}>
+                دانلود با اجازه من
+              </button>
+              <button type="button" className="update-banner-dismiss" onClick={() => setUpdateState((s) => ({ ...s, availableVersion: null }))}>×</button>
             </>
           ) : (
             <>
-              <span>نسخه {updateInfo.version} در حال دانلود...</span>
-              <button type="button" className="update-banner-dismiss" onClick={() => setUpdateInfo(null)}>✕</button>
+              <span>در حال دانلود نسخه {updateState.availableVersion} · {updateState.percent}%</span>
             </>
           )}
         </div>
@@ -2237,7 +2267,7 @@ function App() {
       {testStopPrompt && (
         <div className="killswitch-overlay" role="alertdialog" aria-modal="true">
           <div className="killswitch-dialog">
-            <div className="killswitch-icon">◎</div>
+            <div className="killswitch-icon"><BrandIcon name="pulse" size={34} /></div>
             <h2>{lang === 'fa' ? 'آزمایش کانفیگ‌ها در جریان است' : 'Testing in progress'}</h2>
             <p>{lang === 'fa'
               ? 'همین حالا در حال آزمایش دانلود/آپلود کانفیگ‌های رایگان هستیم. برای برقراری اتصال باید آزمایش متوقف شود. متوقف کنیم و وصل شویم؟'
@@ -2257,7 +2287,7 @@ function App() {
       {killSwitchActive && (
         <div className="killswitch-overlay" role="alertdialog" aria-modal="true">
           <div className="killswitch-dialog">
-            <div className="killswitch-icon">🔒</div>
+            <div className="killswitch-icon"><BrandIcon name="lock" size={34} /></div>
             <h2>{lang === 'fa' ? 'اینترنت مسدود شد' : 'Internet Blocked'}</h2>
             <p>{lang === 'fa'
               ? 'اتصال VPN به‌طور ناگهانی قطع شد و Kill Switch فعال شده تا از نشت اطلاعات جلوگیری کند. برای وصل‌شدن دوباره تلاش کن یا اینترنت را بازگردان.'
@@ -2619,7 +2649,7 @@ function HomePage({
       {errorBanner && (
         <div className="error-banner" role="alert">
           <span className="error-banner-text">{friendlyError(errorBanner)}</span>
-          <button className="error-banner-close" type="button" onClick={dismissErrorBanner} aria-label="بستن">✕</button>
+          <button className="error-banner-close" type="button" onClick={dismissErrorBanner} aria-label="بستن"><BrandIcon name="close" size={16} /></button>
         </div>
       )}
       {!administratorAvailable && !processStatus.running && !adminBannerDismissed && (
@@ -2679,9 +2709,9 @@ function HomePage({
                 <span className="hero-meter-pill bw-up">↑ {formatBytes(trafficSpeed?.upSpeed ?? 0)}/s</span>
                 <span className="hero-meter-pill bw-down">↓ {formatBytes(trafficSpeed?.downSpeed ?? 0)}/s</span>
                 {speedTest?.running ? (
-                  <span className="hero-meter-pill bw-speed">⚡ …</span>
+                  <span className="hero-meter-pill bw-speed"><BrandIcon name="bolt" size={14} /> …</span>
                 ) : speedTest?.mbps != null ? (
-                  <span className="hero-meter-pill bw-speed">⚡ {speedTest.mbps} Mbps</span>
+                  <span className="hero-meter-pill bw-speed"><BrandIcon name="bolt" size={14} /> {speedTest.mbps} Mbps</span>
                 ) : null}
               </span>
             )}
@@ -2814,7 +2844,7 @@ function HomePage({
       {heroConnected && (
       <section className="quick-statistics stats-connected">
         <article className="statistic-card" style={{ animationDelay: '0ms' }}>
-          <span className="statistic-icon">◎</span>
+          <span className="statistic-icon"><BrandIcon name="pulse" size={22} /></span>
           <div>
             <span className="statistic-label">{t('stats.outputIp')}</span>
             <div className="statistic-value-row">
@@ -2832,7 +2862,7 @@ function HomePage({
           </div>
         </article>
         <article className="statistic-card" style={{ animationDelay: '80ms' }}>
-          <span className="statistic-icon">◉</span>
+          <span className="statistic-icon"><BrandIcon name="servers" size={22} /></span>
           <div>
             <span className="statistic-label">{t('stats.currentServer')}</span>
             <strong>
@@ -2845,7 +2875,7 @@ function HomePage({
           </div>
         </article>
         <article className="statistic-card" style={{ animationDelay: '160ms' }}>
-          <span className="statistic-icon">⏱</span>
+          <span className="statistic-icon"><BrandIcon name="clock" size={22} /></span>
           <div>
             <span className="statistic-label">{t('stats.latency', 'پینگ')}</span>
             <strong dir="ltr">
@@ -2862,7 +2892,7 @@ function HomePage({
 
       {!heroConnected && !fastestServer && !selectedServer && !latencyTesting && !dataLoading && (
         <div className="home-empty-state">
-          <div className="home-empty-icon">◎</div>
+          <div className="home-empty-icon"><BrandIcon name="pulse" size={30} /></div>
           <p className="home-empty-title">{t('home.empty.title')}</p>
           <ol className="home-empty-steps">
             <li>{t('home.empty.step1')}</li>
@@ -3092,7 +3122,7 @@ function ProtocolBadge({ protocol, security }: { protocol: string; security?: st
   const icon = getProtocolIcon(key, security)
   return (
     <span className="protocol-badge" style={{ '--pb-color': color } as React.CSSProperties}>
-      <span className="pb-icon" aria-hidden="true">{icon}</span>{label}
+      <span className="pb-icon" aria-hidden="true"><BrandIcon name={icon} size={13} /></span>{label}
     </span>
   )
 }
@@ -3117,26 +3147,26 @@ function getQualityLabel(ms: number | null, t: (k: string) => string): string {
 
 // ── Protocol icons ────────────────────────────────────────────────────────────
 
-const PROTOCOL_ICONS: Record<string, string> = {
-  vless: '🔒',
-  vmess: '🔒',
-  trojan: '🔒',
-  hysteria2: '⚡',
-  hy2: '⚡',
-  hysteria: '⚡',
-  tuic: '⚡',
-  wireguard: '◆',
-  anytls: '🛡',
-  ss: '●',
-  shadowsocks: '●',
+const PROTOCOL_ICONS: Record<string, BrandIconName> = {
+  vless: 'lock',
+  vmess: 'lock',
+  trojan: 'lock',
+  hysteria2: 'bolt',
+  hy2: 'bolt',
+  hysteria: 'bolt',
+  tuic: 'bolt',
+  wireguard: 'shield',
+  anytls: 'shield',
+  ss: 'pulse',
+  shadowsocks: 'pulse',
 }
 
-function getProtocolIcon(protocol: string, security?: string | null): string {
+function getProtocolIcon(protocol: string, security?: string | null): BrandIconName {
   const key = protocol.toLowerCase().replace('://', '')
   if ((key === 'vless' || key === 'vmess' || key === 'trojan') && (security ?? '').toLowerCase() === 'reality') {
-    return '🔐'
+    return 'shield'
   }
-  return PROTOCOL_ICONS[key] ?? '●'
+  return PROTOCOL_ICONS[key] ?? 'pulse'
 }
 
 // ── Error message mapper ───────────────────────────────────────────────────────
@@ -3975,7 +4005,7 @@ function ServersPage({
   if (loading) {
     return (
       <section className="empty-state">
-        <div className="empty-state-icon">◌</div>
+        <div className="empty-state-icon"><BrandIcon name="refresh" size={30} /></div>
         <h2>{t('servers.loading')}</h2>
         <p>{t('servers.loadingDesc')}</p>
       </section>
@@ -4077,7 +4107,7 @@ function ServersPage({
     <div className="page-stack">
       {nodes.length === 0 ? (
         <section className="empty-state">
-          <div className="empty-state-icon empty-state-icon-servers">◉</div>
+          <div className="empty-state-icon empty-state-icon-servers"><BrandIcon name="servers" size={30} /></div>
           <h2>{t('servers.empty.title')}</h2>
           <p>{t('servers.empty.desc')}</p>
           <ol className="empty-state-steps">
@@ -6137,6 +6167,12 @@ function SettingsPage({
   onCloseToTrayToggle,
   killSwitch,
   onKillSwitchToggle,
+  autoUpdateEnabled,
+  updateState,
+  onAutoUpdateToggle,
+  onCheckAppUpdate,
+  onDownloadAppUpdate,
+  onInstallAppUpdate,
   standaloneDoH,
   standaloneDoHLoading,
   onStandaloneDoHChange,
@@ -6208,6 +6244,19 @@ function SettingsPage({
   onCloseToTrayToggle: (v: boolean) => Promise<void>
   killSwitch: boolean
   onKillSwitchToggle: (v: boolean) => Promise<void>
+  autoUpdateEnabled: boolean
+  updateState: {
+    phase: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'
+    availableVersion: string | null
+    percent: number
+    error: string | null
+    retryAfterConnection: boolean
+    lastCheckedAt: string | null
+  }
+  onAutoUpdateToggle: (v: boolean) => Promise<void>
+  onCheckAppUpdate: () => Promise<unknown>
+  onDownloadAppUpdate: () => Promise<unknown>
+  onInstallAppUpdate: () => Promise<unknown>
   standaloneDoH: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard'
   standaloneDoHLoading: boolean
   onStandaloneDoHChange: (server: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard') => Promise<void>
@@ -6629,6 +6678,68 @@ function SettingsPage({
                 ? t('settings.mode.tunShort')
                 : t('settings.mode.proxyShort')}
           </strong>
+        </div>
+      </section>
+
+      <section className="panel-card app-update-card">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">Automatic Updates</span>
+            <h3>{lang === 'fa' ? 'آپدیت خودکار برنامه' : 'Automatic App Updates'}</h3>
+          </div>
+          <span className={`count-badge update-state-${updateState.phase}`}>
+            {updateState.phase === 'checking'
+              ? (lang === 'fa' ? 'در حال بررسی' : 'Checking')
+              : updateState.phase === 'available'
+                ? (lang === 'fa' ? 'نسخه جدید' : 'Update found')
+                : updateState.phase === 'downloading'
+                  ? `${updateState.percent}%`
+                  : updateState.phase === 'ready'
+                    ? (lang === 'fa' ? 'آماده نصب' : 'Ready')
+                    : updateState.phase === 'error'
+                      ? (lang === 'fa' ? 'نیاز به تلاش مجدد' : 'Retry pending')
+                      : (lang === 'fa' ? 'به‌روز' : 'Up to date')}
+          </span>
+        </div>
+
+        <SettingRow
+          title={lang === 'fa' ? 'بررسی خودکار نسخه جدید' : 'Check automatically'}
+          description={lang === 'fa'
+            ? 'هنگام اجرای برنامه در پس‌زمینه بررسی می‌شود؛ اگر GitHub در دسترس نباشد، پس از اتصال موفق دوباره تلاش می‌کند.'
+            : 'Checks quietly at launch and retries after a verified VPN connection if GitHub was unreachable.'}
+          checked={autoUpdateEnabled}
+          onChange={(v) => void onAutoUpdateToggle(v)}
+        />
+
+        {updateState.error && (
+          <p className="inline-notice">
+            {updateState.retryAfterConnection && lang === 'fa'
+              ? 'GitHub فعلاً در دسترس نیست؛ پس از اتصال موفق، بررسی خودکار تکرار می‌شود.'
+              : updateState.error}
+          </p>
+        )}
+
+        <div className="settings-inline-actions">
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={!autoUpdateEnabled || updateState.phase === 'checking' || updateState.phase === 'downloading'}
+            onClick={() => void onCheckAppUpdate()}
+          >
+            {lang === 'fa' ? 'بررسی همین حالا' : 'Check now'}
+          </button>
+          {updateState.phase === 'available' && (
+            <button className="primary-button" type="button" onClick={() => void onDownloadAppUpdate()}>
+              {lang === 'fa'
+                ? `دانلود نسخه ${updateState.availableVersion ?? ''}`
+                : `Download ${updateState.availableVersion ?? ''}`}
+            </button>
+          )}
+          {updateState.phase === 'ready' && (
+            <button className="primary-button" type="button" onClick={() => void onInstallAppUpdate()}>
+              {lang === 'fa' ? 'نصب و راه‌اندازی دوباره' : 'Install and restart'}
+            </button>
+          )}
         </div>
       </section>
 
