@@ -3,11 +3,20 @@
 const path = require('node:path')
 const fs = require('node:fs/promises')
 
-const BACKUP_FILES = [
+const BACKUP_FILES = Object.freeze([
+  'app-settings.json',
   'utls-settings.json',
   'cf-scan-settings.json',
   'upstream-proxy.json',
-]
+  'subscriptions.json',
+  'manual-nodes.json',
+  'hidden-nodes.json',
+  'split-tunnel-apps.json',
+  'kill-switch.json',
+  'free-config-pool.json',
+])
+
+const ALLOWED_BACKUP_FILES = new Set(BACKUP_FILES)
 
 function getDir(userDataPath) {
   return path.join(userDataPath, 'HamidsDeutsch-Connect')
@@ -15,7 +24,7 @@ function getDir(userDataPath) {
 
 async function exportSettings(userDataPath) {
   const dir = getDir(userDataPath)
-  const result = { version: 1, files: {}, exportedAt: new Date().toISOString() }
+  const result = { version: 2, files: {}, exportedAt: new Date().toISOString() }
 
   for (const file of BACKUP_FILES) {
     try {
@@ -26,29 +35,17 @@ async function exportSettings(userDataPath) {
     }
   }
 
-  // Include subscriptions list
-  try {
-    const raw = await fs.readFile(path.join(dir, 'subscriptions.json'), 'utf8')
-    result.files['subscriptions.json'] = JSON.parse(raw)
-  } catch {}
-
-  // Include manual nodes
-  try {
-    const raw = await fs.readFile(path.join(dir, 'manual-nodes.json'), 'utf8')
-    result.files['manual-nodes.json'] = JSON.parse(raw)
-  } catch {}
-
-  // Include direct domains
-  try {
-    const raw = await fs.readFile(path.join(dir, 'direct-domains.json'), 'utf8')
-    result.files['direct-domains.json'] = JSON.parse(raw)
-  } catch {}
-
   return result
 }
 
 async function importSettings(userDataPath, backup) {
-  if (!backup || backup.version !== 1 || !backup.files) {
+  if (
+    !backup ||
+    ![1, 2].includes(backup.version) ||
+    !backup.files ||
+    typeof backup.files !== 'object' ||
+    Array.isArray(backup.files)
+  ) {
     throw new Error('فایل پشتیبان معتبر نیست.')
   }
 
@@ -56,10 +53,10 @@ async function importSettings(userDataPath, backup) {
   await fs.mkdir(dir, { recursive: true })
 
   for (const [file, data] of Object.entries(backup.files)) {
-    // Only allow known safe file names (no path traversal)
-    const baseName = path.basename(file)
-    if (baseName !== file || !baseName.endsWith('.json')) continue
-    await fs.writeFile(path.join(dir, baseName), JSON.stringify(data, null, 2), 'utf8')
+    // Reject unknown JSON files as well as path traversal. Importing arbitrary
+    // runtime files can corrupt the engine or overwrite recovery state.
+    if (!ALLOWED_BACKUP_FILES.has(file) || path.basename(file) !== file) continue
+    await fs.writeFile(path.join(dir, file), JSON.stringify(data, null, 2), 'utf8')
   }
 
   return { success: true }

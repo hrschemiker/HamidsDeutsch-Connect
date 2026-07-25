@@ -1,136 +1,94 @@
 <div align="center">
 
-<img src="public/logo.png" alt="Manfaz VPN" width="110" height="110">
+<img src="public/logo.png" alt="Manfaz VPN" width="112" height="112">
 
 # Manfaz VPN
 
-**Free Internet Access for Windows — One Click, Zero Configuration**
+### A focused Windows client for resilient, verifiable connectivity.
 
-[![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D4?logo=windows&logoColor=white)](https://microsoft.com/windows)
-[![Electron](https://img.shields.io/badge/Electron-v42-47848F?logo=electron&logoColor=white)](https://electronjs.org)
-[![sing‑box](https://img.shields.io/badge/sing--box-v1.13-FF6B35)](https://github.com/SagerNet/sing-box)
-[![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.10.0-f2c055)](../../releases/latest)
+[![Version](https://img.shields.io/badge/version-2.13.0-087f72?style=flat-square)](../../releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](https://microsoft.com/windows)
+[![sing-box](https://img.shields.io/badge/sing--box-1.13-1f2937?style=flat-square)](https://github.com/SagerNet/sing-box)
+[![License](https://img.shields.io/badge/license-MIT-f2c055?style=flat-square)](LICENSE)
 
-[**⬇ Download Latest Release**](../../releases/latest)
+[Explore releases](../../releases) · [Read the guide](#quick-start) · [Report an issue](../../issues)
 
 </div>
 
 ---
 
-## What is it?
+Manfaz turns sing-box into a clean desktop workflow: add a subscription, choose a verified server, or connect through a continuously refreshed pool of free configurations. Every successful connection is checked against the real public IP before the app calls it online.
 
-Manfaz VPN is a Windows desktop application that gets you past internet censorship. It wraps [sing-box](https://github.com/SagerNet/sing-box) in a clean UI with two connection methods — your own V2Ray subscription, and a self-updating pool of free configs curated from Telegram — all in a single window.
+## Why Manfaz
 
----
+- **Verified connections** — public-IP confirmation after every connection attempt.
+- **Two paths online** — personal subscriptions and a self-refreshing free-config pool.
+- **Resilient routing** — System Proxy, TUN, fallback control, smart reconnect, and upstream proxy chaining.
+- **Censorship tooling** — native TLS record/handshake fragmentation, uTLS, ECH, SNI override, and clean Cloudflare IP discovery.
+- **Safe recovery** — Windows proxy restoration, orphan-engine cleanup, and a recoverable Kill Switch.
+- **Useful diagnostics** — live traffic, latency ranking, connection history, and structured logs.
 
-## Connection Methods
+## Quick start
 
-| | Method | Cost | Setup |
-|---|---|---|---|
-| 📋 | **V2Ray Subscription** | Free / Paid | Paste a subscription URL |
-| 🆓 | **Free Configs** | Free | Zero — just click |
+1. Install Manfaz VPN on Windows 10 or 11 x64.
+2. Add a V2Ray-compatible subscription, or open **Servers** and use the free pool.
+3. Pick a server or let Manfaz race the best candidates.
+4. Wait for IP verification; the status changes only after traffic is proven.
 
----
+> Administrator access is required for TUN mode and the firewall-backed Kill Switch. System Proxy mode works without elevation.
 
-## Features
+## Connection modes
 
-- **Auto Cloudflare IP Scan** — runs in the background at startup, silently replaces server IPs with the fastest clean Cloudflare IP for your ISP
-- **Race-dial** — tests top 3 servers in parallel, connects to whichever responds first
-- **uTLS + ECH + Fragment** — TLS fingerprint spoofing, encrypted SNI, and packet fragmentation to defeat deep packet inspection
-- **TUN Mode** — system-level network routing; captures all traffic, not just browser traffic (requires Administrator)
-- **Bandwidth Monitor** — live upload/download speed bar while connected
-- **IP Verification** — confirms your IP actually changed after every connection
-- **Smart Reconnect** — detects drops and automatically tries a replacement server
-- **QR Code sharing** — tap any server to show its QR code
-- **Settings Backup** — export and restore all settings as a single JSON file
-- **Upstream Proxy** — chain through an existing SOCKS5 or HTTP proxy
+| Mode | Best for | Administrator |
+|---|---|---:|
+| **Auto** | Sensible fallback between available modes | Optional |
+| **TUN** | Full-device routing | Required |
+| **System Proxy** | Browsers and proxy-aware apps | No |
 
----
+## Rescue profile
 
-## Installation
+The rescue profile is deliberately opt-in. It can apply native sing-box TLS record fragmentation, full handshake fragmentation with a controlled fallback delay, and a provider-supplied SNI override. Auto DPI Bypass retries a failed, verified connection once with the stronger rescue profile.
 
-1. Go to [**Releases**](../../releases/latest) and download `Manfaz-VPN-Setup-2.12.0-x64.exe`
-2. Run the installer — no extra dependencies required
-3. The app launches automatically after installation
+Use the lightest option that works:
 
-> For TUN Mode and complete firewall control, right-click the app and choose **Run as Administrator**.
+1. TLS Record Fragment
+2. TLS Handshake Fragment
+3. Custom SNI only when your provider supplies one
 
----
+## Built-in tools
 
-## Connection Guide
+- Cloudflare clean-IP scanner with optional background scheduling
+- Subscription format converter
+- SOCKS5 / HTTP upstream proxy
+- Global uTLS and ECH controls
+- Settings, subscriptions, manual nodes, free-pool and safety backup
+- One-click network repair
+- Browser virtual-location companion extension
 
-<details>
-<summary><b>📋 V2Ray Subscription</b></summary>
+## Building from source
 
-1. Open the **Subscriptions** tab and paste your subscription URL
-2. Servers load automatically — click ▶ next to any server to connect
-3. Or press **Connect to Best Server** on the home screen for auto race-dial
+```powershell
+npm ci
+npm run lint
+npm run build
+npm run dist:win
+```
 
-The app automatically swaps `workers.dev` server IPs with the fastest clean Cloudflare IP found during the background scan.
+The Windows installer is written to `release/`. GitHub releases contain the tagged source and release notes; installer distribution is handled separately by the maintainer.
 
-</details>
+## Security notes
 
-<details>
-<summary><b>🆓 Free Configs (Telegram-powered)</b></summary>
-
-Free configs are curated from two Telegram channels and kept fresh automatically:
-
-1. **First run:** connect once through your own **subscription**. As soon as you're online, the app reads the latest ~200 posts of each channel *through your tunnel* (Telegram is blocked in Iran, so this only works once you're connected) and stores every config it finds.
-2. **Testing:** press **Test** — the app warns you it will disconnect, then connects to each config one-by-one, keeps the ones that actually pass traffic, and deletes the rest.
-3. **From then on:** every time you connect (subscription *or* free), it looks for new posts and saves them; every time you disconnect or reopen the app, it re-tests.
-
-Configs are shown as a random 6-digit id plus the **country flag** of the server IP — never a name. Connecting to a free config is identical to connecting to a subscription config.
-
-</details>
-
----
-
-## Advanced Tools
-
-<details>
-<summary><b>uTLS, ECH and Fragment</b></summary>
-
-Available in the **Tools** tab:
-
-- **uTLS Fingerprint** — make your TLS handshake look like Chrome, Firefox, or Safari
-- **ECH** — encrypt the server name inside the TLS handshake
-- **Fragment** — split TLS ClientHello packets into fragments to defeat stateful DPI
-
-</details>
-
-<details>
-<summary><b>Cloudflare IP Scanner</b></summary>
-
-Runs automatically at startup. Scans Cloudflare IP ranges and caches the lowest-latency clean IP for your network. All connections to `workers.dev` and `pages.dev` nodes use this IP automatically.
-
-You can trigger a manual scan or configure a recurring schedule from the **Tools** tab.
-
-</details>
-
-<details>
-<summary><b>Settings Backup & Restore</b></summary>
-
-**Tools** → **Backup** — export all settings (subscriptions, TLS config, proxy settings, WARP account) to a JSON file. Import it on any other machine to restore everything instantly.
-
-</details>
-
-<details>
-<summary><b>Upstream Proxy</b></summary>
-
-**Tools** → **Upstream Proxy** — route all app traffic through an existing SOCKS5 or HTTP proxy before it reaches the remote server.
-
-</details>
-
----
+- Kill Switch uses a Windows Firewall outbound rule and releases it before a reconnect attempt so the VPN engine can recover.
+- Custom SNI values are validated and should match a certificate accepted by the destination.
+- Imported backups accept only Manfaz-owned settings files.
+- No connection is marked successful until public-IP verification passes.
 
 ## Requirements
 
-- Windows 10 or 11 (64-bit)
-- Administrator rights for TUN Mode only
-
----
+- Windows 10 or Windows 11, x64
+- Administrator access for TUN and Kill Switch
+- A V2Ray-compatible subscription, or access to the built-in free-config pool
 
 ## License
 
-[MIT](LICENSE)
+Released under the [MIT License](LICENSE).

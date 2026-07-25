@@ -401,6 +401,27 @@ async function resolveCfCleanIp(userDataPath) {
   }
 }
 
+// A system-wide outbound firewall rule also blocks sing-box. Release it before
+// every connection attempt so the user can recover from a dropped tunnel.
+async function prepareKillSwitchReconnect() {
+  try {
+    const ks = require('./kill-switch.cjs')
+    const wasActive = await ks.refreshKillSwitchActive()
+    if (!wasActive) return { success: true, wasActive: false }
+    const result = await ks.deactivateKillSwitch()
+    if (result.success && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('killswitch:deactivated', {})
+    }
+    return { ...result, wasActive }
+  } catch (error) {
+    return {
+      success: false,
+      wasActive: true,
+      error: error instanceof Error ? error.message : 'Kill Switch could not be released.',
+    }
+  }
+}
+
 /**
  * Crawl both Telegram channels for NEW configs (since the stored post-id cursor),
  * resolve each server's country flag offline, and add them to the pool.
@@ -674,6 +695,13 @@ async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOp
   freeConfigState.userDisconnected = false
   const enginePath = getEnginePath()
   const userDataPath = app.getPath('userData')
+  const killSwitchRelease = await prepareKillSwitchReconnect()
+  if (!killSwitchRelease.success) {
+    return {
+      success: false,
+      error: `Kill Switch مانع اتصال مجدد شد: ${killSwitchRelease.error ?? 'برنامه را با دسترسی Administrator اجرا کنید.'}`,
+    }
+  }
 
   // Resolve the uri from the pool if only an id was given.
   let uri = nodeUri
@@ -764,8 +792,10 @@ setProcessExitCallback(({ code } = {}) => {
     getKillSwitchEnabled(app.getPath('userData')).then(async (enabled) => {
       if (!enabled) return
       const res = await activateKillSwitch()
-      if (mainWindow && !mainWindow.isDestroyed()) {
+      if (res.success && mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('killswitch:activated', { firewall: res.success })
+      } else if (!res.success) {
+        console.error('[KillSwitch] Activation failed:', res.error)
       }
     }).catch(() => {})
   }
@@ -1403,6 +1433,14 @@ function registerIpcHandlers() {
     async () => {
       try {
         await stopFreeTesting()
+        const killSwitchRelease = await prepareKillSwitchReconnect()
+        if (!killSwitchRelease.success) {
+          return {
+            success: false,
+            ...getProcessStatus(),
+            error: killSwitchRelease.error ?? 'برداشتن محدودیت Kill Switch ناموفق بود.',
+          }
+        }
         const result =
           await startLocalProxy({
             enginePath:
@@ -1459,6 +1497,15 @@ function registerIpcHandlers() {
           }
         }
 
+        const killSwitchRelease = await prepareKillSwitchReconnect()
+        if (!killSwitchRelease.success) {
+          return {
+            success: false,
+            ...getProcessStatus(),
+            error: killSwitchRelease.error ?? 'برداشتن محدودیت Kill Switch ناموفق بود.',
+          }
+        }
+
         const result =
           await startTunMode({
             enginePath:
@@ -1468,6 +1515,11 @@ function registerIpcHandlers() {
                 'userData',
               ),
           })
+
+        if (result.success) {
+          expectedEngineStop = false
+          await liftKillSwitchOnConnect()
+        }
 
         console.log(
           '[Engine] TUN start:',
@@ -2750,7 +2802,7 @@ function registerIpcHandlers() {
     const ks = require('./kill-switch.cjs')
     return {
       enabled: await ks.getKillSwitchEnabled(app.getPath('userData')).catch(() => false),
-      active: ks.isKillSwitchActive(),
+      active: await ks.refreshKillSwitchActive().catch(() => ks.isKillSwitchActive()),
     }
   })
 
@@ -2788,11 +2840,14 @@ function registerIpcHandlers() {
       steps.engines = true
     } catch {}
     try {
-      await require('./kill-switch.cjs').deactivateKillSwitch()
-      steps.killswitch = true
+      const result = await require('./kill-switch.cjs').deactivateKillSwitch()
+      steps.killswitch = result.success
     } catch {}
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('killswitch:deactivated', {})
-    return { success: true, steps }
+    return {
+      success: Object.values(steps).every(Boolean),
+      steps,
+    }
   })
 
   // ── CF IP Scanner ──────────────────────────────────────────────────────────

@@ -7229,6 +7229,63 @@ textarea:hover {
   font-weight: 700;
 }
 
+/* ==========================================================================
+   Light-theme contrast and spacing polish — v2.13
+   ========================================================================== */
+
+.page-stack {
+  gap: 24px;
+}
+
+.content > .page-stack + .page-stack {
+  margin-top: 24px;
+}
+
+.bulk-domain-textarea,
+.engine-version-grid > div,
+.virtual-location-steps span,
+.rescue-field input,
+.rescue-field select {
+  border-radius: 12px;
+}
+
+[data-theme="light"] .bulk-domain-textarea,
+[data-theme="light"] .engine-version-grid > div,
+[data-theme="light"] .virtual-location-steps span,
+[data-theme="light"] .rescue-field input,
+[data-theme="light"] .rescue-field select {
+  border-color: var(--border-strong);
+  background: #f1f2f3;
+  color: var(--text);
+}
+
+[data-theme="light"] .bulk-domain-textarea::placeholder,
+[data-theme="light"] .rescue-field input::placeholder {
+  color: #85858c;
+}
+
+/* Filled brand actions must stay legible on the light palette. */
+[data-theme="light"] .primary-button,
+[data-theme="light"] .confirm-ok-btn,
+[data-theme="light"] .fatal-error button,
+[data-theme="light"] .free-pool-connect-btn {
+  color: #f5fffd;
+  text-shadow: 0 1px 1px rgba(0, 40, 35, 0.2);
+}
+
+[data-theme="light"] .action-btn,
+[data-theme="light"] .update-banner-btn {
+  color: #fffaf0;
+  text-shadow: 0 1px 1px rgba(64, 38, 0, 0.24);
+}
+
+.setting-row-error {
+  flex-basis: 100%;
+  color: var(--red);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 @media (max-width: 1100px) {
   .navigation-top .navigation-item {
     padding-inline: 10px;

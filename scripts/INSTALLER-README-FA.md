@@ -45,7 +45,7 @@ C:\HamidsDeutsch-Connect\release
 نام فایل:
 
 ```text
-Manfaz-VPN-Setup-2.12.0-x64.exe
+Manfaz-VPN-Setup-2.13.0-x64.exe
 ```
 
 کنار فایل Setup، فایل SHA-256 نیز ساخته می‌شود.
@@ -55,5 +55,5 @@ Manfaz-VPN-Setup-2.12.0-x64.exe
 ```powershell
 powershell -ExecutionPolicy Bypass `
   -File .\scripts\verify-installer.ps1 `
-  -InstallerPath .\release\Manfaz-VPN-Setup-2.12.0-x64.exe
+  -InstallerPath .\release\Manfaz-VPN-Setup-2.13.0-x64.exe
 ```

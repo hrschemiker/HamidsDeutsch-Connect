@@ -1495,9 +1495,23 @@ function applyRescueOptions(
       options.customSni
   }
 
-  // Enable uTLS fingerprinting — makes sing-box's TLS handshake look like a real
-  // browser, which defeats DPI-based protocol fingerprinting (most effective in Iran).
-  // Only set if not already present (the URI's fp= param may have set it already).
+  // sing-box 1.12+ supports both lightweight TLS-record fragmentation and
+  // full handshake fragmentation directly on outbound TLS. Keep the lighter
+  // option independent so users do not pay the performance cost of full
+  // fragmentation unless they explicitly enabled it.
+  tls.record_fragment =
+    options.recordFragment
+
+  tls.fragment =
+    options.handshakeFragment
+
+  if (options.handshakeFragment) {
+    tls.fragment_fallback_delay =
+      options.fragmentFallbackDelay
+  }
+
+  // Preserve an explicitly configured fingerprint. DPI retry uses Chrome;
+  // normal rescue mode uses a randomized fingerprint as a secondary measure.
   if (!tls.utls) {
     if (options.dpiBypass) {
       // Chrome fingerprint is the most widely accepted and hardest to block
@@ -1539,8 +1553,6 @@ function normalizeRescueOptions(
 
   return {
     enabled,
-    // recordFragment and handshakeFragment kept for UI compatibility but now
-    // they trigger uTLS 'randomized' instead of the old (Xray-only) fields
     recordFragment:
       enabled &&
       value?.recordFragment !==

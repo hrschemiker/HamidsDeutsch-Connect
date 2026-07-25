@@ -2147,8 +2147,20 @@ function App() {
               }}
               killSwitch={killSwitch}
               onKillSwitchToggle={async (v) => {
+                const previous = killSwitch
                 setKillSwitch(v)
-                await window.hamidsDeutsch.killswitch.set(v)
+                const result = await window.hamidsDeutsch.killswitch.set(v)
+                if (result.error || result.enabled !== v) {
+                  setKillSwitch(previous)
+                  setToastMessage(
+                    result.error ??
+                    (lang === 'fa'
+                      ? 'ذخیره تنظیم Kill Switch ناموفق بود.'
+                      : 'Could not save the Kill Switch setting.'),
+                  )
+                  if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+                  toastTimerRef.current = setTimeout(() => setToastMessage(null), 4200)
+                }
               }}
               standaloneDoH={standaloneDoH}
               standaloneDoHLoading={standaloneDoHLoading}
@@ -4892,15 +4904,37 @@ function formatInspectionDate(
 function NetworkRepairRow({ lang }: { lang: 'fa' | 'en' }) {
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function repair() {
     if (busy) return
     setBusy(true)
     setDone(false)
+    setError(null)
     try {
-      await window.hamidsDeutsch.network.repair()
-      setDone(true)
-      setTimeout(() => setDone(false), 4000)
+      const result = await window.hamidsDeutsch.network.repair()
+      if (result.success) {
+        setDone(true)
+        setTimeout(() => setDone(false), 4000)
+      } else {
+        const failed = Object.entries(result.steps)
+          .filter(([, succeeded]) => !succeeded)
+          .map(([step]) => step)
+          .join(', ')
+        setError(
+          lang === 'fa'
+            ? `تعمیر کامل نشد: ${failed || 'خطای نامشخص'}`
+            : `Repair was incomplete: ${failed || 'unknown error'}`,
+        )
+      }
+    } catch (repairError) {
+      setError(
+        repairError instanceof Error
+          ? repairError.message
+          : lang === 'fa'
+            ? 'تعمیر شبکه ناموفق بود.'
+            : 'Network repair failed.',
+      )
     } finally {
       setBusy(false)
     }
@@ -4917,6 +4951,7 @@ function NetworkRepairRow({ lang }: { lang: 'fa' | 'en' }) {
       <button className="secondary-button" type="button" onClick={() => void repair()} disabled={busy}>
         {busy ? (lang === 'fa' ? 'در حال تعمیر…' : 'Repairing…') : done ? (lang === 'fa' ? '✓ انجام شد' : '✓ Done') : (lang === 'fa' ? 'اجرا' : 'Run')}
       </button>
+      {error && <span className="setting-row-error" role="alert">{error}</span>}
     </div>
   )
 }
@@ -6864,7 +6899,7 @@ function ExportImportSection() {
   function exportSettings() {
     try {
       const data = {
-        version: 1,
+        version: 2,
         exportedAt: new Date().toISOString(),
         settings: collectSettings(),
       }
@@ -7673,11 +7708,29 @@ function QrModal({ uri, onClose }: { uri: string; onClose: () => void }) {
 function BackupRestoreSection() {
   const { lang } = useContext(LangCtx)
   const [status, setStatus] = useState<string | null>(null)
+  const rendererKeys = [
+    'hd-theme',
+    'hd-lang',
+    'hamidsdeutsch:connection-settings:v1',
+    'hamidsdeutsch:rescue-settings:v1',
+    'hamidsdeutsch:direct-domains:v2',
+    'hamidsdeutsch:selected-server:v2',
+    'hamidsdeutsch:ctrl-enter',
+    'hamidsdeutsch:server-sort',
+  ] as const
 
   async function handleExport() {
     const r = await window.hamidsDeutsch.settings.export()
     if (!r.success || !r.data) { setStatus(lang === 'fa' ? 'خطا در صدور' : 'Export failed'); return }
-    const json = JSON.stringify(r.data, null, 2)
+    const rendererSettings: Record<string, string> = {}
+    for (const key of rendererKeys) {
+      const value = localStorage.getItem(key)
+      if (value !== null) rendererSettings[key] = value
+    }
+    const json = JSON.stringify({
+      ...r.data,
+      rendererSettings,
+    }, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -7700,6 +7753,12 @@ function BackupRestoreSection() {
         const text = await file.text()
         const backup = JSON.parse(text)
         const r = await window.hamidsDeutsch.settings.import(backup)
+        if (r.success && backup.rendererSettings && typeof backup.rendererSettings === 'object') {
+          for (const key of rendererKeys) {
+            const value = backup.rendererSettings[key]
+            if (typeof value === 'string') localStorage.setItem(key, value)
+          }
+        }
         setStatus(r.success ? (lang === 'fa' ? 'بازیابی انجام شد — برنامه را ری‌استارت کنید' : 'Restored — restart the app') : (r.error ?? 'Import failed'))
       } catch {
         setStatus(lang === 'fa' ? 'فایل نامعتبر' : 'Invalid file')

@@ -3,7 +3,9 @@
 // Kill switch: when the tunnel drops unexpectedly (not via the Disconnect
 // button), block ALL device internet until the user reconnects or turns it off —
 // like ExpressVPN's Network Lock. Implemented with a Windows Firewall
-// block-all-outbound rule (needs admin); falls back to a dead system proxy.
+// block-all-outbound rule (needs admin). A reconnect attempt must explicitly
+// release the rule before starting sing-box, otherwise the firewall blocks the
+// VPN engine itself and makes recovery impossible.
 
 const path = require('node:path')
 const fs = require('node:fs/promises')
@@ -30,15 +32,43 @@ async function getKillSwitchEnabled(userDataPath) {
 }
 
 async function setKillSwitchEnabled(userDataPath, enabled) {
+  // Do not persist "disabled" while an outbound block is still present.
+  // Keeping the setting enabled makes the unresolved state visible and lets
+  // the UI ask for elevation instead of silently leaving Windows offline.
+  if (!enabled) {
+    const release = await deactivateKillSwitch()
+    if (!release.success) {
+      throw new Error(release.error ?? 'Kill Switch firewall rule could not be removed.')
+    }
+  }
+
   const target = settingsPath(userDataPath)
   await fs.mkdir(path.dirname(target), { recursive: true })
   await fs.writeFile(target, JSON.stringify({ enabled: Boolean(enabled) }, null, 2), 'utf8')
-  // Turning the feature off should also lift any active block.
-  if (!enabled) await deactivateKillSwitch()
   return { enabled: Boolean(enabled) }
 }
 
 function isKillSwitchActive() {
+  return active
+}
+
+async function refreshKillSwitchActive() {
+  if (process.platform !== 'win32') {
+    active = false
+    return active
+  }
+
+  try {
+    const { stdout = '' } = await execFileAsync(
+      'netsh',
+      ['advfirewall', 'firewall', 'show', 'rule', `name=${RULE_NAME}`],
+      { windowsHide: true, timeout: 8000 },
+    )
+    active = String(stdout).includes(RULE_NAME)
+  } catch {
+    active = false
+  }
+
   return active
 }
 
@@ -52,19 +82,23 @@ async function activateKillSwitch() {
     active = true
     return { success: true, error: null }
   } catch (err) {
-    active = true // keep the "armed" state; the caller also enforces a dead proxy
+    active = false
     return { success: false, error: err?.message ?? 'kill switch activation failed (admin required)' }
   }
 }
 
 /** Remove the block rule and restore normal internet. */
 async function deactivateKillSwitch() {
-  active = false
-  if (process.platform !== 'win32') return { success: true, error: null }
+  if (process.platform !== 'win32') {
+    active = false
+    return { success: true, error: null }
+  }
   try {
     await execFileAsync('netsh', ['advfirewall', 'firewall', 'delete', 'rule', `name=${RULE_NAME}`], { windowsHide: true, timeout: 8000 })
+    active = false
     return { success: true, error: null }
   } catch (err) {
+    await refreshKillSwitchActive().catch(() => {})
     return { success: false, error: err?.message ?? null }
   }
 }
@@ -75,4 +109,5 @@ module.exports = {
   activateKillSwitch,
   deactivateKillSwitch,
   isKillSwitchActive,
+  refreshKillSwitchActive,
 }
