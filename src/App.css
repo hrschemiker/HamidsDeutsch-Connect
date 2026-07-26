@@ -7460,6 +7460,349 @@ textarea:hover {
   }
 }
 
+/* ==========================================================================
+   Unified interaction and settings system — v2.16
+   This final layer intentionally owns the hero and settings presentation.
+   ========================================================================== */
+
+.hero-card {
+  min-height: 300px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.55fr);
+  overflow: visible;
+  border-radius: 24px;
+}
+
+.hero-content {
+  gap: 20px;
+}
+
+.hero-status-block {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hero-status-block .status-label {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.hero-live-stats {
+  display: flex;
+  min-height: 34px;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-meter-pill {
+  display: inline-flex;
+  min-width: 112px;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.connect-method-buttons {
+  width: 100%;
+  max-width: 620px;
+}
+
+.method-btn {
+  min-height: 78px;
+}
+
+.method-btn-icon {
+  color: currentColor;
+}
+
+.connection-stage-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  animation: brandSpin 700ms linear infinite;
+}
+
+@keyframes brandSpin {
+  to { transform: rotate(360deg); }
+}
+
+.hero-visual {
+  width: 100%;
+  padding: 20px;
+  border: 0;
+  border-inline-start: 1px solid var(--border);
+  border-radius: 0 24px 24px 0;
+  color: inherit;
+  cursor: default;
+  font: inherit;
+}
+
+[dir="rtl"] .hero-visual {
+  border-radius: 24px 0 0 24px;
+}
+
+.hero-visual:disabled {
+  opacity: 1;
+  filter: none;
+}
+
+.hero-visual-clickable {
+  cursor: pointer;
+}
+
+.hero-visual-clickable:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--teal) 65%, transparent);
+  outline-offset: -5px;
+}
+
+.connection-orbit {
+  width: 196px;
+  height: 196px;
+}
+
+.connection-orbit-middle {
+  width: 144px;
+  height: 144px;
+}
+
+.connection-orbit-core {
+  width: 96px;
+  height: 96px;
+}
+
+.orbit-disconnect-hint {
+  display: flex;
+  inset: auto 50% 10px auto;
+  min-width: max-content;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background) 86%, transparent);
+  color: var(--text);
+  font-size: 10px;
+  opacity: .86;
+  transform: translateX(50%);
+}
+
+.hero-visual-clickable:hover .orbit-disconnect-hint,
+.hero-visual-clickable:focus-visible .orbit-disconnect-hint {
+  opacity: 1;
+}
+
+.settings-page {
+  gap: 22px;
+}
+
+.settings-section-nav {
+  position: sticky;
+  z-index: 8;
+  top: 8px;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--background) 90%, transparent);
+  box-shadow: 0 12px 30px rgba(0,0,0,.12);
+  backdrop-filter: blur(16px);
+  scrollbar-width: thin;
+}
+
+.settings-section-nav a {
+  display: inline-flex;
+  min-height: 40px;
+  flex: 1 0 max-content;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 13px;
+  border-radius: 9px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.settings-section-nav a:hover,
+.settings-section-nav a:focus-visible {
+  background: var(--surface-soft);
+  color: var(--teal);
+  outline: none;
+}
+
+.settings-card {
+  scroll-margin-top: 78px;
+  border-radius: 18px;
+}
+
+.appearance-language-options {
+  margin-top: 16px;
+}
+
+.appearance-note {
+  margin-top: 12px;
+}
+
+.appearance-option-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.setting-row {
+  min-height: 74px;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+}
+
+.setting-row > div {
+  min-width: 0;
+  flex: 1 1 360px;
+}
+
+.setting-row strong {
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.setting-row span {
+  max-width: 76ch;
+  font-size: 10.5px;
+  line-height: 1.75;
+}
+
+.setting-row-disabled {
+  opacity: .72;
+}
+
+.switch {
+  align-items: center;
+  gap: 8px;
+}
+
+.switch-state {
+  min-width: 26px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.switch input:checked ~ .switch-state {
+  color: var(--teal);
+}
+
+.settings-select-field select,
+.doh-server-select {
+  min-height: 42px;
+  border-radius: 10px;
+}
+
+.settings-section-divider {
+  margin-top: 18px;
+}
+
+.connection-mode-summary {
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.settings-inline-actions,
+.engine-update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.secondary-button,
+.primary-button {
+  gap: 7px;
+}
+
+[data-theme="light"] .hero-card,
+[data-theme="light"] .settings-card {
+  box-shadow: 0 14px 36px rgba(33, 39, 48, .08);
+}
+
+[data-theme="light"] .hero-meter-pill,
+[data-theme="light"] .connection-mode-summary,
+[data-theme="light"] .settings-section-nav {
+  background: #f5f7f8;
+}
+
+@media (max-width: 1100px) {
+  .hero-card {
+    grid-template-columns: minmax(0, 1fr) 210px;
+  }
+
+  .hero-visual {
+    display: grid;
+  }
+
+  .connection-orbit {
+    transform: scale(.78);
+  }
+}
+
+@media (max-width: 760px) {
+  .hero-card {
+    grid-template-columns: 1fr;
+    overflow: hidden;
+  }
+
+  .hero-visual {
+    min-height: 150px;
+    border-top: 1px solid var(--border);
+    border-inline-start: 0;
+    border-radius: 0;
+  }
+
+  .connection-orbit {
+    height: 150px;
+    transform: scale(.68);
+  }
+
+  .connect-method-buttons {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-meter-pill {
+    flex: 1 1 120px;
+  }
+
+  .settings-section-nav {
+    top: 4px;
+  }
+
+  .setting-row {
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connection-orbit,
+  .connection-stage-spinner {
+    animation: none !important;
+  }
+}
+
 @media (max-width: 480px) {
   .admin-banner {
     position: relative;

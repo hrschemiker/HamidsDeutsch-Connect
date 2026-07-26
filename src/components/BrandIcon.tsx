@@ -5,6 +5,7 @@ export type BrandIconName =
   | 'info' | 'check' | 'close' | 'lock' | 'shield' | 'bolt'
   | 'play' | 'stop' | 'refresh' | 'clock' | 'copy' | 'star'
   | 'download' | 'update' | 'globe' | 'pulse' | 'app'
+  | 'upload' | 'sun' | 'moon' | 'language' | 'repair' | 'power'
 
 type Props = Omit<SVGProps<SVGSVGElement>, 'name'> & {
   name: BrandIconName
@@ -44,6 +45,12 @@ export function BrandIcon({ name, size = 20, ...props }: Props) {
     globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c3 3.3 3 14.7 0 18M12 3c-3 3.3-3 14.7 0 18" /></>,
     pulse: <><circle cx="12" cy="12" r="9" /><path d="M3 12h5l2-4 3 8 2-4h6" /></>,
     app: <><rect x="4" y="4" width="6" height="6" rx="1.5" /><rect x="14" y="4" width="6" height="6" rx="1.5" /><rect x="4" y="14" width="6" height="6" rx="1.5" /><rect x="14" y="14" width="6" height="6" rx="1.5" /></>,
+    upload: <><path d="M12 21V9M7 14l5-5 5 5" /><path d="M4 4h16" /></>,
+    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" /></>,
+    moon: <path d="M20 15.4A8.5 8.5 0 0 1 8.6 4a8.5 8.5 0 1 0 11.4 11.4Z" />,
+    language: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.7 3.4 6 2.7 9-.6 3-1.5 6.3-2.7 9M12 3C9.5 5.7 8.6 9 9.3 12c.6 3 1.5 6.3 2.7 9" /></>,
+    repair: <><path d="m14.5 6.5 3-3a4 4 0 0 1-5 5L5 16l-2 5 5-2 7.5-7.5a4 4 0 0 1 5-5l-3 3Z" /></>,
+    power: <><path d="M12 3v9" /><path d="M7.1 6.4a8 8 0 1 0 9.8 0" /></>,
   }
 
   return (

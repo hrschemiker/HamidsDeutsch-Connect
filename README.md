@@ -6,7 +6,7 @@
 
 ### A focused Windows client for resilient, verifiable connectivity.
 
-[![Version](https://img.shields.io/badge/version-2.15.0-087f72?style=flat-square)](../../releases/latest)
+[![Version](https://img.shields.io/badge/version-2.16.0-087f72?style=flat-square)](../../releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](https://microsoft.com/windows)
 [![sing-box](https://img.shields.io/badge/sing--box-1.13-1f2937?style=flat-square)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/license-MIT-f2c055?style=flat-square)](LICENSE)

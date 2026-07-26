@@ -39,6 +39,40 @@ type FreeConfigPhase =
   | 'reconnecting'
   | 'error'
 
+type AppUpdateState = {
+  phase: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'
+  availableVersion: string | null
+  percent: number
+  error: string | null
+  retryAfterConnection: boolean
+  lastCheckedAt: string | null
+}
+
+const EMPTY_UPDATE_STATE: AppUpdateState = {
+  phase: 'idle',
+  availableVersion: null,
+  percent: 0,
+  error: null,
+  retryAfterConnection: false,
+  lastCheckedAt: null,
+}
+
+function normalizeUpdateState(value: unknown): AppUpdateState {
+  if (!value || typeof value !== 'object') return EMPTY_UPDATE_STATE
+  const state = value as Partial<AppUpdateState>
+  const phases: AppUpdateState['phase'][] = ['idle', 'checking', 'available', 'downloading', 'ready', 'error']
+  return {
+    phase: phases.includes(state.phase as AppUpdateState['phase']) ? state.phase as AppUpdateState['phase'] : 'idle',
+    availableVersion: typeof state.availableVersion === 'string' ? state.availableVersion : null,
+    percent: typeof state.percent === 'number' && Number.isFinite(state.percent)
+      ? Math.max(0, Math.min(100, state.percent))
+      : 0,
+    error: typeof state.error === 'string' ? state.error : null,
+    retryAfterConnection: state.retryAfterConnection === true,
+    lastCheckedAt: typeof state.lastCheckedAt === 'string' ? state.lastCheckedAt : null,
+  }
+}
+
 // New free-config model: 6-digit id + country flag, no display name.
 type FreePoolServer = {
   id: string
@@ -373,29 +407,15 @@ function App() {
   }, [])
 
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true)
-  const [updateState, setUpdateState] = useState<{
-    phase: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'
-    availableVersion: string | null
-    percent: number
-    error: string | null
-    retryAfterConnection: boolean
-    lastCheckedAt: string | null
-  }>({
-    phase: 'idle',
-    availableVersion: null,
-    percent: 0,
-    error: null,
-    retryAfterConnection: false,
-    lastCheckedAt: null,
-  })
+  const [updateState, setUpdateState] = useState<AppUpdateState>(EMPTY_UPDATE_STATE)
 
   useEffect(() => {
     if (!window.hamidsDeutsch.updater) return
     void window.hamidsDeutsch.updater.getSettings().then((result) => {
-      setAutoUpdateEnabled(result.enabled)
-      setUpdateState(result.state)
+      setAutoUpdateEnabled(result?.enabled !== false)
+      setUpdateState(normalizeUpdateState(result?.state))
     }).catch(() => {})
-    return window.hamidsDeutsch.updater.onState(setUpdateState)
+    return window.hamidsDeutsch.updater.onState((state) => setUpdateState(normalizeUpdateState(state)))
   }, [])
 
   const connectionVerified =
@@ -2493,6 +2513,7 @@ function HomePage({
   onNavigateToTools: _onNavigateToTools,
 }: HomePageProps) {
   const t = useT()
+  const { lang } = useContext(LangCtx)
 
   // ── Local reconnect dismiss ───────────────────────────────────────────────
   const [reconnectDismissed, setReconnectDismissed] = useState(false)
@@ -2698,7 +2719,8 @@ function HomePage({
 
       <section className="hero-card">
         <div className="hero-content">
-          <div className="status-label">
+          <div className="hero-status-block" role="status" aria-live="polite">
+            <div className="status-label">
             <span
               className={
                 heroConnected
@@ -2719,22 +2741,24 @@ function HomePage({
                       : processStatus.running
                         ? t('home.proxy.title.running')
                         : t('status.disconnected')}
-            {heroConnected && elapsedSecs >= 0 && (
-              <span className="session-timer" dir="ltr">{formatElapsed(elapsedSecs)}</span>
-            )}
-            {/* Persistent speed meter, pinned next to the timer. Shows live
-                up/down pace (0 B/s when idle instead of vanishing) plus the
-                download-speed result in the same compact pill style. */}
+            </div>
             {heroConnected && (
-              <span className="hero-meter" dir="ltr">
-                <span className="hero-meter-pill bw-up">↑ {formatBytes(trafficSpeed?.upSpeed ?? 0)}/s</span>
-                <span className="hero-meter-pill bw-down">↓ {formatBytes(trafficSpeed?.downSpeed ?? 0)}/s</span>
+              <div className="hero-live-stats" dir="ltr">
+                {elapsedSecs >= 0 && (
+                  <span className="hero-meter-pill"><BrandIcon name="clock" size={14} /> {formatElapsed(elapsedSecs)}</span>
+                )}
+                <span className="hero-meter-pill bw-up" title={lang === 'fa' ? 'سرعت ارسال' : 'Upload speed'}>
+                  <BrandIcon name="upload" size={14} /> {formatBytes(trafficSpeed?.upSpeed ?? 0)}/s
+                </span>
+                <span className="hero-meter-pill bw-down" title={lang === 'fa' ? 'سرعت دریافت' : 'Download speed'}>
+                  <BrandIcon name="download" size={14} /> {formatBytes(trafficSpeed?.downSpeed ?? 0)}/s
+                </span>
                 {speedTest?.running ? (
                   <span className="hero-meter-pill bw-speed"><BrandIcon name="bolt" size={14} /> …</span>
                 ) : speedTest?.mbps != null ? (
                   <span className="hero-meter-pill bw-speed"><BrandIcon name="bolt" size={14} /> {speedTest.mbps} Mbps</span>
                 ) : null}
-              </span>
+              </div>
             )}
           </div>
 
@@ -2752,7 +2776,9 @@ function HomePage({
               onClick={handleSubscriptionConnect}
             >
               <span className="method-btn-icon">
-                {isSubConnecting || (activeMethod === 'subscription' && processBusy) ? <span className="connection-stage-spinner">◌</span> : (activeMethod === 'subscription' || isSubConnecting) ? '■' : '▶'}
+                {isSubConnecting || (activeMethod === 'subscription' && processBusy)
+                  ? <span className="connection-stage-spinner" aria-hidden="true" />
+                  : <BrandIcon name={activeMethod === 'subscription' ? 'stop' : 'play'} size={20} />}
               </span>
               <span className="method-btn-label">
                 <strong>{isSubConnecting ? '■ توقف' : activeMethod === 'subscription' ? t('btn.disconnect') : t('hero.connectFastest')}</strong>
@@ -2772,8 +2798,8 @@ function HomePage({
             >
               <span className="method-btn-icon">
                 {freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting'
-                  ? <span className="connection-stage-spinner">◌</span>
-                  : freeConnected ? '■' : '⬡'}
+                  ? <span className="connection-stage-spinner" aria-hidden="true" />
+                  : <BrandIcon name={freeConnected ? 'stop' : 'globe'} size={20} />}
               </span>
               <span className="method-btn-label">
                 <strong>
@@ -2803,7 +2829,7 @@ function HomePage({
                   }`}
                 >
                   <span className="connection-stage-icon">
-                    {stage.status === 'active' ? <span className="connection-stage-spinner">◌</span> : stage.icon}
+                    {stage.status === 'active' ? <span className="connection-stage-spinner" aria-hidden="true" /> : stage.icon}
                   </span>
                   <span className="connection-stage-label">{stage.label}</span>
                 </div>
@@ -2812,10 +2838,11 @@ function HomePage({
           )}
         </div>
 
-        <div
+        <button
+          type="button"
           className={`hero-visual${heroConnected ? ' hero-visual-clickable' : ''}`}
-          aria-hidden={!heroConnected}
-          title={heroConnected ? t('btn.disconnect') : undefined}
+          disabled={!heroConnected}
+          aria-label={heroConnected ? t('btn.disconnect') : (lang === 'fa' ? 'نمایش وضعیت اتصال' : 'Connection status')}
           onClick={heroConnected ? () => {
             if (activeMethod === 'free') handleFreeToggle()
             else if (activeMethod === 'subscription') {
@@ -2832,7 +2859,10 @@ function HomePage({
                   alt={heroConnected ? t('btn.disconnect') : ''}
                 />
                 {heroConnected && (
-                  <div className="orbit-disconnect-hint">✕</div>
+                  <div className="orbit-disconnect-hint">
+                    <BrandIcon name="power" size={18} />
+                    <span>{t('btn.disconnect')}</span>
+                  </div>
                 )}
               </div>
             </div>
@@ -2846,7 +2876,7 @@ function HomePage({
                   : t('hero.modeSubscription')}
             </div>
           )}
-        </div>
+        </button>
       </section>
 
       {showReconnect && !heroConnected && (
@@ -3763,7 +3793,7 @@ function SubscriptionsPage({
         )}
       </section>
 
-      <section className="panel-card">
+      <section className="panel-card settings-card" id="settings-connection">
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
@@ -5000,7 +5030,8 @@ function NetworkRepairRow({ lang }: { lang: 'fa' | 'en' }) {
           : 'If subscriptions won’t load or a connection hangs on "verifying IP" after a hard stop, run this: it clears a stuck Windows proxy, kills orphan engines, and lifts any kill-switch block.'}</span>
       </div>
       <button className="secondary-button" type="button" onClick={() => void repair()} disabled={busy}>
-        {busy ? (lang === 'fa' ? 'در حال تعمیر…' : 'Repairing…') : done ? (lang === 'fa' ? '✓ انجام شد' : '✓ Done') : (lang === 'fa' ? 'اجرا' : 'Run')}
+        <BrandIcon name={done ? 'check' : 'repair'} size={16} />
+        {busy ? (lang === 'fa' ? 'در حال تعمیر…' : 'Repairing…') : done ? (lang === 'fa' ? 'انجام شد' : 'Done') : (lang === 'fa' ? 'اجرا' : 'Run')}
       </button>
       {error && <span className="setting-row-error" role="alert">{error}</span>}
     </div>
@@ -5413,16 +5444,15 @@ function RescuePage({
   connected: boolean
 }) {
   const t = useT()
+  const { lang } = useContext(LangCtx)
   return (
     <div className="page-stack">
       <section className="rescue-header-card active-rescue-header">
-        <span className="rescue-header-icon">
-          ✦
-        </span>
+        <span className="rescue-header-icon"><BrandIcon name="shield" size={22} /></span>
 
         <div>
           <span className="panel-kicker">
-            Emergency Connection
+            {lang === 'fa' ? 'اتصال اضطراری' : 'Emergency Connection'}
           </span>
           <h2>
             {t('rescue.title')}
@@ -5661,7 +5691,7 @@ function RescuePage({
       <section className="rescue-summary-card">
         <div>
           <span className="panel-kicker">
-            Current Profile
+            {lang === 'fa' ? 'پروفایل فعلی' : 'Current Profile'}
           </span>
           <h3>
             وضعیت پروفایل نجات
@@ -6495,13 +6525,20 @@ function SettingsPage({
   }, [dnsApplyError, dnsSelection, standaloneDoH])
 
   return (
-    <div className="page-stack">
+    <div className="page-stack settings-page">
+      <nav className="settings-section-nav" aria-label={lang === 'fa' ? 'بخش‌های تنظیمات' : 'Settings sections'}>
+        <a href="#settings-appearance"><BrandIcon name="sun" size={16} />{lang === 'fa' ? 'ظاهر' : 'Appearance'}</a>
+        <a href="#settings-connection"><BrandIcon name="route" size={16} />{lang === 'fa' ? 'اتصال' : 'Connection'}</a>
+        <a href="#settings-updates"><BrandIcon name="update" size={16} />{lang === 'fa' ? 'به‌روزرسانی' : 'Updates'}</a>
+        <a href="#settings-privacy"><BrandIcon name="shield" size={16} />{lang === 'fa' ? 'حریم خصوصی' : 'Privacy'}</a>
+        <a href="#settings-tools"><BrandIcon name="repair" size={16} />{lang === 'fa' ? 'ابزارها' : 'Tools'}</a>
+      </nav>
 
       {/* ── Appearance ─────────────────────────────────────────────── */}
-      <section className="panel-card">
+      <section className="panel-card settings-card" id="settings-appearance">
         <div className="panel-heading">
           <div>
-            <span className="panel-kicker">{t('settings.appearanceKicker')}</span>
+            <span className="panel-kicker">{lang === 'fa' ? 'نمای برنامه' : 'Appearance'}</span>
             <h3>{t('settings.appearance')}</h3>
           </div>
         </div>
@@ -6515,7 +6552,7 @@ function SettingsPage({
               checked={theme === 'dark'}
               onChange={() => setTheme('dark')}
             />
-            <span className="appearance-option-icon">☽</span>
+            <span className="appearance-option-icon"><BrandIcon name="moon" size={20} /></span>
             <span>{t('settings.dark')}</span>
           </label>
           <label className="appearance-option">
@@ -6526,12 +6563,12 @@ function SettingsPage({
               checked={theme === 'light'}
               onChange={() => setTheme('light')}
             />
-            <span className="appearance-option-icon">☀</span>
+            <span className="appearance-option-icon"><BrandIcon name="sun" size={20} /></span>
             <span>{t('settings.light')}</span>
           </label>
         </div>
 
-        <div className="appearance-options" style={{ marginTop: '16px' }}>
+        <div className="appearance-options appearance-language-options">
           <label className="appearance-option">
             <input
               type="radio"
@@ -6540,7 +6577,7 @@ function SettingsPage({
               checked={lang === 'fa'}
               onChange={() => setLang('fa')}
             />
-            <span className="appearance-option-icon">🇮🇷</span>
+            <span className="appearance-option-icon"><BrandIcon name="language" size={20} /></span>
             <span>{t('settings.langFa')}</span>
           </label>
           <label className="appearance-option">
@@ -6551,12 +6588,12 @@ function SettingsPage({
               checked={lang === 'en'}
               onChange={() => setLang('en')}
             />
-            <span className="appearance-option-icon">🇬🇧</span>
+            <span className="appearance-option-icon"><BrandIcon name="language" size={20} /></span>
             <span>{t('settings.langEn')}</span>
           </label>
         </div>
 
-        <p className="inline-notice" style={{ marginTop: '12px' }}>
+        <p className="inline-notice appearance-note">
           {t('settings.appearanceNote')}
         </p>
       </section>
@@ -6566,7 +6603,7 @@ function SettingsPage({
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
-              Connection Routing
+              {lang === 'fa' ? 'مسیریابی اتصال' : 'Connection Routing'}
             </span>
             <h3>
               {t('settings.connection.title')}
@@ -6774,10 +6811,10 @@ function SettingsPage({
         </div>
       </section>
 
-      <section className="panel-card app-update-card">
+      <section className="panel-card settings-card app-update-card" id="settings-updates">
         <div className="panel-heading">
           <div>
-            <span className="panel-kicker">Automatic Updates</span>
+            <span className="panel-kicker">{lang === 'fa' ? 'به‌روزرسانی برنامه' : 'Automatic Updates'}</span>
             <h3>{lang === 'fa' ? 'آپدیت خودکار برنامه' : 'Automatic App Updates'}</h3>
           </div>
           <span className={`count-badge update-state-${updateState.phase}`}>
@@ -6791,7 +6828,9 @@ function SettingsPage({
                     ? (lang === 'fa' ? 'آماده نصب' : 'Ready')
                     : updateState.phase === 'error'
                       ? (lang === 'fa' ? 'نیاز به تلاش مجدد' : 'Retry pending')
-                      : (lang === 'fa' ? 'به‌روز' : 'Up to date')}
+                      : updateState.lastCheckedAt
+                        ? (lang === 'fa' ? 'به‌روز' : 'Up to date')
+                        : (lang === 'fa' ? 'هنوز بررسی نشده' : 'Not checked yet')}
           </span>
         </div>
 
@@ -6836,11 +6875,11 @@ function SettingsPage({
         </div>
       </section>
 
-      <section className="panel-card">
+      <section className="panel-card settings-card" id="settings-privacy">
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
-              Split Tunneling
+              {lang === 'fa' ? 'تفکیک ترافیک' : 'Split Tunneling'}
             </span>
             <h3>
               {t('settings.direct.title')}
@@ -6869,11 +6908,11 @@ function SettingsPage({
         </button>
       </section>
 
-      <section className="panel-card engine-update-card">
+      <section className="panel-card settings-card engine-update-card" id="settings-tools">
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
-              Engine Update
+              {lang === 'fa' ? 'به‌روزرسانی موتور' : 'Engine Update'}
             </span>
             <h3>
               {t('settings.engine.title')}
@@ -6882,7 +6921,7 @@ function SettingsPage({
 
           <div className="heading-end-row">
             <span className="count-badge">
-              Stable only
+              {lang === 'fa' ? 'فقط نسخه پایدار' : 'Stable only'}
             </span>
             <InfoButton
               fa="نسخه فعلی با آخرین Release پایدار رسمی SagerNet مقایسه می‌شود. نسخه‌های Alpha، Beta و RC نصب نخواهند شد."
@@ -6965,11 +7004,11 @@ function SettingsPage({
 
       </section>
 
-      <section className="panel-card virtual-location-card">
+      <section className="panel-card settings-card virtual-location-card">
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
-              Browser Virtual Location
+              {lang === 'fa' ? 'مکان مجازی مرورگر' : 'Browser Virtual Location'}
             </span>
             <h3>
               {t('settings.ext.title')}
@@ -7044,7 +7083,7 @@ function SettingsPage({
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
-              Safety
+              {lang === 'fa' ? 'ایمنی' : 'Safety'}
             </span>
             <h3>
               {t('settings.fixed.title')}
@@ -7079,6 +7118,7 @@ function SettingsPage({
 
 function ExportImportSection() {
   const t = useT()
+  const { lang } = useContext(LangCtx)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   function collectSettings(): Record<string, string> {
@@ -7153,7 +7193,7 @@ function ExportImportSection() {
     <section className="panel-card">
       <div className="panel-heading">
         <div>
-          <span className="panel-kicker">Settings</span>
+          <span className="panel-kicker">{lang === 'fa' ? 'تنظیمات' : 'Settings'}</span>
           <h3>{t('settings.exportImport.title')}</h3>
         </div>
         <InfoButton
@@ -7180,6 +7220,7 @@ function ExportImportSection() {
 
 function StartupSection() {
   const t = useT()
+  const { lang } = useContext(LangCtx)
   const [enabled, setEnabled] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -7207,7 +7248,7 @@ function StartupSection() {
     <section className="panel-card">
       <div className="panel-heading">
         <div>
-          <span className="panel-kicker">System</span>
+          <span className="panel-kicker">{lang === 'fa' ? 'سیستم' : 'System'}</span>
           <h3>{t('settings.startup.title')}</h3>
         </div>
         {enabled !== null && (
@@ -7230,6 +7271,7 @@ function StartupSection() {
 
 function ConnectionHistorySection() {
   const t = useT()
+  const { lang } = useContext(LangCtx)
   const [entries, setEntries] = useState<{
     id: string
     connectedAt: string
@@ -7322,7 +7364,7 @@ function ConnectionHistorySection() {
     <section className="panel-card">
       <div className="panel-heading">
         <div>
-          <span className="panel-kicker">History</span>
+          <span className="panel-kicker">{lang === 'fa' ? 'تاریخچه' : 'History'}</span>
           <h3>{t('settings.history.title')}</h3>
         </div>
         {entries.length > 0 && (
@@ -7408,6 +7450,7 @@ function SettingRow({
 
       <label className="switch">
         <input
+          aria-label={title}
           checked={checked}
           disabled={disabled}
           type="checkbox"
@@ -7418,6 +7461,9 @@ function SettingRow({
           }
         />
         <span className="switch-track" />
+        <span className="switch-state" aria-hidden="true">
+          {checked ? 'ON' : 'OFF'}
+        </span>
       </label>
     </div>
   )

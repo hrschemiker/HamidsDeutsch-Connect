@@ -22,7 +22,10 @@ export default class AppErrorBoundary extends Component<Props, State> {
         <img src="/logo.png" alt="" className="fatal-error-logo" />
         <h1>Manfaz VPN</h1>
         <p>رابط برنامه با خطای غیرمنتظره روبه‌رو شد.</p>
-        <p className="fatal-error-detail">{this.state.error.message}</p>
+        <details className="fatal-error-detail">
+          <summary>نمایش جزئیات فنی</summary>
+          <code>{this.state.error.message}</code>
+        </details>
         <button type="button" onClick={() => window.location.reload()}>
           بارگذاری دوباره
         </button>
