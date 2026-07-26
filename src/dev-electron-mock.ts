@@ -61,8 +61,11 @@ function resultFor(path: string): ApiValue {
     'startup.getCloseToTray': { enabled: true, error: null },
     'doh.getSettings': {
       standaloneDoHServer: 'off',
+      customDnsPrimary: '',
+      customDnsSecondary: '',
       proxyDoHEnabled: false,
       standaloneActive: false,
+      activeConfig: null,
       error: null,
     },
     'system.getPrivilegeStatus': {

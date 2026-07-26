@@ -12,8 +12,10 @@ const {
 const { autoUpdater } = require('electron-updater')
 
 const {
+  initializeDnsManager,
   enableStandaloneDoH,
   disableStandaloneDoH,
+  testDnsConfig,
   getStandaloneStatus,
 } = require('./doh-manager.cjs')
 
@@ -213,6 +215,8 @@ function scheduleCfScanInterval(intervalHours) {
 // ── App settings (close-to-tray + DoH) ───────────────────────────────────────
 let closeToTrayEnabled = true
 let standaloneDoHServer = 'off'   // 'off' | 'cloudflare' | 'google'
+let customDnsPrimary = ''
+let customDnsSecondary = ''
 let proxyDoHEnabled = false
 let autoUpdateEnabled = true
 
@@ -229,11 +233,15 @@ async function loadAppSettings() {
     const parsed = JSON.parse(raw)
     closeToTrayEnabled = parsed.closeToTray !== false
     standaloneDoHServer = parsed.standaloneDoHServer ?? 'off'
+    customDnsPrimary = typeof parsed.customDnsPrimary === 'string' ? parsed.customDnsPrimary : ''
+    customDnsSecondary = typeof parsed.customDnsSecondary === 'string' ? parsed.customDnsSecondary : ''
     proxyDoHEnabled = parsed.proxyDoHEnabled === true
     autoUpdateEnabled = parsed.autoUpdateEnabled !== false
   } catch {
     closeToTrayEnabled = true
     standaloneDoHServer = 'off'
+    customDnsPrimary = ''
+    customDnsSecondary = ''
     proxyDoHEnabled = false
     autoUpdateEnabled = true
   }
@@ -246,6 +254,8 @@ async function saveAppSettings() {
   await fs.promises.writeFile(settingsPath, JSON.stringify({
     closeToTray: closeToTrayEnabled,
     standaloneDoHServer,
+    customDnsPrimary,
+    customDnsSecondary,
     proxyDoHEnabled,
     autoUpdateEnabled,
   }, null, 2), 'utf8')
@@ -2737,31 +2747,72 @@ function registerIpcHandlers() {
   // ── DoH IPC handlers ────────────────────────────────────────────────────────
 
   ipcMain.handle('doh:get-settings', () => {
+    const status = getStandaloneStatus()
     return {
       standaloneDoHServer,
+      customDnsPrimary,
+      customDnsSecondary,
       proxyDoHEnabled,
-      standaloneActive: getStandaloneStatus().active,
+      standaloneActive: status.active,
+      activeConfig: status.config,
       error: null,
     }
   })
 
-  ipcMain.handle('doh:set-standalone', async (_event, server) => {
-    // server: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard'
-    const prev = standaloneDoHServer
+  ipcMain.handle('doh:test', async (_event, input) => {
     try {
-      if (prev !== 'off') {
-        await disableStandaloneDoH()
-      }
-      if (server !== 'off') {
-        await enableStandaloneDoH(server)
+      const server = input?.server
+      const custom = server === 'custom'
+        ? { primary: input?.primary, secondary: input?.secondary, label: 'Custom DNS' }
+        : null
+      return await testDnsConfig(server, custom)
+    } catch (error) {
+      return { success: false, results: [], error: error?.message ?? 'DNS test failed.' }
+    }
+  })
+
+  ipcMain.handle('doh:set-standalone', async (_event, input) => {
+    const server = typeof input === 'string' ? input : input?.server
+    const custom = server === 'custom'
+      ? { primary: input?.primary, secondary: input?.secondary, label: 'Custom DNS' }
+      : null
+    const prev = standaloneDoHServer
+    const prevPrimary = customDnsPrimary
+    const prevSecondary = customDnsSecondary
+    try {
+      if (server === 'off') {
+        await disableStandaloneDoH(app.getPath('userData'))
+      } else {
+        await enableStandaloneDoH(server, custom, app.getPath('userData'))
       }
       standaloneDoHServer = server
+      if (server === 'custom') {
+        customDnsPrimary = String(custom.primary ?? '').trim()
+        customDnsSecondary = String(custom.secondary ?? '').trim()
+      }
       await saveAppSettings()
-      return { success: true, standaloneDoHServer, standaloneActive: server !== 'off', error: null }
+      return {
+        success: true,
+        standaloneDoHServer,
+        customDnsPrimary,
+        customDnsSecondary,
+        standaloneActive: server !== 'off',
+        activeConfig: getStandaloneStatus().config,
+        error: null,
+      }
     } catch (err) {
-      // Roll back in memory
       standaloneDoHServer = prev
-      return { success: false, standaloneDoHServer: prev, standaloneActive: prev !== 'off', error: err?.message ?? 'Failed to change DoH server.' }
+      customDnsPrimary = prevPrimary
+      customDnsSecondary = prevSecondary
+      return {
+        success: false,
+        standaloneDoHServer: prev,
+        customDnsPrimary: prevPrimary,
+        customDnsSecondary: prevSecondary,
+        standaloneActive: getStandaloneStatus().active,
+        activeConfig: getStandaloneStatus().config,
+        error: err?.message ?? 'Failed to change DNS server.',
+      }
     }
   })
 
@@ -3686,7 +3737,15 @@ app.whenReady().then(async () => {
 
 
   registerIpcHandlers()
-  loadAppSettings().then(() => {
+  loadAppSettings().then(async () => {
+    const dnsStatus = await initializeDnsManager(app.getPath('userData')).catch((error) => {
+      console.error('[DNS] State recovery failed:', error?.message ?? error)
+      return { active: false }
+    })
+    if (!dnsStatus.active && standaloneDoHServer !== 'off') {
+      standaloneDoHServer = 'off'
+      await saveAppSettings().catch(() => {})
+    }
     createMainWindow()
     setupTray()
     setupAutoUpdater()

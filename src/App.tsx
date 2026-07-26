@@ -323,13 +323,18 @@ function App() {
     void window.hamidsDeutsch.startup.getCloseToTray().then((r) => { setCloseToTray(r.enabled) }).catch(() => {})
   }, [])
 
-  type DoHServer = 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard'
-  const [standaloneDoH, setStandaloneDoH] = useState<DoHServer>('off')
+  type DnsServer = 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom'
+  const [standaloneDoH, setStandaloneDoH] = useState<DnsServer>('off')
   const [standaloneDoHLoading, setStandaloneDoHLoading] = useState(false)
+  const [customDnsPrimary, setCustomDnsPrimary] = useState('')
+  const [customDnsSecondary, setCustomDnsSecondary] = useState('')
+  const [dnsApplyError, setDnsApplyError] = useState<string | null>(null)
   const [proxyDoH, setProxyDoH] = useState(false)
   useEffect(() => {
     void window.hamidsDeutsch.doh.getSettings().then((r) => {
       setStandaloneDoH(r.standaloneDoHServer)
+      setCustomDnsPrimary(r.customDnsPrimary)
+      setCustomDnsSecondary(r.customDnsSecondary)
       setProxyDoH(r.proxyDoHEnabled)
     }).catch(() => {})
   }, [])
@@ -2187,10 +2192,26 @@ function App() {
               onInstallAppUpdate={() => window.hamidsDeutsch.updater.installUpdate()}
               standaloneDoH={standaloneDoH}
               standaloneDoHLoading={standaloneDoHLoading}
-              onStandaloneDoHChange={async (server) => {
+              customDnsPrimary={customDnsPrimary}
+              customDnsSecondary={customDnsSecondary}
+              dnsApplyError={dnsApplyError}
+              onCustomDnsChange={(primary, secondary) => {
+                setCustomDnsPrimary(primary)
+                setCustomDnsSecondary(secondary)
+              }}
+              onStandaloneDoHChange={async (server, primary, secondary) => {
                 setStandaloneDoHLoading(true)
-                const r = await window.hamidsDeutsch.doh.setStandalone(server)
-                if (r.success) setStandaloneDoH(server)
+                setDnsApplyError(null)
+                const r = await window.hamidsDeutsch.doh.setStandalone(
+                  server === 'custom' ? { server, primary, secondary } : server,
+                )
+                if (r.success) {
+                  setStandaloneDoH(server)
+                  setCustomDnsPrimary(r.customDnsPrimary)
+                  setCustomDnsSecondary(r.customDnsSecondary)
+                } else {
+                  setDnsApplyError(r.error)
+                }
                 setStandaloneDoHLoading(false)
               }}
               proxyDoH={proxyDoH}
@@ -6175,6 +6196,10 @@ function SettingsPage({
   onInstallAppUpdate,
   standaloneDoH,
   standaloneDoHLoading,
+  customDnsPrimary,
+  customDnsSecondary,
+  dnsApplyError,
+  onCustomDnsChange,
   onStandaloneDoHChange,
   proxyDoH,
   onProxyDoHToggle,
@@ -6257,9 +6282,17 @@ function SettingsPage({
   onCheckAppUpdate: () => Promise<unknown>
   onDownloadAppUpdate: () => Promise<unknown>
   onInstallAppUpdate: () => Promise<unknown>
-  standaloneDoH: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard'
+  standaloneDoH: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom'
   standaloneDoHLoading: boolean
-  onStandaloneDoHChange: (server: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard') => Promise<void>
+  customDnsPrimary: string
+  customDnsSecondary: string
+  dnsApplyError: string | null
+  onCustomDnsChange: (primary: string, secondary: string) => void
+  onStandaloneDoHChange: (
+    server: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom',
+    primary?: string,
+    secondary?: string,
+  ) => Promise<void>
   proxyDoH: boolean
   onProxyDoHToggle: (v: boolean) => Promise<void>
 }) {
@@ -6449,6 +6482,17 @@ function SettingsPage({
 
   const { theme, setTheme } = useContext(ThemeCtx)
   const { lang, setLang } = useContext(LangCtx)
+  const [dnsSelection, setDnsSelection] = useState(standaloneDoH)
+
+  useEffect(() => {
+    setDnsSelection(standaloneDoH)
+  }, [standaloneDoH])
+
+  useEffect(() => {
+    if (dnsApplyError && dnsSelection !== 'custom') {
+      setDnsSelection(standaloneDoH)
+    }
+  }, [dnsApplyError, dnsSelection, standaloneDoH])
 
   return (
     <div className="page-stack">
@@ -6619,32 +6663,81 @@ function SettingsPage({
 
         <NetworkRepairRow lang={lang} />
 
-        {/* ── DNS over HTTPS ──────────────────────────────────────────────── */}
+        {/* ── System DNS / DNS over HTTPS ─────────────────────────────────── */}
         <div className="settings-section-divider">
-          <span>{lang === 'fa' ? 'DNS over HTTPS' : 'DNS over HTTPS (DoH)'}</span>
+          <span>{lang === 'fa' ? 'DNS و DNS over HTTPS' : 'DNS & DNS over HTTPS'}</span>
         </div>
 
         <div className="setting-row">
           <div>
-            <strong>{lang === 'fa' ? 'سرور DoH مستقل' : 'Standalone DoH Server'}</strong>
+            <strong>{lang === 'fa' ? 'DNS سیستم' : 'System DNS'}</strong>
             <span>{lang === 'fa'
-              ? 'بدون نیاز به اتصال VPN، DNS را رمزگذاری می‌کند و شنود ISP را مسدود می‌کند.'
-              : 'Encrypts DNS without a VPN connection — hides visited domains from your ISP.'
+              ? 'پیش از اعمال، پاسخ واقعی سرورها بررسی می‌شود و سپس DNS همه آداپترهای فعال ویندوز تغییر می‌کند. گزینه‌های خارجی در Windows 11 با DoH رمزگذاری می‌شوند.'
+              : 'Servers are queried before use, then applied to every active Windows adapter. International presets use encrypted DoH on Windows 11.'
             }</span>
           </div>
           <select
             className="doh-server-select"
-            value={standaloneDoH}
+            value={dnsSelection}
             disabled={standaloneDoHLoading}
-            onChange={(e) => void onStandaloneDoHChange(e.target.value as 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard')}
+            onChange={(event) => {
+              const next = event.target.value as typeof dnsSelection
+              setDnsSelection(next)
+              if (next !== 'custom') void onStandaloneDoHChange(next)
+            }}
           >
             <option value="off">{lang === 'fa' ? 'غیرفعال' : 'Off'}</option>
             <option value="cloudflare">Cloudflare (1.1.1.1)</option>
             <option value="cloudflare-family">Cloudflare Family (1.1.1.3)</option>
             <option value="google">Google (8.8.8.8)</option>
             <option value="adguard">AdGuard (94.140.14.14)</option>
+            <option value="shecan">شکن · 178.22.122.100</option>
+            <option value="radar">رادار گیم · 10.202.10.10</option>
+            <option value="electro">الکترو · 78.157.42.100</option>
+            <option value="custom">{lang === 'fa' ? 'DNS دستی…' : 'Custom DNS…'}</option>
           </select>
         </div>
+
+        {dnsSelection === 'custom' && (
+          <div className="custom-dns-panel">
+            <label>
+              <span>{lang === 'fa' ? 'DNS اصلی' : 'Primary DNS'}</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                dir="ltr"
+                value={customDnsPrimary}
+                placeholder="9.9.9.9"
+                disabled={standaloneDoHLoading}
+                onChange={(event) => onCustomDnsChange(event.target.value, customDnsSecondary)}
+              />
+            </label>
+            <label>
+              <span>{lang === 'fa' ? 'DNS دوم (اختیاری)' : 'Secondary DNS (optional)'}</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                dir="ltr"
+                value={customDnsSecondary}
+                placeholder="149.112.112.112"
+                disabled={standaloneDoHLoading}
+                onChange={(event) => onCustomDnsChange(customDnsPrimary, event.target.value)}
+              />
+            </label>
+            <button
+              className="primary-button"
+              type="button"
+              disabled={standaloneDoHLoading || customDnsPrimary.trim().length === 0}
+              onClick={() => void onStandaloneDoHChange('custom', customDnsPrimary, customDnsSecondary)}
+            >
+              {standaloneDoHLoading
+                ? (lang === 'fa' ? 'در حال تست و اعمال…' : 'Testing and applying…')
+                : (lang === 'fa' ? 'تست و اعمال DNS' : 'Test & apply DNS')}
+            </button>
+          </div>
+        )}
+
+        {dnsApplyError && <div className="inline-error dns-apply-error">{dnsApplyError}</div>}
 
         <SettingRow
           title={lang === 'fa' ? 'DoH داخل پروکسی' : 'DoH Inside Proxy'}

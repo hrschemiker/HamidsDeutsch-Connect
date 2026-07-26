@@ -320,7 +320,8 @@ contextBridge.exposeInMainWorld(
 
     doh: {
       getSettings: () => ipcRenderer.invoke('doh:get-settings'),
-      setStandalone: (server) => ipcRenderer.invoke('doh:set-standalone', server),
+      test: (input) => ipcRenderer.invoke('doh:test', input),
+      setStandalone: (input) => ipcRenderer.invoke('doh:set-standalone', input),
       setProxyDoH: (enabled) => ipcRenderer.invoke('doh:set-proxy-doh', enabled),
     },
 

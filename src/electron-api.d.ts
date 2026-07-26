@@ -836,15 +836,26 @@ declare global {
 
       doh: {
         getSettings: () => Promise<{
-          standaloneDoHServer: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard'
+          standaloneDoHServer: DnsServerId
+          customDnsPrimary: string
+          customDnsSecondary: string
           proxyDoHEnabled: boolean
           standaloneActive: boolean
+          activeConfig: DnsActiveConfig | null
           error: string | null
         }>
-        setStandalone: (server: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard') => Promise<{
+        test: (input: { server: Exclude<DnsServerId, 'off'>; primary?: string; secondary?: string }) => Promise<{
           success: boolean
-          standaloneDoHServer: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard'
+          results: Array<{ address: string; success: boolean; answer: string | null; error: string | null }>
+          error: string | null
+        }>
+        setStandalone: (input: DnsServerId | { server: DnsServerId; primary?: string; secondary?: string }) => Promise<{
+          success: boolean
+          standaloneDoHServer: DnsServerId
+          customDnsPrimary: string
+          customDnsSecondary: string
           standaloneActive: boolean
+          activeConfig: DnsActiveConfig | null
           error: string | null
         }>
         setProxyDoH: (enabled: boolean) => Promise<{
@@ -961,6 +972,25 @@ type AppUpdateState = {
   error: string | null
   retryAfterConnection: boolean
   lastCheckedAt: string | null
+}
+
+type DnsServerId =
+  | 'off'
+  | 'cloudflare'
+  | 'cloudflare-family'
+  | 'google'
+  | 'adguard'
+  | 'shecan'
+  | 'radar'
+  | 'electro'
+  | 'custom'
+
+type DnsActiveConfig = {
+  server: Exclude<DnsServerId, 'off'>
+  primary: string
+  secondary: string | null
+  label: string
+  encrypted: boolean
 }
 
 type ConnectionHistoryEntry = {
