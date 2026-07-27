@@ -190,6 +190,7 @@ let appTray = null
 // the config when the bypass list changes while connected.
 let activeConnectionParams = null
 let isQuitting = false
+let shutdownCleanupStarted = false
 let fatalCleanupStarted = false
 
 // CF auto-scan interval
@@ -3910,12 +3911,13 @@ app.whenReady().then(async () => {
 app.on(
   'before-quit',
   (event) => {
-    if (isQuitting) {
+    if (shutdownCleanupStarted) {
       return
     }
 
     event.preventDefault()
     isQuitting = true
+    shutdownCleanupStarted = true
 
     // Quitting is an expected engine stop — never let it look like a drop and
     // arm the kill switch. Also lift any active block so closing the app can
@@ -3934,6 +3936,9 @@ app.on(
             'userData',
           ),
       }),
+      // DNS-only and VPN-specific DNS are session-scoped. Always restore the
+      // exact per-adapter baseline before the application exits.
+      disableStandaloneDoH(app.getPath('userData')),
     ]).finally(() => {
       void stopVirtualLocationService()
         .catch(() => {

@@ -6861,6 +6861,141 @@ button {
   display: block;
 }
 
+/* v2.18 — one settings scale and a first-class DNS-only connection */
+.settings-page {
+  --settings-title-size: 14px;
+  --settings-body-size: 12px;
+  --settings-label-size: 12px;
+  --settings-control-height: 42px;
+}
+
+.settings-page .panel-heading h3,
+.settings-page .setting-row strong,
+.settings-page .setting-title-with-info > strong,
+.settings-page .saved-dns-heading strong {
+  font-size: var(--settings-title-size) !important;
+  line-height: 1.55 !important;
+}
+
+.settings-page .setting-row,
+.settings-page .setting-row p,
+.settings-page .setting-row span,
+.settings-page label > span,
+.settings-page .inline-notice,
+.settings-page .connection-mode-summary {
+  font-size: var(--settings-body-size);
+  line-height: 1.75;
+}
+
+.settings-page button:not(.info-button):not(.icon-button),
+.settings-page input,
+.settings-page select {
+  min-height: var(--settings-control-height);
+  box-sizing: border-box;
+  font-size: var(--settings-label-size) !important;
+  line-height: 1.4;
+}
+
+.settings-page button:not(.info-button):not(.icon-button) {
+  padding: 9px 15px !important;
+  border-radius: 11px;
+}
+
+.connection-choice-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dns-choice-card {
+  gap: 14px;
+}
+
+.dns-choice-active {
+  border-color: color-mix(in srgb, var(--brand) 52%, var(--border));
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--brand) 10%, transparent);
+}
+
+.dns-card-select {
+  display: grid;
+  gap: 7px;
+}
+
+.dns-card-select > span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.dns-card-select select {
+  width: 100%;
+  min-height: 42px;
+  padding-inline: 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--text-primary);
+  background: var(--surface-soft);
+}
+
+.saved-dns-profiles {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft);
+}
+
+.saved-dns-heading,
+.saved-dns-row,
+.saved-dns-actions {
+  display: flex;
+  align-items: center;
+}
+
+.saved-dns-heading,
+.saved-dns-row {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.saved-dns-heading > span {
+  min-width: 26px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-align: center;
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+}
+
+.saved-dns-row {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.saved-dns-row > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.saved-dns-row > div:first-child > span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.saved-dns-actions {
+  gap: 7px;
+}
+
+@media (max-width: 1120px) {
+  .connection-choice-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .connection-choice-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ==========================================================================
    UX hardening — v2.12
    Consistent rhythm, accessible interaction states and responsive safeguards.
@@ -8230,3 +8365,26 @@ textarea:hover {
     width: 100%;
   }
 }
+
+/* v2.18 final cascade */
+.connection-choice-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.settings-page .panel-heading h3,
+.settings-page .setting-row strong,
+.settings-page .setting-title-with-info > strong,
+.settings-page .saved-dns-heading strong { font-size: 14px !important; line-height: 1.55 !important; }
+.settings-page .setting-row,
+.settings-page .setting-row p,
+.settings-page .setting-row span,
+.settings-page label > span,
+.settings-page .inline-notice { font-size: 12px !important; line-height: 1.75 !important; }
+.settings-page button:not(.info-button):not(.info-btn):not(.icon-button),
+.settings-page input,
+.settings-page select { min-height: 42px; box-sizing: border-box; font-size: 12px !important; }
+.settings-page button:not(.info-button):not(.info-btn):not(.icon-button) {
+  height: 42px;
+  padding: 9px 15px !important;
+  border-radius: 11px;
+  white-space: nowrap;
+}
+@media (max-width: 1120px) { .connection-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .connection-choice-grid { grid-template-columns: 1fr; } }

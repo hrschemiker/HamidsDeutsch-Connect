@@ -4,71 +4,83 @@
 
 # Manfaz VPN
 
-### A focused Windows client for resilient, verifiable connectivity.
+### Reliable Windows connectivity, backed by sing-box and verified by real network state.
 
-[![Version](https://img.shields.io/badge/version-2.17.0-087f72?style=flat-square)](../../releases/latest)
+[![Version](https://img.shields.io/badge/version-2.18.0-087f72?style=flat-square)](../../releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](https://microsoft.com/windows)
-[![sing-box](https://img.shields.io/badge/sing--box-1.13-1f2937?style=flat-square)](https://github.com/SagerNet/sing-box)
+[![sing-box](https://img.shields.io/badge/powered%20by-sing--box-1f2937?style=flat-square)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/license-MIT-f2c055?style=flat-square)](LICENSE)
 
-[Explore releases](../../releases) · [Read the guide](#quick-start) · [Report an issue](../../issues)
+[Releases](../../releases) · [Getting started](#getting-started) · [Issues](../../issues)
 
 </div>
 
 ---
 
-Manfaz turns sing-box into a clean desktop workflow: add a subscription, choose a verified server, or connect through a continuously refreshed pool of free configurations. Every successful connection is checked against the real public IP before the app calls it online.
+Manfaz is a Windows connectivity client built around a simple rule: the reported state must match the real network state. It manages sing-box connections, system routing, DNS, recovery, and updates as one lifecycle—and verifies the public route before declaring a VPN connection successful.
 
-## Why Manfaz
+## Core capabilities
 
-- **Verified connections** — public-IP confirmation after every connection attempt.
-- **Two paths online** — personal subscriptions and a self-refreshing free-config pool.
-- **Resilient routing** — System Proxy, full-device TUN, DNS-aware direct routes, fallback control, smart reconnect, and upstream proxy chaining.
-- **Censorship tooling** — native TLS record/handshake fragmentation, uTLS, ECH, SNI override, and clean Cloudflare IP discovery.
-- **Safe recovery** — Windows proxy restoration, orphan-engine cleanup, and a verified-session Kill Switch that never arms during connection setup.
-- **Permission-first updates** — background release discovery, post-connection retry, explicit download consent, progress reporting, and one-click restart.
-- **Useful diagnostics** — live traffic, latency ranking, connection history, and structured logs.
+- **Verified VPN sessions** — public-IP confirmation, connection health monitoring, latency ranking, and controlled recovery.
+- **Multiple connection sources** — personal subscriptions, manual nodes, and a refreshed pool of tested public configurations.
+- **Full routing coverage** — TUN for device-wide traffic, System Proxy for proxy-aware applications, and automatic fallback.
+- **DNS as a real connection mode** — built-in or user-defined resolvers can be applied without starting a VPN.
+- **Per-adapter DNS recovery** — the original Windows DNS configuration is captured once and restored on disconnect or shutdown.
+- **Split routing** — direct domains and applications are compiled into sing-box routing rules for VPN bypass.
+- **Censorship resilience** — TLS record fragmentation, handshake fragmentation, uTLS, ECH, SNI override, and Cloudflare IP discovery.
+- **Failure-safe recovery** — Windows proxy repair, orphan-process cleanup, firewall state recovery, and explicit reconnect boundaries.
+- **Permission-first updates** — background version checks, deferred retry after connectivity returns, consent before download, and restart-to-install.
+- **Operational visibility** — live throughput, connection history, structured diagnostics, and service-access checks.
 
-## Quick start
+## Connection models
+
+| Model | Network effect | Elevation |
+|---|---|---:|
+| **Auto** | Chooses TUN when available and falls back according to policy | Optional |
+| **TUN** | Routes device traffic through the sing-box tunnel | Required |
+| **System Proxy** | Routes proxy-aware applications through a local endpoint | No |
+| **DNS only** | Changes resolver settings on active Windows adapters; no VPN starts | Required |
+
+DNS profiles remain available while a VPN is active. When a profile is applied, Manfaz records the resolver configuration of every affected adapter. Disconnecting the DNS session, disconnecting the VPN, or exiting the application restores that exact baseline.
+
+## Reliability model
+
+Connection changes are treated as transactions:
+
+1. validate the selected server or resolver;
+2. capture the Windows state that may be changed;
+3. apply routing, proxy, firewall, or DNS configuration;
+4. verify the resulting network behavior;
+5. roll back safely on failure or explicit disconnect.
+
+The Kill Switch arms only after a verified VPN session exists. Expected stops, mode transitions, failed startup attempts, and ordinary application shutdown do not leave a stale firewall block behind.
+
+## DNS profiles
+
+Built-in profiles include Cloudflare, Cloudflare Family, Google, AdGuard, Shecan, Radar, and Electro. Custom IPv4 resolver pairs are validated before application, stored locally, prioritized over built-in profiles, and can be used either independently or alongside a VPN connection.
+
+Cloudflare is the safe default when no custom profile exists.
+
+## Rescue and routing tools
+
+- TLS record and handshake fragmentation
+- Controlled DPI-bypass retry
+- Provider-supplied SNI override
+- Global uTLS fingerprint and ECH controls
+- SOCKS5 and HTTP upstream proxy chaining
+- Cloudflare clean-IP scanner with scheduling
+- Subscription conversion
+- Direct-domain and direct-application routing
+- Network repair and settings backup
+
+## Getting started
 
 1. Install Manfaz VPN on Windows 10 or 11 x64.
-2. Add a V2Ray-compatible subscription, or open **Servers** and use the free pool.
-3. Pick a server or let Manfaz race the best candidates.
-4. Wait for IP verification; the status changes only after traffic is proven.
+2. Run with Administrator access when using TUN, Kill Switch, or system DNS.
+3. Add a compatible subscription, choose a tested public server, or select a DNS-only profile.
+4. Connect and wait for verification.
 
-> Administrator access is required for TUN mode and the firewall-backed Kill Switch. System Proxy mode works without elevation.
-
-## Connection modes
-
-| Mode | Best for | Administrator |
-|---|---|---:|
-| **Auto** | Sensible fallback between available modes | Optional |
-| **TUN** | Full-device routing | Required |
-| **System Proxy** | Browsers and proxy-aware apps | No |
-
-## Rescue profile
-
-The rescue profile is deliberately opt-in. It can apply native sing-box TLS record fragmentation, full handshake fragmentation with a controlled fallback delay, and a provider-supplied SNI override. Auto DPI Bypass retries a failed, verified connection once with the stronger rescue profile.
-
-Use the lightest option that works:
-
-1. TLS Record Fragment
-2. TLS Handshake Fragment
-3. Custom SNI only when your provider supplies one
-
-## Built-in tools
-
-- Real service-access checks for Gemini, Telegram, X, and Instagram
-- Cloudflare clean-IP scanner with optional background scheduling
-- Subscription format converter
-- SOCKS5 / HTTP upstream proxy
-- Global uTLS and ECH controls
-- Verified system DNS profiles with Cloudflare, Google, AdGuard, Shecan, Radar, Electro, and validated custom IPv4 resolvers
-- Settings, subscriptions, manual nodes, free-pool and safety backup
-- One-click network repair
-- Browser virtual-location companion extension
-
-## Building from source
+## Build
 
 ```powershell
 npm ci
@@ -77,20 +89,13 @@ npm run build
 npm run dist:win
 ```
 
-The Windows installer is written to `release/`. GitHub releases contain the tagged source and release notes; installer distribution is handled separately by the maintainer.
-
-## Security notes
-
-- Kill Switch arms only after a connection is verified, treats an absent firewall rule as a clean state, and releases safely before reconnecting.
-- Custom SNI values are validated and should match a certificate accepted by the destination.
-- Imported backups accept only Manfaz-owned settings files.
-- No connection is marked successful until public-IP verification passes.
+The local Windows installer is created in `release/`. Public releases contain the tagged source and release notes; installer distribution is maintained separately.
 
 ## Requirements
 
 - Windows 10 or Windows 11, x64
-- Administrator access for TUN and Kill Switch
-- A V2Ray-compatible subscription, or access to the built-in free-config pool
+- Administrator access for TUN, Kill Switch, and system DNS changes
+- A compatible subscription for private VPN connections
 
 ## License
 

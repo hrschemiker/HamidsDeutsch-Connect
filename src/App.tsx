@@ -28,6 +28,45 @@ import { useConnectionDiagnostics } from './diagnostics/use-connection-diagnosti
 import { BrandIcon, type BrandIconName } from './components/BrandIcon'
 import './App.css'
 
+type DnsProfile = {
+  id: string
+  name: string
+  primary: string
+  secondary: string
+  custom: boolean
+  server: 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom'
+}
+
+const BUILTIN_DNS_PROFILES: DnsProfile[] = [
+  { id: 'cloudflare', name: 'Cloudflare', primary: '1.1.1.1', secondary: '1.0.0.1', custom: false, server: 'cloudflare' },
+  { id: 'cloudflare-family', name: 'Cloudflare Family', primary: '1.1.1.3', secondary: '1.0.0.3', custom: false, server: 'cloudflare-family' },
+  { id: 'google', name: 'Google', primary: '8.8.8.8', secondary: '8.8.4.4', custom: false, server: 'google' },
+  { id: 'adguard', name: 'AdGuard', primary: '94.140.14.14', secondary: '94.140.15.15', custom: false, server: 'adguard' },
+  { id: 'shecan', name: 'شکن', primary: '178.22.122.100', secondary: '185.51.200.2', custom: false, server: 'shecan' },
+  { id: 'radar', name: 'رادار گیم', primary: '10.202.10.10', secondary: '10.202.10.11', custom: false, server: 'radar' },
+  { id: 'electro', name: 'الکترو', primary: '78.157.42.100', secondary: '78.157.42.101', custom: false, server: 'electro' },
+]
+
+function loadCustomDnsProfiles(): DnsProfile[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('manfaz:dns-profiles') ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((item) => item && typeof item.name === 'string' && typeof item.primary === 'string')
+      .slice(0, 20)
+      .map((item) => ({
+        id: String(item.id || `custom-${crypto.randomUUID()}`),
+        name: String(item.name).trim().slice(0, 40),
+        primary: String(item.primary).trim(),
+        secondary: String(item.secondary ?? '').trim(),
+        custom: true,
+        server: 'custom' as const,
+      }))
+  } catch {
+    return []
+  }
+}
+
 // ── Free Config types ────────────────────────────────────────────────────────
 
 type FreeConfigPhase =
@@ -370,12 +409,87 @@ function App() {
   const [customDnsSecondary, setCustomDnsSecondary] = useState('')
   const [dnsApplyError, setDnsApplyError] = useState<string | null>(null)
   const [proxyDoH, setProxyDoH] = useState(false)
+  const [customDnsProfiles, setCustomDnsProfiles] = useState<DnsProfile[]>(loadCustomDnsProfiles)
+  const [selectedDnsProfileId, setSelectedDnsProfileId] = useState(() => {
+    const custom = loadCustomDnsProfiles()
+    return custom[0]?.id ?? 'cloudflare'
+  })
+  const allDnsProfiles = useMemo(
+    () => [...customDnsProfiles, ...BUILTIN_DNS_PROFILES],
+    [customDnsProfiles],
+  )
+  const activeDnsProfile = useMemo(() => {
+    if (standaloneDoH === 'off') return null
+    if (standaloneDoH === 'custom') {
+      return customDnsProfiles.find(
+        (profile) => profile.primary === customDnsPrimary && profile.secondary === customDnsSecondary,
+      ) ?? {
+        id: 'active-custom',
+        name: 'DNS دستی',
+        primary: customDnsPrimary,
+        secondary: customDnsSecondary,
+        custom: true,
+        server: 'custom' as const,
+      }
+    }
+    return BUILTIN_DNS_PROFILES.find((profile) => profile.server === standaloneDoH) ?? null
+  }, [customDnsPrimary, customDnsProfiles, customDnsSecondary, standaloneDoH])
+
+  function saveDnsProfiles(next: DnsProfile[]) {
+    setCustomDnsProfiles(next)
+    try { localStorage.setItem('manfaz:dns-profiles', JSON.stringify(next)) } catch {}
+    if (!next.some((profile) => profile.id === selectedDnsProfileId)) {
+      setSelectedDnsProfileId(next[0]?.id ?? 'cloudflare')
+    }
+  }
+
+  async function applyDnsProfile(profile: DnsProfile) {
+    setStandaloneDoHLoading(true)
+    setDnsApplyError(null)
+    try {
+      const result = await window.hamidsDeutsch.doh.setStandalone(
+        profile.custom
+          ? { server: 'custom', primary: profile.primary, secondary: profile.secondary }
+          : profile.server,
+      )
+      if (!result.success) {
+        setDnsApplyError(result.error)
+        return false
+      }
+      setStandaloneDoH(profile.server)
+      setCustomDnsPrimary(result.customDnsPrimary ?? profile.primary)
+      setCustomDnsSecondary(result.customDnsSecondary ?? profile.secondary)
+      setSelectedDnsProfileId(profile.id)
+      return true
+    } finally {
+      setStandaloneDoHLoading(false)
+    }
+  }
+
+  async function restoreSystemDns() {
+    setStandaloneDoHLoading(true)
+    setDnsApplyError(null)
+    try {
+      const result = await window.hamidsDeutsch.doh.setStandalone('off')
+      if (!result.success) {
+        setDnsApplyError(result.error)
+        return false
+      }
+      setStandaloneDoH('off')
+      return true
+    } finally {
+      setStandaloneDoHLoading(false)
+    }
+  }
   useEffect(() => {
     void window.hamidsDeutsch.doh.getSettings().then((r) => {
       setStandaloneDoH(r.standaloneDoHServer)
       setCustomDnsPrimary(r.customDnsPrimary)
       setCustomDnsSecondary(r.customDnsSecondary)
       setProxyDoH(r.proxyDoHEnabled)
+      if (r.standaloneDoHServer !== 'off' && r.standaloneDoHServer !== 'custom') {
+        setSelectedDnsProfileId(r.standaloneDoHServer)
+      }
     }).catch(() => {})
   }, [])
 
@@ -663,6 +777,7 @@ function App() {
     intentionalDisconnectRef.current = true
     try {
       await window.hamidsDeutsch.free.disconnect()
+      if (standaloneDoH !== 'off') await restoreSystemDns()
       setFreePhase('idle')
       setFreeNodeName(null)
       setFreeLatencyMs(null)
@@ -1516,6 +1631,10 @@ function App() {
       'manual',
     )
 
+    if (standaloneDoH !== 'off') {
+      await restoreSystemDns()
+    }
+
     ipVerification.reset()
     setTunVerified(false)
     setTunBaselineIp(null)
@@ -1637,6 +1756,7 @@ function App() {
       window.clearTimeout(initialTimer)
       window.clearInterval(intervalId)
     }
+
   // Method-level dependencies are intentionally stable; the containing hook
   // objects are recreated and would restart this watchdog every render.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1810,6 +1930,20 @@ function App() {
               ipVerificationResult={ipVerification.result}
               ipVerificationChecking={ipVerification.checking}
               isConnected={connectionVerified}
+              dnsProfiles={allDnsProfiles}
+              selectedDnsProfileId={selectedDnsProfileId}
+              dnsActive={standaloneDoH !== 'off'}
+              activeDnsProfile={activeDnsProfile}
+              dnsBusy={standaloneDoHLoading}
+              dnsError={dnsApplyError}
+              onDnsSelection={setSelectedDnsProfileId}
+              onDnsConnect={() => {
+                const profile = allDnsProfiles.find((item) => item.id === selectedDnsProfileId)
+                  ?? customDnsProfiles[0]
+                  ?? BUILTIN_DNS_PROFILES[0]
+                void applyDnsProfile(profile)
+              }}
+              onDnsDisconnect={() => void restoreSystemDns()}
               selectedServer={
                 selectedNode
                   ? toPublicServer(
@@ -2221,6 +2355,20 @@ function App() {
               customDnsPrimary={customDnsPrimary}
               customDnsSecondary={customDnsSecondary}
               dnsApplyError={dnsApplyError}
+              customDnsProfiles={customDnsProfiles}
+              onSaveDnsProfile={(profile) => {
+                const next: DnsProfile = {
+                  id: `custom-${crypto.randomUUID()}`,
+                  name: profile.name.trim() || `DNS ${profile.primary.trim()}`,
+                  primary: profile.primary.trim(),
+                  secondary: profile.secondary.trim(),
+                  custom: true,
+                  server: 'custom',
+                }
+                saveDnsProfiles([next, ...customDnsProfiles])
+                setSelectedDnsProfileId(next.id)
+              }}
+              onRemoveDnsProfile={(id) => saveDnsProfiles(customDnsProfiles.filter((profile) => profile.id !== id))}
               onCustomDnsChange={(primary, secondary) => {
                 setCustomDnsPrimary(primary)
                 setCustomDnsSecondary(secondary)
@@ -2233,8 +2381,8 @@ function App() {
                 )
                 if (r.success) {
                   setStandaloneDoH(server)
-                  setCustomDnsPrimary(r.customDnsPrimary)
-                  setCustomDnsSecondary(r.customDnsSecondary)
+                  setCustomDnsPrimary(r.customDnsPrimary ?? primary ?? '')
+                  setCustomDnsSecondary(r.customDnsSecondary ?? secondary ?? '')
                 } else {
                   setDnsApplyError(r.error)
                 }
@@ -2429,6 +2577,15 @@ type HomePageProps = {
   }
   ipVerificationChecking: boolean
   isConnected: boolean
+  dnsProfiles: DnsProfile[]
+  selectedDnsProfileId: string
+  dnsActive: boolean
+  activeDnsProfile: DnsProfile | null
+  dnsBusy: boolean
+  dnsError: string | null
+  onDnsSelection: (id: string) => void
+  onDnsConnect: () => void
+  onDnsDisconnect: () => void
   selectedServer: PublicServer | null
   selectedServerLatency: LatencyItem | null
   fastestServer: SafeServerNode | null
@@ -2482,6 +2639,15 @@ function HomePage({
   ipVerificationResult,
   ipVerificationChecking,
   isConnected,
+  dnsProfiles,
+  selectedDnsProfileId,
+  dnsActive,
+  activeDnsProfile,
+  dnsBusy,
+  dnsError,
+  onDnsSelection,
+  onDnsConnect,
+  onDnsDisconnect,
   selectedServer,
   selectedServerLatency,
   fastestServer,
@@ -2538,7 +2704,7 @@ function HomePage({
 
   // ── Error banner (top of hero, auto-dismisses after 10s or on connection) ──
   const freeConnectedLocal = freePhase === 'connected'
-  const heroConnectedLocal = isConnected || false || freeConnectedLocal
+  const heroConnectedLocal = isConnected || freeConnectedLocal || dnsActive
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const errorBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dismissErrorBanner = () => {
@@ -2619,10 +2785,10 @@ function HomePage({
   }
 
   const freeConnected = freeConnectedLocal
-  const otherMethodActive = processStatus.running || freeConnected
+  const otherMethodActive = processStatus.running || freeConnected || dnsActive
   const heroConnected = heroConnectedLocal
-  const activeMethod: 'free' | 'subscription' | null =
-    freeConnected ? 'free' : processStatus.running ? 'subscription' : null
+  const activeMethod: 'free' | 'subscription' | 'dns' | null =
+    freeConnected ? 'free' : processStatus.running ? 'subscription' : dnsActive ? 'dns' : null
 
   const isConnecting = processBusy && !heroConnected
   const isReconnecting = freePhase === 'reconnecting'
@@ -2736,6 +2902,8 @@ function HomePage({
             />
             {activeMethod === 'free'
                 ? `${t('home.free.title')} ${t('status.connected')}${freeNodeName ? ` · ${freeNodeName}` : ''}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}${isConnected ? ` · IP ${ipVerificationResult.proxyIp ?? t('stats.confirmed')}` : ''}`
+                : activeMethod === 'dns'
+                  ? `DNS · ${activeDnsProfile?.name ?? 'Custom'} · ${activeDnsProfile?.primary ?? ''}`
                 : isConnected
                   ? processStatus.connectionMode === 'tun'
                     ? `TUN · IP ${tunCurrentIp ?? t('stats.confirmed')}`
@@ -2859,6 +3027,7 @@ function HomePage({
           {heroConnected && (
             <button type="button" className="hero-disconnect-button" onClick={() => {
             if (activeMethod === 'free') handleFreeToggle()
+            else if (activeMethod === 'dns') onDnsDisconnect()
             else if (activeMethod === 'subscription') {
               requireSwitch(t('btn.disconnect'), 'اتصال قطع می‌شود. ادامه می‌دهید؟', () => { setSwitchConfirm(null); onMainAction() })
             }
@@ -2984,6 +3153,59 @@ function HomePage({
           secondaryActionLabel={t('home.prev.retest')}
           onSecondaryAction={onRetestLatency}
         />
+
+        <article className={`connection-choice-card dns-choice-card${dnsActive ? ' dns-choice-active' : ''}`}>
+          <div className="connection-choice-heading">
+            <div>
+              <span className="panel-kicker">{lang === 'fa' ? 'اتصال مستقل' : 'Standalone connection'}</span>
+              <h3>{lang === 'fa' ? 'اتصال فقط با DNS' : 'DNS-only connection'}</h3>
+            </div>
+            <InfoButton
+              fa="این اتصال فقط DNS آداپترهای فعال ویندوز را تغییر می‌دهد و VPN را روشن نمی‌کند. هنگام قطع اتصال، تنظیمات DNS قبلی هر آداپتر دقیقاً بازیابی می‌شود."
+              en="Changes DNS on active Windows adapters without starting the VPN. Disconnecting restores each adapter's previous DNS configuration."
+            />
+          </div>
+          <label className="dns-card-select">
+            <span>{lang === 'fa' ? 'سرویس DNS' : 'DNS service'}</span>
+            <select
+              value={selectedDnsProfileId}
+              disabled={dnsBusy}
+              onChange={(event) => onDnsSelection(event.target.value)}
+            >
+              {dnsProfiles.filter((profile) => profile.custom).length > 0 && (
+                <optgroup label={lang === 'fa' ? 'DNSهای من' : 'My DNS profiles'}>
+                  {dnsProfiles.filter((profile) => profile.custom).map((profile) => (
+                    <option key={profile.id} value={profile.id}>{profile.name} · {profile.primary}</option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label={lang === 'fa' ? 'DNSهای برنامه' : 'Built-in DNS'}>
+                {dnsProfiles.filter((profile) => !profile.custom).map((profile) => (
+                  <option key={profile.id} value={profile.id}>{profile.name} · {profile.primary}</option>
+                ))}
+              </optgroup>
+            </select>
+          </label>
+          <div className="connection-choice-server">
+            <strong>{dnsActive ? activeDnsProfile?.name : dnsProfiles.find((profile) => profile.id === selectedDnsProfileId)?.name}</strong>
+            <span dir="ltr">{dnsActive ? activeDnsProfile?.primary : dnsProfiles.find((profile) => profile.id === selectedDnsProfileId)?.primary}</span>
+          </div>
+          {dnsError && <div className="inline-error">{dnsError}</div>}
+          <div className="connection-choice-actions">
+            <button
+              className={dnsActive ? 'danger-button' : 'primary-button'}
+              type="button"
+              disabled={dnsBusy}
+              onClick={dnsActive ? onDnsDisconnect : onDnsConnect}
+            >
+              {dnsBusy
+                ? (lang === 'fa' ? 'در حال اعمال…' : 'Applying…')
+                : dnsActive
+                  ? t('btn.disconnect')
+                  : (lang === 'fa' ? 'اتصال DNS' : 'Connect DNS')}
+            </button>
+          </div>
+        </article>
       </section>
 
       {switchConfirm && (
@@ -6221,6 +6443,9 @@ function SettingsPage({
   customDnsPrimary,
   customDnsSecondary,
   dnsApplyError,
+  customDnsProfiles,
+  onSaveDnsProfile,
+  onRemoveDnsProfile,
   onCustomDnsChange,
   onStandaloneDoHChange,
   proxyDoH,
@@ -6309,6 +6534,9 @@ function SettingsPage({
   customDnsPrimary: string
   customDnsSecondary: string
   dnsApplyError: string | null
+  customDnsProfiles: DnsProfile[]
+  onSaveDnsProfile: (profile: { name: string; primary: string; secondary: string }) => void
+  onRemoveDnsProfile: (id: string) => void
   onCustomDnsChange: (primary: string, secondary: string) => void
   onStandaloneDoHChange: (
     server: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom',
@@ -6504,6 +6732,7 @@ function SettingsPage({
 
   const { lang } = useContext(LangCtx)
   const [dnsSelection, setDnsSelection] = useState(standaloneDoH)
+  const [customDnsName, setCustomDnsName] = useState('')
 
   useEffect(() => {
     setDnsSelection(standaloneDoH)
@@ -6663,6 +6892,17 @@ function SettingsPage({
         {dnsSelection === 'custom' && (
           <div className="custom-dns-panel">
             <label>
+              <span>{lang === 'fa' ? 'نام پروفایل' : 'Profile name'}</span>
+              <input
+                type="text"
+                value={customDnsName}
+                maxLength={40}
+                placeholder={lang === 'fa' ? 'مثلاً DNS محل کار' : 'e.g. Work DNS'}
+                disabled={standaloneDoHLoading}
+                onChange={(event) => setCustomDnsName(event.target.value)}
+              />
+            </label>
+            <label>
               <span>{lang === 'fa' ? 'DNS اصلی' : 'Primary DNS'}</span>
               <input
                 type="text"
@@ -6690,12 +6930,56 @@ function SettingsPage({
               className="primary-button"
               type="button"
               disabled={standaloneDoHLoading || customDnsPrimary.trim().length === 0}
-              onClick={() => void onStandaloneDoHChange('custom', customDnsPrimary, customDnsSecondary)}
+              onClick={() => {
+                onSaveDnsProfile({
+                  name: customDnsName,
+                  primary: customDnsPrimary,
+                  secondary: customDnsSecondary,
+                })
+                setCustomDnsName('')
+                void onStandaloneDoHChange('custom', customDnsPrimary, customDnsSecondary)
+              }}
             >
               {standaloneDoHLoading
                 ? (lang === 'fa' ? 'در حال تست و اعمال…' : 'Testing and applying…')
-                : (lang === 'fa' ? 'تست و اعمال DNS' : 'Test & apply DNS')}
+                : (lang === 'fa' ? 'ذخیره، تست و اعمال' : 'Save, test & apply')}
             </button>
+          </div>
+        )}
+
+        {customDnsProfiles.length > 0 && (
+          <div className="saved-dns-profiles">
+            <div className="saved-dns-heading">
+              <strong>{lang === 'fa' ? 'DNSهای ذخیره‌شده من' : 'My saved DNS profiles'}</strong>
+              <span>{customDnsProfiles.length}</span>
+            </div>
+            {customDnsProfiles.map((profile) => (
+              <div className="saved-dns-row" key={profile.id}>
+                <div>
+                  <strong>{profile.name}</strong>
+                  <span dir="ltr">{profile.primary}{profile.secondary ? ` · ${profile.secondary}` : ''}</span>
+                </div>
+                <div className="saved-dns-actions">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={standaloneDoHLoading}
+                    onClick={() => void onStandaloneDoHChange('custom', profile.primary, profile.secondary)}
+                  >
+                    {lang === 'fa' ? 'اعمال' : 'Apply'}
+                  </button>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    disabled={standaloneDoHLoading}
+                    aria-label={lang === 'fa' ? 'حذف' : 'Delete'}
+                    onClick={() => onRemoveDnsProfile(profile.id)}
+                  >
+                    <BrandIcon name="close" size={15} />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
