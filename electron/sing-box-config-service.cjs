@@ -254,7 +254,7 @@ async function createAndCheckTunConfig({
       outbound.server_port,
     configPath,
     interfaceName:
-      'HamidsDeutsch',
+      null,
     directDomainCount:
       normalizedDirectDomains.length,
     stdout: checkResult.stdout,
@@ -1199,29 +1199,36 @@ function buildTransportConfig(params) {
 
 function buildDirectRules(directDomains) {
   if (!directDomains || directDomains.length === 0) return []
-  // Two rules: exact domain match AND subdomain suffix match
+  const ipValues = directDomains.filter((value) =>
+    /^(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?$/.test(value) ||
+    /^[0-9a-f:]+(?:\/\d{1,3})?$/i.test(value),
+  )
+  const domains = directDomains.filter((value) => !ipValues.includes(value))
   return [
-    {
-      domain: directDomains,
+    ...(domains.length > 0 ? [{ domain: domains, outbound: 'direct' }] : []),
+    ...(domains.length > 0 ? [{
+      domain_suffix: domains.map((domain) => `.${domain}`),
       outbound: 'direct',
-    },
-    {
-      domain_suffix: directDomains,
-      outbound: 'direct',
-    },
+    }] : []),
+    ...(ipValues.length > 0 ? [{ ip_cidr: ipValues, outbound: 'direct' }] : []),
   ]
 }
 
 function buildDnsRules(directDomains) {
   if (!directDomains || directDomains.length === 0) return []
+  const domains = directDomains.filter((value) =>
+    !/^(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?$/.test(value) &&
+    !/^[0-9a-f:]+(?:\/\d{1,3})?$/i.test(value),
+  )
+  if (domains.length === 0) return []
   return [
     {
-      domain: directDomains,
+      domain: domains,
       action: 'route',
       server: 'dns-direct',
     },
     {
-      domain_suffix: directDomains,
+      domain_suffix: domains.map((domain) => `.${domain}`),
       action: 'route',
       server: 'dns-direct',
     },
@@ -1332,11 +1339,13 @@ function buildTunConfig(
   setSystemProxy = false,
   directApps = [],
 ) {
-  // Split tunneling: the selected apps bypass the tunnel (go direct); everything
-  // else routes through the proxy (final: 'proxy'). Matched by process basename.
-  const appNames = Array.isArray(directApps)
-    ? Array.from(new Set(directApps.map((a) => String(a).trim().toLowerCase()).filter(Boolean))).slice(0, 200)
-    : []
+  const appEntries = Array.isArray(directApps) ? directApps : []
+  const appNames = Array.from(new Set(appEntries.map((entry) =>
+    typeof entry === 'string' ? entry : entry?.processName,
+  ).map((value) => String(value ?? '').trim()).filter(Boolean))).slice(0, 500)
+  const appPaths = Array.from(new Set(appEntries.map((entry) =>
+    typeof entry === 'object' ? entry?.path : '',
+  ).map((value) => String(value ?? '').trim()).filter(Boolean))).slice(0, 500)
 
   const rules = [
     // Capture DNS before routing domain rules. Without this, Windows resolves a
@@ -1347,10 +1356,14 @@ function buildTunConfig(
       action: 'hijack-dns',
     },
     {
+      action: 'sniff',
+    },
+    {
       ip_is_private: true,
       outbound: 'direct',
     },
     ...(appNames.length > 0 ? [{ process_name: appNames, outbound: 'direct' }] : []),
+    ...(appPaths.length > 0 ? [{ process_path: appPaths, outbound: 'direct' }] : []),
     ...buildDirectRules(directDomains),
   ]
 
@@ -1364,16 +1377,14 @@ function buildTunConfig(
       {
         type: 'tun',
         tag: 'tun-in',
-        interface_name:
-          'HamidsDeutsch',
         address: [
           '172.19.0.1/30',
           'fdfe:dcba:9876::1/126',
         ],
-        mtu: 1500,
+        mtu: 1400,
         auto_route: true,
-        strict_route: true,
-        stack: 'mixed',
+        strict_route: false,
+        stack: 'system',
       },
       {
         type: 'mixed',
@@ -1679,7 +1690,7 @@ function normalizeDirectDomains(values) {
             .replace(/\.$/, ''),
         )
         .filter(Boolean)
-        .slice(0, 500),
+        .slice(0, 5000),
     ),
   )
 }

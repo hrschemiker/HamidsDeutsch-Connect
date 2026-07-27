@@ -7,6 +7,7 @@ const {
   Menu,
   nativeImage,
   dialog,
+  net,
 } = require('electron')
 
 const { autoUpdater } = require('electron-updater')
@@ -26,6 +27,7 @@ const fs = require('node:fs')
 const crypto = require('node:crypto')
 const {
   execFile,
+  spawn,
 } = require('node:child_process')
 const {
   promisify,
@@ -2362,8 +2364,8 @@ function registerIpcHandlers() {
           )
         }
 
-        const { getProcessNames } = require('./split-tunnel-store.cjs')
-        const directApps = await getProcessNames(app.getPath('userData')).catch(() => [])
+        const { getApps } = require('./split-tunnel-store.cjs')
+        const directApps = await getApps(app.getPath('userData')).catch(() => [])
 
         const result =
           await createAndCheckTunConfig({
@@ -2843,8 +2845,13 @@ function registerIpcHandlers() {
     }
     try {
       autoUpdateState.phase = 'downloading'
+      autoUpdateState.error = null
       sendAutoUpdateState()
-      await autoUpdater.downloadUpdate()
+      if (fallbackUpdateAsset) {
+        await downloadFallbackInstaller()
+      } else {
+        await autoUpdater.downloadUpdate()
+      }
       return { success: true, error: null }
     } catch (error) {
       autoUpdateState.phase = 'error'
@@ -2859,7 +2866,17 @@ function registerIpcHandlers() {
       if (autoUpdateState.phase !== 'ready') {
         return { success: false, error: 'The update has not finished downloading.' }
       }
-      autoUpdater.quitAndInstall(false, true)
+      if (downloadedFallbackInstaller) {
+        const installer = spawn(downloadedFallbackInstaller, [], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: false,
+        })
+        installer.unref()
+        setTimeout(() => app.quit(), 500)
+      } else {
+        autoUpdater.quitAndInstall(false, true)
+      }
       return { success: true, error: null }
     } catch (err) {
       console.error('[Updater] quitAndInstall error:', err?.message)
@@ -3533,6 +3550,100 @@ const autoUpdateState = {
   lastCheckedAt: null,
 }
 let autoUpdateCheckInFlight = null
+let fallbackUpdateAsset = null
+let downloadedFallbackInstaller = null
+
+function compareVersions(left, right) {
+  const a = String(left ?? '').replace(/^v/i, '').split('.').map((part) => Number.parseInt(part, 10) || 0)
+  const b = String(right ?? '').replace(/^v/i, '').split('.').map((part) => Number.parseInt(part, 10) || 0)
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    if ((a[index] ?? 0) > (b[index] ?? 0)) return 1
+    if ((a[index] ?? 0) < (b[index] ?? 0)) return -1
+  }
+  return 0
+}
+
+async function checkGithubReleaseFallback(reason) {
+  const response = await net.fetch(
+    'https://api.github.com/repos/hrschemiker/HamidsDeutsch-Connect/releases/latest',
+    {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': `Manfaz-VPN/${app.getVersion()}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+  )
+  if (!response.ok) throw new Error(`GitHub update service returned HTTP ${response.status}.`)
+  const release = await response.json()
+  const version = String(release?.tag_name ?? release?.name ?? '').replace(/^v/i, '')
+  if (!version) throw new Error('The latest GitHub release has no version.')
+
+  autoUpdateState.lastCheckedAt = new Date().toISOString()
+  autoUpdateState.retryAfterConnection = false
+  autoUpdateState.error = null
+  fallbackUpdateAsset = Array.isArray(release?.assets)
+    ? release.assets.find((asset) => /\.exe$/i.test(asset?.name ?? '') && /setup/i.test(asset?.name ?? '')) ?? null
+    : null
+
+  if (compareVersions(version, app.getVersion()) > 0) {
+    autoUpdateState.phase = 'available'
+    autoUpdateState.availableVersion = version
+    autoUpdateState.percent = 0
+  } else {
+    autoUpdateState.phase = 'idle'
+    autoUpdateState.availableVersion = null
+    autoUpdateState.percent = 0
+  }
+  sendAutoUpdateState()
+  return { success: true, updateInfo: { version, releaseUrl: release?.html_url ?? null }, reason }
+}
+
+async function downloadFallbackInstaller() {
+  if (!fallbackUpdateAsset?.browser_download_url) {
+    throw new Error('Installer asset is not available in the GitHub release.')
+  }
+  const response = await net.fetch(fallbackUpdateAsset.browser_download_url, {
+    headers: { 'User-Agent': `Manfaz-VPN/${app.getVersion()}` },
+  })
+  if (!response.ok || !response.body) {
+    throw new Error(`Installer download failed with HTTP ${response.status}.`)
+  }
+
+  const safeName = path.basename(String(fallbackUpdateAsset.name ?? 'Manfaz-VPN-Update.exe'))
+  const target = path.join(app.getPath('temp'), safeName)
+  const file = await fs.promises.open(target, 'w')
+  const reader = response.body.getReader()
+  const total = Number(response.headers.get('content-length') ?? fallbackUpdateAsset.size ?? 0)
+  let received = 0
+  const hash = crypto.createHash('sha256')
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const chunk = Buffer.from(value)
+      await file.write(chunk)
+      hash.update(chunk)
+      received += chunk.length
+      autoUpdateState.percent = total > 0 ? Math.min(99, Math.round((received / total) * 100)) : 0
+      sendAutoUpdateState()
+    }
+  } finally {
+    await file.close()
+  }
+
+  const actualDigest = hash.digest('hex').toLowerCase()
+  const expectedDigest = String(fallbackUpdateAsset.digest ?? '').replace(/^sha256:/i, '').toLowerCase()
+  if (expectedDigest && expectedDigest !== actualDigest) {
+    await fs.promises.rm(target, { force: true })
+    throw new Error('Downloaded installer integrity check failed.')
+  }
+  downloadedFallbackInstaller = target
+  autoUpdateState.phase = 'ready'
+  autoUpdateState.percent = 100
+  autoUpdateState.error = null
+  sendAutoUpdateState()
+}
 
 function sendAutoUpdateState() {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -3560,11 +3671,17 @@ async function checkForAppUpdate(reason = 'scheduled') {
       sendAutoUpdateState()
       return { success: true, updateInfo: result?.updateInfo ?? null, reason }
     } catch (error) {
-      autoUpdateState.phase = 'error'
-      autoUpdateState.error = error instanceof Error ? error.message : 'Update check failed.'
-      autoUpdateState.retryAfterConnection = true
-      sendAutoUpdateState()
-      return { success: false, error: autoUpdateState.error, reason }
+      try {
+        return await checkGithubReleaseFallback(reason)
+      } catch (fallbackError) {
+        autoUpdateState.phase = 'error'
+        autoUpdateState.error = fallbackError instanceof Error
+          ? fallbackError.message
+          : error instanceof Error ? error.message : 'Update check failed.'
+        autoUpdateState.retryAfterConnection = true
+        sendAutoUpdateState()
+        return { success: false, error: autoUpdateState.error, reason }
+      }
     } finally {
       autoUpdateCheckInFlight = null
     }

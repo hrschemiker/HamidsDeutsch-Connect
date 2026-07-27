@@ -8101,3 +8101,132 @@ textarea:hover {
 .zeus-deploy-btn:hover:not(:disabled), .zeus-connect-btn:hover:not(:disabled) {
   background: linear-gradient(135deg, #4f46e5, #6366f1) !important;
 }
+
+/* v2.17 focused UI corrections */
+.hero-live-stats {
+  justify-content: center;
+  align-self: center;
+  width: min(100%, 620px);
+}
+
+.hero-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hero-disconnect-button {
+  display: inline-flex;
+  min-width: 118px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--red) 42%, var(--border));
+  border-radius: 10px;
+  background: var(--red-soft);
+  color: var(--red);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.hero-disconnect-button:hover {
+  background: color-mix(in srgb, var(--red) 18%, var(--surface));
+  transform: translateY(-1px);
+}
+
+.hero-disconnect-button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--red) 34%, transparent);
+  outline-offset: 2px;
+}
+
+.topbar-controls {
+  gap: 18px;
+}
+
+.info-btn {
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.info-panel-backdrop {
+  position: fixed;
+  z-index: 9998;
+  inset: 0;
+  background: rgba(4, 7, 12, .28);
+  backdrop-filter: blur(2px);
+}
+
+.info-panel,
+.panel-heading .info-btn-wrap .info-panel,
+.heading-end-row .info-panel {
+  position: fixed;
+  z-index: 9999;
+  inset: 50% auto auto 50%;
+  display: flex;
+  width: min(420px, calc(100vw - 32px));
+  min-width: 0;
+  max-width: none;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px;
+  overflow: visible;
+  border-radius: 14px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .38);
+  transform: translate(-50%, -50%);
+}
+
+.info-panel > span {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.info-panel-close {
+  display: grid;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.setting-title-with-info {
+  display: inline-flex !important;
+  flex: 0 1 auto !important;
+  align-items: center;
+  flex-direction: row !important;
+  gap: 8px !important;
+}
+
+.setting-row > div:has(.setting-title-with-info) {
+  flex-basis: 360px;
+}
+
+@media (max-width: 760px) {
+  .topbar-controls {
+    gap: 14px;
+  }
+
+  .hero-live-stats {
+    width: 100%;
+  }
+}

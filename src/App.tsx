@@ -169,9 +169,15 @@ function InfoButton({ fa, en }: { fa: string; en: string }) {
         <BrandIcon name="info" size={16} />
       </button>
       {open && (
-        <span className="info-panel" role="note">
-          {text}
-        </span>
+        <>
+          <span className="info-panel-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />
+          <span className="info-panel" role="note">
+            <span>{text}</span>
+            <button type="button" className="info-panel-close" onClick={() => setOpen(false)} aria-label={lang === 'fa' ? 'بستن' : 'Close'}>
+              <BrandIcon name="close" size={16} />
+            </button>
+          </span>
+        </>
       )}
     </span>
   )
@@ -2838,45 +2844,30 @@ function HomePage({
           )}
         </div>
 
-        <button
-          type="button"
-          className={`hero-visual${heroConnected ? ' hero-visual-clickable' : ''}`}
-          disabled={!heroConnected}
-          aria-label={heroConnected ? t('btn.disconnect') : (lang === 'fa' ? 'نمایش وضعیت اتصال' : 'Connection status')}
-          onClick={heroConnected ? () => {
-            if (activeMethod === 'free') handleFreeToggle()
-            else if (activeMethod === 'subscription') {
-              requireSwitch(t('btn.disconnect'), 'اتصال قطع می‌شود. ادامه می‌دهید؟', () => { setSwitchConfirm(null); onMainAction() })
-            }
-          } : undefined}
-        >
+        <div className="hero-visual">
           <div className={orbitClass}>
             <div className="connection-orbit-middle">
               <div className="connection-orbit-core">
                 <img
                   src="logo.png"
                   className={`orbit-logo${heroConnected ? ' orbit-logo-online' : ''}${isConnecting ? ' orbit-logo-connecting' : ''}`}
-                  alt={heroConnected ? t('btn.disconnect') : ''}
+                  alt=""
                 />
-                {heroConnected && (
-                  <div className="orbit-disconnect-hint">
-                    <BrandIcon name="power" size={18} />
-                    <span>{t('btn.disconnect')}</span>
-                  </div>
-                )}
               </div>
             </div>
           </div>
           {heroConnected && (
-            <div className="hero-mode-pill">
-              {freePhase === 'connected'
-                ? t('hero.modeFree')
-                : lastConnectionType === 'bpb'
-                  ? 'BPB Panel'
-                  : t('hero.modeSubscription')}
-            </div>
+            <button type="button" className="hero-disconnect-button" onClick={() => {
+            if (activeMethod === 'free') handleFreeToggle()
+            else if (activeMethod === 'subscription') {
+              requireSwitch(t('btn.disconnect'), 'اتصال قطع می‌شود. ادامه می‌دهید؟', () => { setSwitchConfirm(null); onMainAction() })
+            }
+          }}>
+              <BrandIcon name="power" size={16} />
+              <span>{t('btn.disconnect')}</span>
+            </button>
           )}
-        </button>
+        </div>
       </section>
 
       {showReconnect && !heroConnected && (
@@ -5023,11 +5014,12 @@ function NetworkRepairRow({ lang }: { lang: 'fa' | 'en' }) {
 
   return (
     <div className="setting-row">
-      <div>
+      <div className="setting-title-with-info">
         <strong>{lang === 'fa' ? 'تعمیر شبکه' : 'Repair network'}</strong>
-        <span>{lang === 'fa'
-          ? 'اگر بعد از یک قطع ناگهانی، سرورهای اشتراک لود نمی‌شوند یا اتصال روی «تعیین IP» می‌ماند، این را بزن: پروکسی گیرکرده‌ی ویندوز پاک می‌شود، موتورهای باقی‌مانده بسته می‌شوند و قفل اضطراری برداشته می‌شود.'
-          : 'If subscriptions won’t load or a connection hangs on "verifying IP" after a hard stop, run this: it clears a stuck Windows proxy, kills orphan engines, and lifts any kill-switch block.'}</span>
+        <InfoButton
+          fa="اگر بعد از یک قطع ناگهانی، سرورهای اشتراک لود نمی‌شوند یا اتصال روی «تعیین IP» می‌ماند، این ابزار پروکسی گیرکرده ویندوز را پاک می‌کند، موتورهای باقی‌مانده را می‌بندد و قفل اضطراری را برمی‌دارد."
+          en='If subscriptions will not load or a connection hangs on "verifying IP" after a hard stop, this clears a stuck Windows proxy, closes orphan engines, and lifts the emergency block.'
+        />
       </div>
       <button className="secondary-button" type="button" onClick={() => void repair()} disabled={busy}>
         <BrandIcon name={done ? 'check' : 'repair'} size={16} />
@@ -6203,10 +6195,10 @@ function SettingsPage({
   settings,
   onUpdate,
   onReset,
-  directDomainCount,
+  directDomainCount: _directDomainCount,
   administratorAvailable,
   connected,
-  onOpenDirectSites,
+  onOpenDirectSites: _onOpenDirectSites,
   onOpenVirtualLocationExtension,
   onDownloadExtensionZip,
   currentEngineVersion,
@@ -6510,8 +6502,7 @@ function SettingsPage({
     }
   }
 
-  const { theme, setTheme } = useContext(ThemeCtx)
-  const { lang, setLang } = useContext(LangCtx)
+  const { lang } = useContext(LangCtx)
   const [dnsSelection, setDnsSelection] = useState(standaloneDoH)
 
   useEffect(() => {
@@ -6527,76 +6518,10 @@ function SettingsPage({
   return (
     <div className="page-stack settings-page">
       <nav className="settings-section-nav" aria-label={lang === 'fa' ? 'بخش‌های تنظیمات' : 'Settings sections'}>
-        <a href="#settings-appearance"><BrandIcon name="sun" size={16} />{lang === 'fa' ? 'ظاهر' : 'Appearance'}</a>
         <a href="#settings-connection"><BrandIcon name="route" size={16} />{lang === 'fa' ? 'اتصال' : 'Connection'}</a>
         <a href="#settings-updates"><BrandIcon name="update" size={16} />{lang === 'fa' ? 'به‌روزرسانی' : 'Updates'}</a>
-        <a href="#settings-privacy"><BrandIcon name="shield" size={16} />{lang === 'fa' ? 'حریم خصوصی' : 'Privacy'}</a>
         <a href="#settings-tools"><BrandIcon name="repair" size={16} />{lang === 'fa' ? 'ابزارها' : 'Tools'}</a>
       </nav>
-
-      {/* ── Appearance ─────────────────────────────────────────────── */}
-      <section className="panel-card settings-card" id="settings-appearance">
-        <div className="panel-heading">
-          <div>
-            <span className="panel-kicker">{lang === 'fa' ? 'نمای برنامه' : 'Appearance'}</span>
-            <h3>{t('settings.appearance')}</h3>
-          </div>
-        </div>
-
-        <div className="appearance-options">
-          <label className="appearance-option">
-            <input
-              type="radio"
-              name="theme"
-              value="dark"
-              checked={theme === 'dark'}
-              onChange={() => setTheme('dark')}
-            />
-            <span className="appearance-option-icon"><BrandIcon name="moon" size={20} /></span>
-            <span>{t('settings.dark')}</span>
-          </label>
-          <label className="appearance-option">
-            <input
-              type="radio"
-              name="theme"
-              value="light"
-              checked={theme === 'light'}
-              onChange={() => setTheme('light')}
-            />
-            <span className="appearance-option-icon"><BrandIcon name="sun" size={20} /></span>
-            <span>{t('settings.light')}</span>
-          </label>
-        </div>
-
-        <div className="appearance-options appearance-language-options">
-          <label className="appearance-option">
-            <input
-              type="radio"
-              name="lang"
-              value="fa"
-              checked={lang === 'fa'}
-              onChange={() => setLang('fa')}
-            />
-            <span className="appearance-option-icon"><BrandIcon name="language" size={20} /></span>
-            <span>{t('settings.langFa')}</span>
-          </label>
-          <label className="appearance-option">
-            <input
-              type="radio"
-              name="lang"
-              value="en"
-              checked={lang === 'en'}
-              onChange={() => setLang('en')}
-            />
-            <span className="appearance-option-icon"><BrandIcon name="language" size={20} /></span>
-            <span>{t('settings.langEn')}</span>
-          </label>
-        </div>
-
-        <p className="inline-notice appearance-note">
-          {t('settings.appearanceNote')}
-        </p>
-      </section>
 
       {/* ── Connection routing ──────────────────────────────────────── */}
       <section className="panel-card">
@@ -6706,12 +6631,12 @@ function SettingsPage({
         </div>
 
         <div className="setting-row">
-          <div>
+          <div className="setting-title-with-info">
             <strong>{lang === 'fa' ? 'DNS سیستم' : 'System DNS'}</strong>
-            <span>{lang === 'fa'
-              ? 'پیش از اعمال، پاسخ واقعی سرورها بررسی می‌شود و سپس DNS همه آداپترهای فعال ویندوز تغییر می‌کند. گزینه‌های خارجی در Windows 11 با DoH رمزگذاری می‌شوند.'
-              : 'Servers are queried before use, then applied to every active Windows adapter. International presets use encrypted DoH on Windows 11.'
-            }</span>
+            <InfoButton
+              fa="پیش از اعمال، پاسخ واقعی سرورها بررسی می‌شود و سپس DNS همه آداپترهای فعال ویندوز تغییر می‌کند. گزینه‌های خارجی در Windows 11 با DoH رمزگذاری می‌شوند."
+              en="Servers are queried before use, then applied to every active Windows adapter. International presets use encrypted DoH on Windows 11."
+            />
           </div>
           <select
             className="doh-server-select"
@@ -6845,9 +6770,11 @@ function SettingsPage({
 
         {updateState.error && (
           <p className="inline-notice">
-            {updateState.retryAfterConnection && lang === 'fa'
+            {updateState.retryAfterConnection && lang === 'fa' && !connected
               ? 'GitHub فعلاً در دسترس نیست؛ پس از اتصال موفق، بررسی خودکار تکرار می‌شود.'
-              : updateState.error}
+              : lang === 'fa'
+                ? `بررسی آپدیت انجام نشد: ${updateState.error}`
+                : updateState.error}
           </p>
         )}
 
@@ -6873,39 +6800,6 @@ function SettingsPage({
             </button>
           )}
         </div>
-      </section>
-
-      <section className="panel-card settings-card" id="settings-privacy">
-        <div className="panel-heading">
-          <div>
-            <span className="panel-kicker">
-              {lang === 'fa' ? 'تفکیک ترافیک' : 'Split Tunneling'}
-            </span>
-            <h3>
-              {t('settings.direct.title')}
-            </h3>
-          </div>
-
-          <div className="heading-end-row">
-            <span className="count-badge">
-              {directDomainCount} {t('settings.direct.domains')}
-            </span>
-            <InfoButton
-              fa="دامنه‌های این فهرست از خروجی مستقیم اینترنت باز می‌شوند و وارد تونل نمی‌شوند. این قانون هم در TUN و هم در System Proxy اعمال می‌شود."
-              en="Domains in this list bypass the VPN tunnel and connect directly. This rule applies in both TUN and System Proxy modes."
-            />
-          </div>
-        </div>
-
-        <button
-          className="primary-button compact-primary"
-          type="button"
-          onClick={
-            onOpenDirectSites
-          }
-        >
-          {t('settings.direct.manage')}
-        </button>
       </section>
 
       <section className="panel-card settings-card engine-update-card" id="settings-tools">
@@ -7444,8 +7338,10 @@ function SettingRow({
       }
     >
       <div>
-        <strong>{title}</strong>
-        <span>{description}</span>
+        <span className="setting-title-with-info">
+          <strong>{title}</strong>
+          <InfoButton fa={description} en={description} />
+        </span>
       </div>
 
       <label className="switch">
