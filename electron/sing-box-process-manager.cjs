@@ -580,7 +580,6 @@ async function stopLocalProxy({
     activeProcess
 
   const shouldRestoreWindowsProxy =
-    processState.systemProxyEnabled &&
     typeof userDataPath === 'string' &&
     userDataPath.trim()
 

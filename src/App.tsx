@@ -390,6 +390,8 @@ function App() {
   // Last connection for one-tap reconnect
   const [lastConnectionType, setLastConnectionType] = useState<'free' | 'subscription' | null>(null)
   const [showReconnectBar, setShowReconnectBar] = useState(false)
+  // Session-scoped by design: survives tab navigation, resets on every app launch.
+  const [freeRiskAcknowledged, setFreeRiskAcknowledged] = useState(false)
 
   // Ctrl+Enter keyboard shortcut toggle (UX #9)
   const [ctrlEnterEnabled, setCtrlEnterEnabled] = useState<boolean>(() => {
@@ -1938,6 +1940,8 @@ function App() {
               ipVerificationResult={ipVerification.result}
               ipVerificationChecking={ipVerification.checking}
               isConnected={connectionVerified}
+              freeRiskAcknowledged={freeRiskAcknowledged}
+              onAcknowledgeFreeRisk={() => setFreeRiskAcknowledged(true)}
               dnsProfiles={allDnsProfiles}
               selectedDnsProfileId={selectedDnsProfileId}
               dnsActive={standaloneDoH !== 'off'}
@@ -2586,6 +2590,8 @@ type HomePageProps = {
   }
   ipVerificationChecking: boolean
   isConnected: boolean
+  freeRiskAcknowledged: boolean
+  onAcknowledgeFreeRisk: () => void
   dnsProfiles: DnsProfile[]
   selectedDnsProfileId: string
   dnsActive: boolean
@@ -2648,6 +2654,8 @@ function HomePage({
   ipVerificationResult,
   ipVerificationChecking,
   isConnected,
+  freeRiskAcknowledged,
+  onAcknowledgeFreeRisk,
   dnsProfiles,
   selectedDnsProfileId,
   dnsActive,
@@ -2698,7 +2706,6 @@ function HomePage({
 
   // ── Local reconnect dismiss ───────────────────────────────────────────────
   const [reconnectDismissed, setReconnectDismissed] = useState(false)
-  const [freeRiskAcknowledged, setFreeRiskAcknowledged] = useState(false)
   useEffect(() => { if (showReconnectBar) setReconnectDismissed(false) }, [showReconnectBar])
   function setShowReconnectBarLocal(v: boolean) { if (!v) setReconnectDismissed(true) }
   const showReconnect = showReconnectBar && !reconnectDismissed
@@ -3307,7 +3314,7 @@ function HomePage({
                   ? 'کانفیگ‌های عمومی رایگان تحت کنترل Manfaz نیستند و امنیت یا حریم خصوصی آن‌ها تضمین نمی‌شود.'
                   : 'Public free configurations are not controlled by Manfaz. Their security and privacy cannot be guaranteed.'}
               </p>
-              <button className="warning-ack-button" type="button" onClick={() => setFreeRiskAcknowledged(true)}>
+              <button className="warning-ack-button" type="button" onClick={onAcknowledgeFreeRisk}>
                 {lang === 'fa' ? 'متوجه شدم' : 'I understand'}
               </button>
             </div>
@@ -3321,7 +3328,9 @@ function HomePage({
             <span>{lang === 'fa' ? 'MANFAZ PREMIUM' : 'MANFAZ PREMIUM'}</span>
             <strong>{lang === 'fa' ? 'اتصال مطمئن، برای هر روز' : 'Reliable connectivity, every day'}</strong>
             <p>{lang === 'fa' ? 'سرویس اختصاصی با سرعت پایدار و پشتیبانی واقعی' : 'Private service with consistent speed and real support'}</p>
-            <div>{lang === 'fa' ? 'سرویس‌های حرفه‌ای منفذ' : 'Manfaz professional services'}</div>
+            <a href="https://t.me/ManfazVpnBot" target="_blank" rel="noopener noreferrer">
+              {lang === 'fa' ? 'مشاهده سرویس‌ها' : 'View services'}
+            </a>
           </div>
         </article>
       </section>
@@ -6787,12 +6796,6 @@ function SettingsPage({
 
   return (
     <div className="page-stack settings-page">
-      <nav className="settings-section-nav" aria-label={lang === 'fa' ? 'بخش‌های تنظیمات' : 'Settings sections'}>
-        <a href="#settings-connection"><BrandIcon name="route" size={16} />{lang === 'fa' ? 'اتصال' : 'Connection'}</a>
-        <a href="#settings-updates"><BrandIcon name="update" size={16} />{lang === 'fa' ? 'به‌روزرسانی' : 'Updates'}</a>
-        <a href="#settings-tools"><BrandIcon name="repair" size={16} />{lang === 'fa' ? 'ابزارها' : 'Tools'}</a>
-      </nav>
-
       {/* ── Connection routing ──────────────────────────────────────── */}
       <section className="panel-card">
         <div className="panel-heading">

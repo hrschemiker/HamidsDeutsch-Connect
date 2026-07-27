@@ -2861,6 +2861,9 @@ function registerIpcHandlers() {
     try {
       if (server === 'off') {
         await disableStandaloneDoH(app.getPath('userData'))
+        // DNS-only disconnect is also a safe recovery boundary for a local
+        // Manfaz proxy left enabled by an interrupted VPN session.
+        await restoreWindowsProxyState(app.getPath('userData'))
       } else {
         await enableStandaloneDoH(server, custom, app.getPath('userData'))
       }

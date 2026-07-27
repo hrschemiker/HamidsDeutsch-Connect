@@ -130,6 +130,11 @@ async function restoreWindowsProxyState(
     backup.values,
   )
 
+  // A stale backup from an interrupted older session may itself contain our
+  // local 127.0.0.1:2080 proxy. Never restore that dead endpoint after the
+  // engine has stopped; genuine user-configured proxies remain untouched.
+  await forceDisableLocalManualProxy()
+
   await fsp.rm(
     backupPath,
     {
