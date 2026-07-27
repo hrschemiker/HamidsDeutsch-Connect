@@ -220,6 +220,9 @@ let closeToTrayEnabled = true
 let standaloneDoHServer = 'off'   // 'off' | 'cloudflare' | 'google'
 let customDnsPrimary = ''
 let customDnsSecondary = ''
+let preferredDnsServer = 'cloudflare'
+let preferredDnsPrimary = ''
+let preferredDnsSecondary = ''
 let proxyDoHEnabled = false
 let autoUpdateEnabled = true
 
@@ -238,6 +241,16 @@ async function loadAppSettings() {
     standaloneDoHServer = parsed.standaloneDoHServer ?? 'off'
     customDnsPrimary = typeof parsed.customDnsPrimary === 'string' ? parsed.customDnsPrimary : ''
     customDnsSecondary = typeof parsed.customDnsSecondary === 'string' ? parsed.customDnsSecondary : ''
+    preferredDnsServer = parsed.preferredDnsServer
+      ?? (parsed.standaloneDoHServer && parsed.standaloneDoHServer !== 'off'
+        ? parsed.standaloneDoHServer
+        : 'cloudflare')
+    preferredDnsPrimary = typeof parsed.preferredDnsPrimary === 'string'
+      ? parsed.preferredDnsPrimary
+      : customDnsPrimary
+    preferredDnsSecondary = typeof parsed.preferredDnsSecondary === 'string'
+      ? parsed.preferredDnsSecondary
+      : customDnsSecondary
     proxyDoHEnabled = parsed.proxyDoHEnabled === true
     autoUpdateEnabled = parsed.autoUpdateEnabled !== false
   } catch {
@@ -245,6 +258,9 @@ async function loadAppSettings() {
     standaloneDoHServer = 'off'
     customDnsPrimary = ''
     customDnsSecondary = ''
+    preferredDnsServer = 'cloudflare'
+    preferredDnsPrimary = ''
+    preferredDnsSecondary = ''
     proxyDoHEnabled = false
     autoUpdateEnabled = true
   }
@@ -259,9 +275,36 @@ async function saveAppSettings() {
     standaloneDoHServer,
     customDnsPrimary,
     customDnsSecondary,
+    preferredDnsServer,
+    preferredDnsPrimary,
+    preferredDnsSecondary,
     proxyDoHEnabled,
     autoUpdateEnabled,
   }, null, 2), 'utf8')
+}
+
+const VPN_DNS_PRESETS = {
+  cloudflare: { primary: '1.1.1.1', secondary: '1.0.0.1', label: 'Cloudflare' },
+  'cloudflare-family': { primary: '1.1.1.3', secondary: '1.0.0.3', label: 'Cloudflare Family' },
+  google: { primary: '8.8.8.8', secondary: '8.8.4.4', label: 'Google' },
+  adguard: { primary: '94.140.14.14', secondary: '94.140.15.15', label: 'AdGuard' },
+  shecan: { primary: '178.22.122.100', secondary: '185.51.200.2', label: 'Shecan' },
+  radar: { primary: '10.202.10.10', secondary: '10.202.10.11', label: 'Radar' },
+  electro: { primary: '78.157.42.100', secondary: '78.157.42.101', label: 'Electro' },
+}
+
+function getPreferredVpnDnsConfig() {
+  if (preferredDnsServer === 'off') return null
+  if (preferredDnsServer === 'custom') {
+    const primary = String(preferredDnsPrimary ?? '').trim()
+    if (!primary) return null
+    return {
+      primary,
+      secondary: String(preferredDnsSecondary ?? '').trim(),
+      label: 'Custom DNS',
+    }
+  }
+  return VPN_DNS_PRESETS[preferredDnsServer] ?? VPN_DNS_PRESETS.cloudflare
 }
 
 // Legacy single-value save — kept so existing callers still work
@@ -755,6 +798,7 @@ async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOp
       localPort: 2080,
       setSystemProxy: true,
       proxyDoH: proxyDoHEnabled,
+      vpnDns: getPreferredVpnDnsConfig(),
       upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
       utlsSettings,
       cfCleanIp,
@@ -2255,6 +2299,7 @@ function registerIpcHandlers() {
           directDomains,
           rescueOptions: effectiveRescueOptions,
           proxyDoH: proxyDoHEnabled,
+          vpnDns: getPreferredVpnDnsConfig(),
           upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
           utlsSettings,
           cfCleanIp: cleanIp,
@@ -2382,6 +2427,7 @@ function registerIpcHandlers() {
             directDomains,
             rescueOptions,
             directApps,
+            vpnDns: getPreferredVpnDnsConfig(),
           })
 
         console.log(
@@ -2755,6 +2801,9 @@ function registerIpcHandlers() {
       standaloneDoHServer,
       customDnsPrimary,
       customDnsSecondary,
+      preferredDnsServer,
+      preferredDnsPrimary,
+      preferredDnsSecondary,
       proxyDoHEnabled,
       standaloneActive: status.active,
       activeConfig: status.config,
@@ -2771,6 +2820,33 @@ function registerIpcHandlers() {
       return await testDnsConfig(server, custom)
     } catch (error) {
       return { success: false, results: [], error: error?.message ?? 'DNS test failed.' }
+    }
+  })
+
+  ipcMain.handle('doh:set-preferred', async (_event, input) => {
+    const server = typeof input === 'string' ? input : input?.server
+    const allowed = new Set(['off', ...Object.keys(VPN_DNS_PRESETS), 'custom'])
+    if (!allowed.has(server)) {
+      return { success: false, error: 'DNS profile is not supported.' }
+    }
+    if (server === 'custom') {
+      const primary = String(input?.primary ?? '').trim()
+      const secondary = String(input?.secondary ?? '').trim()
+      const ipv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/
+      if (!ipv4.test(primary) || (secondary && !ipv4.test(secondary))) {
+        return { success: false, error: 'Custom DNS addresses must be valid IPv4 addresses.' }
+      }
+      preferredDnsPrimary = primary
+      preferredDnsSecondary = secondary
+    }
+    preferredDnsServer = server
+    await saveAppSettings()
+    return {
+      success: true,
+      preferredDnsServer,
+      preferredDnsPrimary,
+      preferredDnsSecondary,
+      error: null,
     }
   })
 

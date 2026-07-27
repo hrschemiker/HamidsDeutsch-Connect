@@ -42,6 +42,7 @@ async function createAndCheckConfig({
   localPort = 2080,
   setSystemProxy = false,
   proxyDoH = false,
+  vpnDns = null,
   upstreamProxy = null,
   utlsSettings = null,
   cfCleanIp = null,
@@ -102,6 +103,7 @@ async function createAndCheckConfig({
     localPort,
     setSystemProxy,
     proxyDoH,
+    vpnDns,
     upstreamProxy,
     clashApiPort,
   )
@@ -160,6 +162,7 @@ async function createAndCheckTunConfig({
   setSystemProxy = false,
   utlsSettings = null,
   directApps = [],
+  vpnDns = null,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -217,6 +220,7 @@ async function createAndCheckTunConfig({
       localPort,
       setSystemProxy,
       directApps,
+      vpnDns,
     )
 
   const runtimeDirectory = path.join(
@@ -1235,15 +1239,24 @@ function buildDnsRules(directDomains) {
   ]
 }
 
-function buildProxyDnsBlock(directDomains = []) {
-  return {
-    servers: [
-      {
+function buildProxyDnsBlock(directDomains = [], vpnDns = null) {
+  const selectedDns = vpnDns?.primary
+    ? {
+        tag: 'dns-proxy',
+        type: 'udp',
+        server: vpnDns.primary,
+        server_port: 53,
+        detour: 'proxy',
+      }
+    : {
         tag: 'dns-proxy',
         type: 'tls',
         server: '1.1.1.1',
         detour: 'proxy',
-      },
+      }
+  return {
+    servers: [
+      selectedDns,
       {
         tag: 'dns-direct',
         type: 'local',
@@ -1261,20 +1274,22 @@ function buildConfig(
   localPort = 2080,
   setSystemProxy = false,
   proxyDoH = false,
+  vpnDns = null,
   upstreamProxy = null,
   clashApiPort = 9090,
 ) {
   const rules = buildDirectRules(directDomains)
   const outbounds = []
+  const useInternalDns = proxyDoH || Boolean(vpnDns?.primary)
 
   // If upstream proxy chaining is enabled, route the main proxy outbound through it
   const resolvedProxyOutbound = upstreamProxy?.enabled && upstreamProxy?.host
-    ? { ...(proxyDoH ? { ...proxyOutbound, domain_resolver: 'dns-direct' } : proxyOutbound), detour: 'upstream-proxy' }
-    : (proxyDoH ? { ...proxyOutbound, domain_resolver: 'dns-direct' } : proxyOutbound)
+    ? { ...(useInternalDns ? { ...proxyOutbound, domain_resolver: 'dns-proxy' } : proxyOutbound), detour: 'upstream-proxy' }
+    : (useInternalDns ? { ...proxyOutbound, domain_resolver: 'dns-proxy' } : proxyOutbound)
 
   outbounds.push(resolvedProxyOutbound)
   outbounds.push(
-    proxyDoH
+    useInternalDns
       ? { type: 'direct', tag: 'direct', domain_resolver: 'dns-direct' }
       : { type: 'direct', tag: 'direct' },
   )
@@ -1309,8 +1324,8 @@ function buildConfig(
     },
   }
 
-  if (proxyDoH) {
-    config.dns = buildProxyDnsBlock(directDomains)
+  if (useInternalDns) {
+    config.dns = buildProxyDnsBlock(directDomains, vpnDns)
   }
 
   config.experimental = { clash_api: { external_controller: `127.0.0.1:${clashApiPort}` } }
@@ -1338,6 +1353,7 @@ function buildTunConfig(
   localPort = 2080,
   setSystemProxy = false,
   directApps = [],
+  vpnDns = null,
 ) {
   const appEntries = Array.isArray(directApps) ? directApps : []
   const appNames = Array.from(new Set(appEntries.map((entry) =>
@@ -1405,7 +1421,7 @@ function buildTunConfig(
       },
     ],
 
-    dns: buildProxyDnsBlock(directDomains),
+    dns: buildProxyDnsBlock(directDomains, vpnDns),
 
     route: {
       rules,

@@ -839,6 +839,9 @@ declare global {
           standaloneDoHServer: DnsServerId
           customDnsPrimary: string
           customDnsSecondary: string
+          preferredDnsServer: DnsServerId
+          preferredDnsPrimary: string
+          preferredDnsSecondary: string
           proxyDoHEnabled: boolean
           standaloneActive: boolean
           activeConfig: DnsActiveConfig | null
@@ -847,6 +850,13 @@ declare global {
         test: (input: { server: Exclude<DnsServerId, 'off'>; primary?: string; secondary?: string }) => Promise<{
           success: boolean
           results: Array<{ address: string; success: boolean; answer: string | null; error: string | null }>
+          error: string | null
+        }>
+        setPreferred: (input: DnsServerId | { server: DnsServerId; primary?: string; secondary?: string }) => Promise<{
+          success: boolean
+          preferredDnsServer?: DnsServerId
+          preferredDnsPrimary?: string
+          preferredDnsSecondary?: string
           error: string | null
         }>
         setStandalone: (input: DnsServerId | { server: DnsServerId; primary?: string; secondary?: string }) => Promise<{

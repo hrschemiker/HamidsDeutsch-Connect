@@ -407,6 +407,9 @@ function App() {
   const [standaloneDoHLoading, setStandaloneDoHLoading] = useState(false)
   const [customDnsPrimary, setCustomDnsPrimary] = useState('')
   const [customDnsSecondary, setCustomDnsSecondary] = useState('')
+  const [preferredDnsServer, setPreferredDnsServer] = useState<DnsServer>('cloudflare')
+  const [preferredDnsPrimary, setPreferredDnsPrimary] = useState('')
+  const [preferredDnsSecondary, setPreferredDnsSecondary] = useState('')
   const [dnsApplyError, setDnsApplyError] = useState<string | null>(null)
   const [proxyDoH, setProxyDoH] = useState(false)
   const [customDnsProfiles, setCustomDnsProfiles] = useState<DnsProfile[]>(loadCustomDnsProfiles)
@@ -486,6 +489,9 @@ function App() {
       setStandaloneDoH(r.standaloneDoHServer)
       setCustomDnsPrimary(r.customDnsPrimary)
       setCustomDnsSecondary(r.customDnsSecondary)
+      setPreferredDnsServer(r.preferredDnsServer ?? 'cloudflare')
+      setPreferredDnsPrimary(r.preferredDnsPrimary ?? '')
+      setPreferredDnsSecondary(r.preferredDnsSecondary ?? '')
       setProxyDoH(r.proxyDoHEnabled)
       if (r.standaloneDoHServer !== 'off' && r.standaloneDoHServer !== 'custom') {
         setSelectedDnsProfileId(r.standaloneDoHServer)
@@ -742,6 +748,7 @@ function App() {
   // Connect to the best working free config — same path as a subscription (spec #8).
   async function connectFreeConfig() {
     if (!(await confirmStopTestingIfNeeded())) return
+    if (standaloneDoH !== 'off' && !(await restoreSystemDns())) return
     setFreePhase('connecting')
     setFreeProgress('در حال اتصال به کانفیگ رایگان...')
     setFreeError(null)
@@ -1306,6 +1313,7 @@ function App() {
     node: SafeServerNode,
   ) {
     if (!(await confirmStopTestingIfNeeded())) return
+    if (standaloneDoH !== 'off' && !(await restoreSystemDns())) return
     setConnectionActionError(null)
     setSubConnectingNodeId(node.id)
     setSubConnectingStep('در حال قطع اتصال قبلی...')
@@ -2019,6 +2027,7 @@ function App() {
                 if (node) void prepareAndStart(node)
               }}
               onConnectFreeServer={async (server) => {
+                if (standaloneDoH !== 'off' && !(await restoreSystemDns())) return
                 setFreePhase('connecting')
                 setFreeProgress(`اتصال به ${server.id}...`)
                 setFreeError(null)
@@ -2350,10 +2359,10 @@ function App() {
               onCheckAppUpdate={() => window.hamidsDeutsch.updater.checkForUpdate()}
               onDownloadAppUpdate={() => window.hamidsDeutsch.updater.downloadUpdate()}
               onInstallAppUpdate={() => window.hamidsDeutsch.updater.installUpdate()}
-              standaloneDoH={standaloneDoH}
+              standaloneDoH={preferredDnsServer}
               standaloneDoHLoading={standaloneDoHLoading}
-              customDnsPrimary={customDnsPrimary}
-              customDnsSecondary={customDnsSecondary}
+              customDnsPrimary={preferredDnsServer === 'custom' ? preferredDnsPrimary : customDnsPrimary}
+              customDnsSecondary={preferredDnsServer === 'custom' ? preferredDnsSecondary : customDnsSecondary}
               dnsApplyError={dnsApplyError}
               customDnsProfiles={customDnsProfiles}
               onSaveDnsProfile={(profile) => {
@@ -2376,13 +2385,13 @@ function App() {
               onStandaloneDoHChange={async (server, primary, secondary) => {
                 setStandaloneDoHLoading(true)
                 setDnsApplyError(null)
-                const r = await window.hamidsDeutsch.doh.setStandalone(
+                const r = await window.hamidsDeutsch.doh.setPreferred(
                   server === 'custom' ? { server, primary, secondary } : server,
                 )
                 if (r.success) {
-                  setStandaloneDoH(server)
-                  setCustomDnsPrimary(r.customDnsPrimary ?? primary ?? '')
-                  setCustomDnsSecondary(r.customDnsSecondary ?? secondary ?? '')
+                  setPreferredDnsServer(server)
+                  setPreferredDnsPrimary(r.preferredDnsPrimary ?? primary ?? '')
+                  setPreferredDnsSecondary(r.preferredDnsSecondary ?? secondary ?? '')
                 } else {
                   setDnsApplyError(r.error)
                 }
@@ -2689,6 +2698,7 @@ function HomePage({
 
   // ── Local reconnect dismiss ───────────────────────────────────────────────
   const [reconnectDismissed, setReconnectDismissed] = useState(false)
+  const [freeRiskAcknowledged, setFreeRiskAcknowledged] = useState(false)
   useEffect(() => { if (showReconnectBar) setReconnectDismissed(false) }, [showReconnectBar])
   function setShowReconnectBarLocal(v: boolean) { if (!v) setReconnectDismissed(true) }
   const showReconnect = showReconnectBar && !reconnectDismissed
@@ -2785,6 +2795,7 @@ function HomePage({
   }
 
   const freeConnected = freeConnectedLocal
+  const vpnConnectionActive = isConnected || freeConnected
   const otherMethodActive = processStatus.running || freeConnected || dnsActive
   const heroConnected = heroConnectedLocal
   const activeMethod: 'free' | 'subscription' | 'dns' | null =
@@ -3154,7 +3165,7 @@ function HomePage({
           onSecondaryAction={onRetestLatency}
         />
 
-        <article className={`connection-choice-card dns-choice-card${dnsActive ? ' dns-choice-active' : ''}`}>
+        <article className={`connection-choice-card dns-choice-card${dnsActive ? ' dns-choice-active' : ''}${vpnConnectionActive ? ' dns-choice-vpn-muted' : ''}`}>
           <div className="connection-choice-heading">
             <div>
               <span className="panel-kicker">{lang === 'fa' ? 'اتصال مستقل' : 'Standalone connection'}</span>
@@ -3169,7 +3180,7 @@ function HomePage({
             <span>{lang === 'fa' ? 'سرویس DNS' : 'DNS service'}</span>
             <select
               value={selectedDnsProfileId}
-              disabled={dnsBusy}
+              disabled={dnsBusy || vpnConnectionActive}
               onChange={(event) => onDnsSelection(event.target.value)}
             >
               {dnsProfiles.filter((profile) => profile.custom).length > 0 && (
@@ -3195,10 +3206,12 @@ function HomePage({
             <button
               className={dnsActive ? 'danger-button' : 'primary-button'}
               type="button"
-              disabled={dnsBusy}
+              disabled={dnsBusy || vpnConnectionActive}
               onClick={dnsActive ? onDnsDisconnect : onDnsConnect}
             >
-              {dnsBusy
+              {vpnConnectionActive
+                ? (lang === 'fa' ? 'DNS از داخل VPN اعمال می‌شود' : 'DNS is applied inside VPN')
+                : dnsBusy
                 ? (lang === 'fa' ? 'در حال اعمال…' : 'Applying…')
                 : dnsActive
                   ? t('btn.disconnect')
@@ -3252,36 +3265,64 @@ function HomePage({
           )}
         </article>
 
-        <article className="top-server-card">
+        <article className={`top-server-card free-config-card${freeRiskAcknowledged ? ' free-config-revealed' : ''}`}>
           <div className="top-server-card-header">
             <span className="panel-kicker">{t('home.topFree.kicker', 'بهترین سرورهای رایگان')}</span>
           </div>
-          {topFreeServers.length === 0 ? (
-            <p className="top-server-empty">{t('home.topFree.empty', 'هنوز سرور رایگانی آزمایش نشده')}</p>
-          ) : (
-            <ul className="top-server-list">
-              {topFreeServers.map((s) => (
-                <li key={s.id} className="top-server-row">
-                  <span className="top-server-name" dir="ltr">{s.flag ?? '🏳️'} {s.id}</span>
-                  <span className="top-server-latency" dir="ltr">{s.latencyMs != null ? `${s.latencyMs} ms` : '—'}</span>
-                  <button
-                    className="top-server-connect-btn"
-                    type="button"
-                    onClick={() => {
-                      if (activeMethod || isFreeActive) {
-                        requireSwitch('تغییر روش', 'اتصال فعلی قطع و به سرور رایگان انتخابی متصل می‌شوید.', () => {
-                          setSwitchConfirm(null)
+          <div className="free-config-sensitive-content" aria-hidden={!freeRiskAcknowledged}>
+            {topFreeServers.length === 0 ? (
+              <p className="top-server-empty">{t('home.topFree.empty', 'هنوز سرور رایگانی آزمایش نشده')}</p>
+            ) : (
+              <ul className="top-server-list">
+                {topFreeServers.map((s) => (
+                  <li key={s.id} className="top-server-row">
+                    <span className="top-server-name" dir="ltr">{s.flag ?? '🏳️'} {s.id}</span>
+                    <span className="top-server-latency" dir="ltr">{s.latencyMs != null ? `${s.latencyMs} ms` : '—'}</span>
+                    <button
+                      className="top-server-connect-btn"
+                      type="button"
+                      disabled={!freeRiskAcknowledged}
+                      onClick={() => {
+                        if (activeMethod || isFreeActive) {
+                          requireSwitch('تغییر روش', 'اتصال فعلی قطع و به سرور رایگان انتخابی متصل می‌شوید.', () => {
+                            setSwitchConfirm(null)
+                            onConnectFreeServer(s)
+                          })
+                        } else {
                           onConnectFreeServer(s)
-                        })
-                      } else {
-                        onConnectFreeServer(s)
-                      }
-                    }}
-                  >▶</button>
-                </li>
-              ))}
-            </ul>
+                        }
+                      }}
+                    >▶</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {!freeRiskAcknowledged && (
+            <div className="free-risk-gate" role="note">
+              <span className="free-risk-icon"><BrandIcon name="shield" size={24} /></span>
+              <strong>{lang === 'fa' ? 'فقط برای مواقع ضروری' : 'Emergency use only'}</strong>
+              <p>
+                {lang === 'fa'
+                  ? 'کانفیگ‌های عمومی رایگان تحت کنترل Manfaz نیستند و امنیت یا حریم خصوصی آن‌ها تضمین نمی‌شود.'
+                  : 'Public free configurations are not controlled by Manfaz. Their security and privacy cannot be guaranteed.'}
+              </p>
+              <button className="warning-ack-button" type="button" onClick={() => setFreeRiskAcknowledged(true)}>
+                {lang === 'fa' ? 'متوجه شدم' : 'I understand'}
+              </button>
+            </div>
           )}
+        </article>
+
+        <article className="manfaz-promo-card">
+          <img src="manfaz-service-banner-v1.png" alt="" />
+          <div className="manfaz-promo-shade" />
+          <div className="manfaz-promo-copy">
+            <span>{lang === 'fa' ? 'MANFAZ PREMIUM' : 'MANFAZ PREMIUM'}</span>
+            <strong>{lang === 'fa' ? 'اتصال مطمئن، برای هر روز' : 'Reliable connectivity, every day'}</strong>
+            <p>{lang === 'fa' ? 'سرویس اختصاصی با سرعت پایدار و پشتیبانی واقعی' : 'Private service with consistent speed and real support'}</p>
+            <div>{lang === 'fa' ? 'سرویس‌های حرفه‌ای منفذ' : 'Manfaz professional services'}</div>
+          </div>
         </article>
       </section>
     </div>
