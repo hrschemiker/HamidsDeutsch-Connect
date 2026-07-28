@@ -376,8 +376,8 @@ $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($path)
 
 $currentServer = [string]$key.GetValue('ProxyServer', '')
 $isLocalHamidsProxy =
-  $currentServer -match '(^|[=;])127\\.0\\.0\\.1:2080($|;)' -or
-  $currentServer -match '(^|[=;])localhost:2080($|;)'
+  $currentServer -match '(^|[=;])(?:https?://)?127\\.0\\.0\\.1:2080(?:/)?($|;)' -or
+  $currentServer -match '(^|[=;])(?:https?://)?localhost:2080(?:/)?($|;)'
 
 if ($isLocalHamidsProxy) {
   $key.SetValue(
@@ -387,6 +387,9 @@ if ($isLocalHamidsProxy) {
   )
   try {
     $key.DeleteValue('ProxyServer', $false)
+  } catch {}
+  try {
+    $key.DeleteValue('ProxyOverride', $false)
   } catch {}
 }
 

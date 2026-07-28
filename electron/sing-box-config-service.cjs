@@ -1203,11 +1203,30 @@ function buildTransportConfig(params) {
 
 function buildDirectRules(directDomains) {
   if (!directDomains || directDomains.length === 0) return []
-  const ipValues = directDomains.filter((value) =>
+  const protectedProxyDomains = [
+    'x.com',
+    'twitter.com',
+    'twimg.com',
+    'instagram.com',
+    'cdninstagram.com',
+    'facebook.com',
+    'fbcdn.net',
+    'threads.net',
+    'telegram.org',
+    't.me',
+  ]
+  const isProtectedProxyDomain = (value) => {
+    const normalized = String(value ?? '').trim().toLowerCase().replace(/^\./, '')
+    return protectedProxyDomains.some(
+      (domain) => normalized === domain || normalized.endsWith(`.${domain}`),
+    )
+  }
+  const safeDirectDomains = directDomains.filter((value) => !isProtectedProxyDomain(value))
+  const ipValues = safeDirectDomains.filter((value) =>
     /^(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?$/.test(value) ||
     /^[0-9a-f:]+(?:\/\d{1,3})?$/i.test(value),
   )
-  const domains = directDomains.filter((value) => !ipValues.includes(value))
+  const domains = safeDirectDomains.filter((value) => !ipValues.includes(value))
   return [
     ...(domains.length > 0 ? [{ domain: domains, outbound: 'direct' }] : []),
     ...(domains.length > 0 ? [{
@@ -1220,9 +1239,25 @@ function buildDirectRules(directDomains) {
 
 function buildDnsRules(directDomains) {
   if (!directDomains || directDomains.length === 0) return []
+  const protectedProxyDomains = [
+    'x.com',
+    'twitter.com',
+    'twimg.com',
+    'instagram.com',
+    'cdninstagram.com',
+    'facebook.com',
+    'fbcdn.net',
+    'threads.net',
+    'telegram.org',
+    't.me',
+  ]
   const domains = directDomains.filter((value) =>
     !/^(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?$/.test(value) &&
-    !/^[0-9a-f:]+(?:\/\d{1,3})?$/i.test(value),
+    !/^[0-9a-f:]+(?:\/\d{1,3})?$/i.test(value) &&
+    !protectedProxyDomains.some((domain) => {
+      const normalized = String(value ?? '').trim().toLowerCase().replace(/^\./, '')
+      return normalized === domain || normalized.endsWith(`.${domain}`)
+    }),
   )
   if (domains.length === 0) return []
   return [
@@ -1240,18 +1275,33 @@ function buildDnsRules(directDomains) {
 }
 
 function buildProxyDnsBlock(directDomains = [], vpnDns = null) {
-  const selectedDns = vpnDns?.primary
+  const encryptedDnsServers = {
+    '1.1.1.1': 'cloudflare-dns.com',
+    '1.0.0.1': 'cloudflare-dns.com',
+    '8.8.8.8': 'dns.google',
+    '8.8.4.4': 'dns.google',
+    '94.140.14.14': 'dns.adguard-dns.com',
+    '94.140.15.15': 'dns.adguard-dns.com',
+  }
+  const selectedAddress = vpnDns?.primary || '1.1.1.1'
+  const tlsServerName = encryptedDnsServers[selectedAddress]
+  const selectedDns = tlsServerName
     ? {
         tag: 'dns-proxy',
-        type: 'udp',
-        server: vpnDns.primary,
-        server_port: 53,
+        type: 'tls',
+        server: selectedAddress,
+        server_port: 853,
         detour: 'proxy',
+        tls: {
+          enabled: true,
+          server_name: tlsServerName,
+        },
       }
     : {
         tag: 'dns-proxy',
-        type: 'tls',
-        server: '1.1.1.1',
+        type: 'udp',
+        server: selectedAddress,
+        server_port: 53,
         detour: 'proxy',
       }
   return {
@@ -1283,9 +1333,12 @@ function buildConfig(
   const useInternalDns = proxyDoH || Boolean(vpnDns?.primary)
 
   // If upstream proxy chaining is enabled, route the main proxy outbound through it
+  // The server address must be bootstrapped outside the tunnel. Pointing the
+  // proxy outbound at dns-proxy creates a dependency cycle: dns-proxy itself
+  // is configured to use that same proxy.
   const resolvedProxyOutbound = upstreamProxy?.enabled && upstreamProxy?.host
-    ? { ...(useInternalDns ? { ...proxyOutbound, domain_resolver: 'dns-proxy' } : proxyOutbound), detour: 'upstream-proxy' }
-    : (useInternalDns ? { ...proxyOutbound, domain_resolver: 'dns-proxy' } : proxyOutbound)
+    ? { ...(useInternalDns ? { ...proxyOutbound, domain_resolver: 'dns-direct' } : proxyOutbound), detour: 'upstream-proxy' }
+    : (useInternalDns ? { ...proxyOutbound, domain_resolver: 'dns-direct' } : proxyOutbound)
 
   outbounds.push(resolvedProxyOutbound)
   outbounds.push(
