@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 export type EngineInfo = {
+  engineType?: 'xray' | 'sing-box'
   installed: boolean
   healthy: boolean
   path: string

@@ -9,6 +9,7 @@ export type ConnectionModePreference =
   | 'system-proxy'
 
 export type ConnectionSettings = {
+  engine: 'xray' | 'sing-box'
   mode: ConnectionModePreference
   allowFallback: boolean
 }
@@ -18,6 +19,7 @@ const STORAGE_KEY =
 
 const DEFAULT_SETTINGS:
   ConnectionSettings = {
+    engine: 'sing-box',
     mode: 'auto',
     allowFallback: true,
   }
@@ -47,6 +49,7 @@ function readSettings():
           : 'auto'
 
     return {
+      engine: parsed.engine === 'xray' ? 'xray' : 'sing-box',
       mode,
       allowFallback:
         parsed.allowFallback !==

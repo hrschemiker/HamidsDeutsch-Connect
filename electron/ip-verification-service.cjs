@@ -84,45 +84,33 @@ async function verifyIpChange({
 
   const proxyIp = proxyResult.ip
 
-  // Now try to fetch the direct IP (may fail if IP-check sites are blocked)
+  // A reachable local listener only proves that the core started.  Never call
+  // that a VPN connection: the direct and proxied egress addresses must both
+  // be observed and must differ.
   const directStartedAt = Date.now()
   let directIp = null
   let directService = 'n/a'
   let directDurationMs = 0
   try {
-    const directResult = await fetchFirstWorkingIp({
-      mode: 'direct',
-      proxyHost,
-      proxyPort,
-    })
+    const directResult = await fetchFirstWorkingIp({ mode: 'direct', proxyHost, proxyPort })
     directIp = directResult.ip
     directService = directResult.service
-    directDurationMs = Date.now() - directStartedAt
-  } catch {
-    directDurationMs = Date.now() - directStartedAt
-    // Direct IP fetch failed — IP-check services may be blocked on this network.
-    // The proxy is working (we got proxyIp), so treat this as a successful connection
-    // without IP-change confirmation.
-  }
+  } catch {}
+  directDurationMs = Date.now() - directStartedAt
 
   const changed = directIp !== null && directIp !== proxyIp
 
-  // Success if:
-  //   a) Proxy IP obtained AND direct IP obtained AND they differ (full verification), OR
-  //   b) Proxy IP obtained but direct IP unreachable (services blocked — proxy still works)
-  const success = true
+  const success = changed
   const error = directIp === null
-    ? null
-    : changed
-      ? null
-      : 'IP خروجی پروکسی با IP مستقیم یکسان است.'
+    ? 'اتصال موتور برقرار شد، اما تغییر IP قابل تأیید نیست؛ اتصال موفق اعلام نشد.'
+    : changed ? null : 'IP خروجی پروکسی با IP مستقیم یکسان است؛ ترافیک از VPN عبور نکرد.'
 
   return {
     success,
     checkedAt,
     directIp,
     proxyIp,
-    changed: directIp === null ? true : changed,
+    changed,
     directDurationMs,
     proxyDurationMs,
     service: `${directService} / ${proxyResult.service}`,

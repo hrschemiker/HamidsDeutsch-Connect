@@ -505,6 +505,7 @@ function App() {
 
   const directDomains = useDirectDomains()
   const engine = useEngineInfo()
+  const refreshEngineInfo = engine.refresh
   const engineProcess = useEngineProcess()
   const subscriptions = useSubscriptions()
 
@@ -527,6 +528,12 @@ function App() {
   const rescueSettings = useRescueSettings()
   const connectionSettings = useConnectionSettings()
   const diagnostics = useConnectionDiagnostics()
+
+  useEffect(() => {
+    void window.hamidsDeutsch.engine
+      .setPreference(connectionSettings.settings.engine)
+      .then(() => refreshEngineInfo())
+  }, [connectionSettings.settings.engine, refreshEngineInfo])
 
   const [hiddenNodeIds, setHiddenNodeIds] = useState<string[]>([])
 
@@ -748,6 +755,30 @@ function App() {
   }, [connectionVerified, serverNodes])
 
   // Connect to the best working free config — same path as a subscription (spec #8).
+  async function connectFreeNodeWithSelectedEngine(nodeId: string) {
+    let result = await window.hamidsDeutsch.free.connectSpecificNode({
+      nodeId,
+      directDomains: directDomains.domains,
+      enginePreference: connectionSettings.settings.engine,
+    })
+    if (!result.success && result.requiresEngine === 'sing-box') {
+      const accepted = await requestConfirmation(
+        'تغییر موتور اتصال',
+        `این کانفیگ ${result.protocol || ''} با Xray سازگار نیست و به sing-box نیاز دارد. موتور به sing-box تغییر کند؟`,
+      )
+      if (accepted) {
+        connectionSettings.update({ engine: 'sing-box' })
+        await window.hamidsDeutsch.engine.setPreference('sing-box')
+        result = await window.hamidsDeutsch.free.connectSpecificNode({
+          nodeId,
+          directDomains: directDomains.domains,
+          enginePreference: 'sing-box',
+        })
+      }
+    }
+    return result
+  }
+
   async function connectFreeConfig() {
     if (!(await confirmStopTestingIfNeeded())) return
     if (standaloneDoH !== 'off' && !(await restoreSystemDns())) return
@@ -765,7 +796,7 @@ function App() {
         return
       }
       setLastConnectionType('free')
-      const result = await window.hamidsDeutsch.free.connectSpecificNode({ nodeId: best.id, directDomains: directDomains.domains })
+      const result = await connectFreeNodeWithSelectedEngine(best.id)
       if (result.success) {
         setFreeNodeName(`${best.id} ${best.flag ?? ''}`.trim())
         setFreePhase('connected')
@@ -930,6 +961,24 @@ function App() {
     setTunCurrentIp(null)
 
     onStep?.('بررسی کانفیگ سرور...')
+    let requestedEngine = connectionSettings.settings.engine
+    const xrayProtocols = new Set(['vless', 'vmess', 'trojan', 'ss', 'shadowsocks'])
+    const needsSingBox = requestedEngine === 'xray' && !xrayProtocols.has(node.protocol.toLowerCase())
+    const tunNeedsSingBox = requestedEngine === 'xray' && connectionSettings.settings.mode === 'tun'
+    if (needsSingBox || tunNeedsSingBox) {
+      const reason = tunNeedsSingBox
+        ? 'حالت TUN در این نسخه به موتور sing-box نیاز دارد.'
+        : `پروتکل ${node.protocol} توسط Xray این نسخه پشتیبانی نمی‌شود.`
+      const accepted = window.confirm(`${reason}\n\nآیا موتور برای این اتصال به sing-box تغییر کند؟`)
+      if (!accepted) {
+        return { success: false as const, fatal: true as const, error: `${reason} اتصال لغو شد.` }
+      }
+      requestedEngine = 'sing-box'
+      connectionSettings.update({ engine: 'sing-box' })
+      await window.hamidsDeutsch.engine.setPreference('sing-box')
+    } else {
+      await window.hamidsDeutsch.engine.setPreference(requestedEngine)
+    }
     const checkResult = await configCheck.checkConfig({
       subscriptionId:
         node.subscriptionId,
@@ -941,6 +990,7 @@ function App() {
         directDomains.domains,
       rescueOptions:
         rescueSettings.settings,
+      enginePreference: requestedEngine,
     })
 
     if (!checkResult.success) {
@@ -993,6 +1043,7 @@ function App() {
             recordFragment: true,
             dpiBypass: true,
           },
+          enginePreference: requestedEngine,
         })
 
         if (dpiCheckResult.success) {
@@ -1023,7 +1074,7 @@ function App() {
     const baselineIp =
       localVerification.directIp
 
-    const wantsTun =
+    const wantsTun = requestedEngine === 'sing-box' &&
       connectionSettings.settings.mode !==
       'system-proxy'
 
@@ -1528,7 +1579,7 @@ function App() {
       const best = list.success ? list.servers.find((s) => s.working === true) ?? list.servers[0] : undefined
       if (best) {
         setLastConnectionType('free')
-        const freeResult = await window.hamidsDeutsch.free.connectSpecificNode({ nodeId: best.id, directDomains: directDomains.domains })
+        const freeResult = await connectFreeNodeWithSelectedEngine(best.id)
         if (freeResult.success) {
           setFreeNodeName(`${best.id} ${best.flag ?? ''}`.trim())
           setFreePhase('connected')
@@ -1824,7 +1875,9 @@ function App() {
             }
             title={connectionVerified
               ? `${t('status.connected')} · ${ipVerification.result.proxyIp ?? 'IP'}`
-              : engine.info?.healthy ? `sing-box ${engine.info.version}` : t('home.core.unavailable')}
+              : engine.info?.healthy
+                ? `${engine.info.engineType === 'xray' ? 'Xray' : 'sing-box'} ${engine.info.version}`
+                : t('home.core.unavailable')}
           />
           <span className="topnav-version">{t('version', 'نسخه ۰.۱.۰')}</span>
         </div>
@@ -2037,10 +2090,7 @@ function App() {
                 setFreeError(null)
                 setLastConnectionType('free')
                 try {
-                  const result = await window.hamidsDeutsch.free.connectSpecificNode({
-                    nodeId: server.id,
-                    directDomains: directDomains.domains,
-                  })
+                  const result = await connectFreeNodeWithSelectedEngine(server.id)
                   if (result.success) {
                     setFreePhase('connected')
                     setFreeNodeName(`${server.id} ${server.flag ?? ''}`.trim())
@@ -2114,6 +2164,7 @@ function App() {
                     directDomains.domains,
                   rescueOptions:
                     rescueSettings.settings,
+                  enginePreference: connectionSettings.settings.engine,
                 })
               }}
               processRunning={engineProcess.status.running}
@@ -2130,10 +2181,7 @@ function App() {
                 setFreeError(null)
                 setLastConnectionType('free')
                 try {
-                  const result = await window.hamidsDeutsch.free.connectSpecificNode({
-                    nodeId: server.id,
-                    directDomains: directDomains.domains,
-                  })
+                  const result = await connectFreeNodeWithSelectedEngine(server.id)
                   if (result.success) {
                     setFreePhase('connected')
                     setFreeNodeName(`${server.id} ${server.flag ?? ''}`.trim())
@@ -2556,6 +2604,7 @@ type HomePageProps = {
   elevationError: string | null
   onRelaunchAsAdministrator: () => void
   processStatus: {
+    engineType?: 'xray' | 'sing-box'
     running: boolean
     ready: boolean
     systemProxyEnabled: boolean
@@ -2863,7 +2912,7 @@ function HomePage({
     }
     if (isConnecting || activeMethod === 'subscription') {
       return [
-        { icon: '◌', label: 'شروع sing-box', status: processBusy && !processStatus.ready ? 'active' : (processStatus.ready || isConnected) ? 'done' : 'idle' },
+        { icon: '◌', label: `شروع ${processStatus.engineType === 'xray' ? 'Xray' : 'sing-box'}`, status: processBusy && !processStatus.ready ? 'active' : (processStatus.ready || isConnected) ? 'done' : 'idle' },
         { icon: '⇄', label: 'پراکسی محلی', status: processStatus.ready && !isConnected ? 'active' : isConnected ? 'done' : 'idle' },
         { icon: '✓', label: 'تأیید IP', status: ipVerificationChecking ? 'active' : isConnected ? 'done' : 'idle' },
       ]
@@ -6502,6 +6551,7 @@ function SettingsPage({
   onProxyDoHToggle,
 }: {
   settings: {
+    engine: 'xray' | 'sing-box'
     mode:
       | 'auto'
       | 'tun'
@@ -6510,6 +6560,7 @@ function SettingsPage({
   }
   onUpdate: (
     patch: Partial<{
+      engine: 'xray' | 'sing-box'
       mode:
         | 'auto'
         | 'tun'
@@ -6822,6 +6873,32 @@ function SettingsPage({
             {t('settings.connection.notice')}
           </div>
         )}
+
+        <label className="settings-select-field">
+          <span>{lang === 'fa' ? 'موتور اتصال' : 'Connection engine'}</span>
+          <select
+            value={settings.engine}
+            disabled={connected}
+            onChange={(event) => {
+              const engine = event.target.value as 'xray' | 'sing-box'
+              onUpdate({ engine })
+              void window.hamidsDeutsch.engine.setPreference(engine)
+            }}
+          >
+            <option value="xray">Xray Core · {lang === 'fa' ? 'پیش‌فرض' : 'Default'}</option>
+            <option value="sing-box">sing-box · {lang === 'fa' ? 'سازگاری تکمیلی' : 'Extended compatibility'}</option>
+          </select>
+        </label>
+
+        <div className="inline-notice">
+          {settings.engine === 'xray'
+            ? (lang === 'fa'
+                ? 'Xray برای VLESS، VMess، Trojan و Shadowsocks استفاده می‌شود. TUN، Hysteria2، TUIC و AnyTLS با هشدار به sing-box نیاز دارند.'
+                : 'Xray handles VLESS, VMess, Trojan, and Shadowsocks. TUN, Hysteria2, TUIC, and AnyTLS require sing-box with confirmation.')
+            : (lang === 'fa'
+                ? 'sing-box برای پروتکل‌ها و قابلیت‌های اختصاصی فعال است.'
+                : 'sing-box is active for its exclusive protocols and capabilities.')}
+        </div>
 
         <label className="settings-select-field">
           <span>

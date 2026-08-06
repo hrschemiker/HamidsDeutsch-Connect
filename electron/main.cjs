@@ -72,6 +72,11 @@ const {
 } = require('./sing-box-config-service.cjs')
 
 const {
+  createAndCheckXrayConfig,
+  getXrayCompatibility,
+} = require('./xray-config-service.cjs')
+
+const {
   scanCloudflareIps,
 } = require('./cf-scanner-service.cjs')
 
@@ -115,6 +120,8 @@ const {
   emergencyDispose,
   setProcessExitCallback,
 } = require('./sing-box-process-manager.cjs')
+
+const connectionEngines = require('./connection-engine-manager.cjs')
 
 const {
   addConfigs: addFreeConfigs,
@@ -420,7 +427,7 @@ async function sendFreePoolStatus() {
 }
 
 function isAnyConnectionActive() {
-  try { return getProcessStatus().running } catch { return false }
+  try { return connectionEngines.getSelectedStatus().running } catch { return false }
 }
 
 async function tunneledFetch(url) {
@@ -751,7 +758,7 @@ async function refreshWorkingPings() {
  * Connect to a free config EXACTLY like a subscription: build the normal runtime
  * config and start the engine. No separate free-runtime, no extra gate.
  */
-async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOptions = null }) {
+async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOptions = null, enginePreference = 'xray' }) {
   const { createAndCheckConfig } = require('./sing-box-config-service.cjs')
   // Never connect while a test is running — stop it first so a leftover test
   // engine can't disrupt the real connection.
@@ -775,9 +782,16 @@ async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOp
   }
   if (!uri) return { success: false, error: 'کانفیگ رایگان پیدا نشد.' }
 
-  if (getProcessStatus().running) {
+  const requestedEngine = enginePreference === 'sing-box' ? 'sing-box' : 'xray'
+  const compatibility = getXrayCompatibility(uri)
+  if (requestedEngine === 'xray' && !compatibility.compatible) {
+    return { success: false, requiresEngine: 'sing-box', protocol: compatibility.protocol, error: compatibility.reason }
+  }
+  connectionEngines.setSelectedEngine(requestedEngine)
+
+  if (connectionEngines.getSelectedStatus().running) {
     expectedEngineStop = true
-    try { await stopLocalProxy({ userDataPath }) } catch {}
+    try { await connectionEngines.stopSelected({ userDataPath }) } catch {}
   }
 
   const [upstreamProxy, utlsSettings, cleanIp] = await Promise.all([
@@ -787,7 +801,7 @@ async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOp
   ])
 
   async function build(cfCleanIp) {
-    return createAndCheckConfig({
+    const params = {
       subscriptionUrl: 'https://t.me',
       nodeId: nodeId ?? 'free',
       nodeUri: uri,
@@ -802,7 +816,11 @@ async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOp
       upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
       utlsSettings,
       cfCleanIp,
-    }).catch((e) => ({ success: false, error: e?.message }))
+    }
+    return (requestedEngine === 'xray'
+      ? createAndCheckXrayConfig({ ...params, enginePath: getXrayPath() })
+      : createAndCheckConfig(params)
+    ).catch((e) => ({ success: false, error: e?.message }))
   }
 
   await backupWindowsProxyState(userDataPath).catch(() => {})
@@ -811,12 +829,20 @@ async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOp
   for (const cfCleanIp of (cleanIp ? [cleanIp, null] : [null])) {
     const configResult = await build(cfCleanIp)
     if (!configResult.success) continue
-    const started = await startLocalProxy({ enginePath, userDataPath, configPath: configResult.configPath })
+    const started = await connectionEngines.startSelected({
+      singBoxPath: enginePath, xrayPath: getXrayPath(), userDataPath,
+    })
     if (!started.success) continue
+    if (requestedEngine === 'xray') {
+      const activated = await connectionEngines.activateSelectedSystemProxy({
+        singBoxPath: enginePath, xrayPath: getXrayPath(), userDataPath,
+      })
+      if (!activated.success) continue
+    }
     if (cfCleanIp) {
       // Verify the clean-IP tunnel actually passes traffic; else retry as-is.
       const relay = await probeRelay(2080).catch(() => ({ ok: false }))
-      if (!relay.ok) { expectedEngineStop = true; await stopLocalProxy({ userDataPath }).catch(() => {}); continue }
+      if (!relay.ok) { expectedEngineStop = true; await connectionEngines.stopSelected({ userDataPath }).catch(() => {}); continue }
     }
     freeConfigState.phase = 'connected'
     freeConfigState.nodeId = nodeId ?? null
@@ -845,7 +871,7 @@ function startTelegramCrawler() { /* folded into startFreeAutomation */ }
 // servers) — used so the kill switch only fires on genuine drops.
 let expectedEngineStop = false
 
-setProcessExitCallback(({ code } = {}) => {
+connectionEngines.setProcessExitCallback(({ code } = {}) => {
   const wasExpected = expectedEngineStop
   expectedEngineStop = false
   freeConfigState.phase = 'idle'
@@ -1065,9 +1091,9 @@ function getEnginePath() {
 }
 
 
-async function getEngineInfo() {
-  const enginePath =
-    getEnginePath()
+async function getEngineInfo(engineType = connectionEngines.getSelectedEngine()) {
+  const normalizedEngine = engineType === 'sing-box' ? 'sing-box' : 'xray'
+  const enginePath = normalizedEngine === 'xray' ? getXrayPath() : getEnginePath()
 
   console.log(
     '[Engine] Checking path:',
@@ -1089,8 +1115,9 @@ async function getEngineInfo() {
       path: enginePath,
       version: null,
       architecture: null,
+      engineType: normalizedEngine,
       error:
-        'فایل sing-box.exe پیدا نشد.',
+        `فایل ${normalizedEngine === 'xray' ? 'xray.exe' : 'sing-box.exe'} پیدا نشد.`,
     }
   }
 
@@ -1111,10 +1138,11 @@ async function getEngineInfo() {
     const output =
       `${stdout}\n${stderr}`.trim()
 
-    const versionMatch =
-      output.match(
-        /sing-box version\s+([^\s]+)/i,
-      )
+    const versionMatch = output.match(
+      normalizedEngine === 'xray'
+        ? /Xray\s+([^\s]+)/i
+        : /sing-box version\s+([^\s]+)/i,
+    )
 
     const environmentMatch =
       output.match(
@@ -1129,8 +1157,10 @@ async function getEngineInfo() {
         versionMatch?.[1] ??
         'نامشخص',
       architecture:
-        environmentMatch?.[1]
-          ?.trim() ?? null,
+        normalizedEngine === 'xray'
+          ? (output.match(/windows\/([^\s)]+)/i)?.[1] ?? null)
+          : (environmentMatch?.[1]?.trim() ?? null),
+      engineType: normalizedEngine,
       error: null,
     }
   } catch (error) {
@@ -1145,10 +1175,11 @@ async function getEngineInfo() {
       path: enginePath,
       version: null,
       architecture: null,
+      engineType: normalizedEngine,
       error:
         error instanceof Error
           ? error.message
-          : 'اجرای sing-box با خطا مواجه شد.',
+          : `اجرای ${normalizedEngine} با خطا مواجه شد.`,
     }
   }
 }
@@ -1158,11 +1189,11 @@ function createProcessErrorResult(
 ) {
   return {
     success: false,
-    ...getProcessStatus(),
+    ...connectionEngines.getSelectedStatus(),
     error:
       error instanceof Error
         ? error.message
-        : 'عملیات sing-box ناموفق بود.',
+        : 'عملیات موتور اتصال ناموفق بود.',
   }
 }
 
@@ -1226,7 +1257,7 @@ function registerIpcHandlers() {
     async () => {
       try {
         const info =
-          await getEngineInfo()
+          await getEngineInfo('sing-box')
 
         return await checkLatestStable({
           currentVersion:
@@ -1262,8 +1293,7 @@ function registerIpcHandlers() {
     'engine:update-to-latest',
     async () => {
       try {
-        const status =
-          getProcessStatus()
+        const status = connectionEngines.getSelectedStatus()
 
         if (status.running) {
           return {
@@ -1279,7 +1309,7 @@ function registerIpcHandlers() {
         }
 
         const info =
-          await getEngineInfo()
+          await getEngineInfo('sing-box')
 
         const result =
           await updateToLatestStable({
@@ -1382,23 +1412,23 @@ function registerIpcHandlers() {
 
       // If a subscription/free proxy is currently running, hot-rebuild the config
       // so bypass list changes take effect without a full reconnect.
-      const procStatus = getProcessStatus()
+      const procStatus = connectionEngines.getSelectedStatus()
       if (procStatus.running && activeConnectionParams) {
         try {
           const newDomains = Array.isArray(domains) ? domains : []
-          const newConfigResult = await createAndCheckConfig({
-            ...activeConnectionParams,
-            directDomains: newDomains,
-          })
+          const newConfigResult = activeConnectionParams.engineType === 'xray'
+            ? await createAndCheckXrayConfig({ ...activeConnectionParams, directDomains: newDomains })
+            : await createAndCheckConfig({ ...activeConnectionParams, directDomains: newDomains })
           if (newConfigResult.success) {
             // Restart sing-box with the new config
-            const enginePath = getEnginePath()
             const userDataPath = app.getPath('userData')
             await backupWindowsProxyState(userDataPath).catch(() => {})
             expectedEngineStop = true
             require('./kill-switch.cjs').setKillSwitchArmed(false)
-            await stopLocalProxy({ userDataPath }).catch(() => {})
-            const restarted = await startLocalProxy({ enginePath, userDataPath, configPath: newConfigResult.configPath })
+            await connectionEngines.stopSelected({ userDataPath }).catch(() => {})
+            const restarted = await connectionEngines.startSelected({
+              singBoxPath: getEnginePath(), xrayPath: getXrayPath(), userDataPath,
+            })
             expectedEngineStop = false
             if (restarted.success) {
               activeConnectionParams = { ...activeConnectionParams, directDomains: newDomains }
@@ -1509,6 +1539,24 @@ function registerIpcHandlers() {
   )
 
   ipcMain.handle(
+    'engine:set-preference',
+    async (_event, engineType) => {
+      const normalized = connectionEngines.setSelectedEngine(engineType)
+      return { success: true, engineType: normalized, error: null }
+    },
+  )
+
+  ipcMain.handle(
+    'engine:get-preference',
+    async () => ({ engineType: connectionEngines.getSelectedEngine() }),
+  )
+
+  ipcMain.handle(
+    'engine:get-xray-compatibility',
+    async (_event, nodeUri) => getXrayCompatibility(nodeUri),
+  )
+
+  ipcMain.handle(
     'engine:start-local-proxy',
     async () => {
       try {
@@ -1517,19 +1565,15 @@ function registerIpcHandlers() {
         if (!killSwitchRelease.success) {
           return {
             success: false,
-            ...getProcessStatus(),
+            ...connectionEngines.getSelectedStatus(),
             error: killSwitchRelease.error ?? 'برداشتن محدودیت Kill Switch ناموفق بود.',
           }
         }
-        const result =
-          await startLocalProxy({
-            enginePath:
-              getEnginePath(),
-            userDataPath:
-              app.getPath(
-                'userData',
-              ),
-          })
+        const result = await connectionEngines.startSelected({
+          singBoxPath: getEnginePath(),
+          xrayPath: getXrayPath(),
+          userDataPath: app.getPath('userData'),
+        })
 
         if (result.success) {
           expectedEngineStop = false // a live connection — a later drop is unexpected
@@ -1571,7 +1615,7 @@ function registerIpcHandlers() {
         ) {
           return {
             success: false,
-            ...getProcessStatus(),
+            ...connectionEngines.getSelectedStatus(),
             error:
               'اجرای TUN به دسترسی Administrator نیاز دارد.',
           }
@@ -1581,20 +1625,15 @@ function registerIpcHandlers() {
         if (!killSwitchRelease.success) {
           return {
             success: false,
-            ...getProcessStatus(),
+            ...connectionEngines.getSelectedStatus(),
             error: killSwitchRelease.error ?? 'برداشتن محدودیت Kill Switch ناموفق بود.',
           }
         }
 
-        const result =
-          await startTunMode({
-            enginePath:
-              getEnginePath(),
-            userDataPath:
-              app.getPath(
-                'userData',
-              ),
-          })
+        const result = await connectionEngines.startTunSelected({
+          singBoxPath: getEnginePath(),
+          userDataPath: app.getPath('userData'),
+        })
 
         if (result.success) {
           expectedEngineStop = false
@@ -1627,15 +1666,11 @@ function registerIpcHandlers() {
     'engine:activate-system-proxy',
     async () => {
       try {
-        const result =
-          await activateSystemProxy({
-            enginePath:
-              getEnginePath(),
-            userDataPath:
-              app.getPath(
-                'userData',
-              ),
-          })
+        const result = await connectionEngines.activateSelectedSystemProxy({
+          singBoxPath: getEnginePath(),
+          xrayPath: getXrayPath(),
+          userDataPath: app.getPath('userData'),
+        })
 
         console.log(
           '[Engine] System proxy activation:',
@@ -1667,19 +1702,11 @@ function registerIpcHandlers() {
     ) => {
       expectedEngineStop = true
       try {
-        const result =
-          await deactivateSystemProxy({
-            enginePath:
-              getEnginePath(),
-            userDataPath:
-              app.getPath(
-                'userData',
-              ),
-            keepLocalProxy:
-              Boolean(
-                keepLocalProxy,
-              ),
-          })
+        const result = await connectionEngines.deactivateSelectedSystemProxy({
+          singBoxPath: getEnginePath(),
+          userDataPath: app.getPath('userData'),
+          keepLocalProxy: Boolean(keepLocalProxy),
+        })
 
         console.log(
           '[Engine] System proxy deactivation:',
@@ -1708,13 +1735,9 @@ function registerIpcHandlers() {
       activeConnectionParams = null
       expectedEngineStop = true // Disconnect button / server switch — not a drop.
       try {
-        const result =
-          await stopLocalProxy({
-            userDataPath:
-              app.getPath(
-                'userData',
-              ),
-          })
+        const result = await connectionEngines.stopSelected({
+          userDataPath: app.getPath('userData'),
+        })
 
         console.log(
           '[Engine] Local proxy stop:',
@@ -1740,15 +1763,14 @@ function registerIpcHandlers() {
   ipcMain.handle(
     'engine:get-process-status',
     async () => {
-      return getProcessStatus()
+      return connectionEngines.getSelectedStatus()
     },
   )
 
   ipcMain.handle(
     'network:verify-ip-change',
     async () => {
-      const processStatus =
-        getProcessStatus()
+      const processStatus = connectionEngines.getSelectedStatus()
 
       if (
         !processStatus.running ||
@@ -2224,6 +2246,10 @@ function registerIpcHandlers() {
             ? input.directDomains
             : []
 
+        const requestedEngine = input?.enginePreference === 'sing-box'
+          ? 'sing-box'
+          : 'xray'
+
         const rescueOptions =
           input?.rescueOptions &&
           typeof input.rescueOptions ===
@@ -2303,11 +2329,17 @@ function registerIpcHandlers() {
           upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
           utlsSettings,
           cfCleanIp: cleanIp,
+          engineType: requestedEngine,
         }
-        const result =
-          await createAndCheckConfig(configParams)
+        const result = requestedEngine === 'xray'
+          ? await createAndCheckXrayConfig({
+              ...configParams,
+              enginePath: getXrayPath(),
+            })
+          : await createAndCheckConfig(configParams)
 
         if (result.success) {
+          connectionEngines.setSelectedEngine(requestedEngine)
           activeConnectionParams = configParams
         }
 
@@ -2543,8 +2575,8 @@ function registerIpcHandlers() {
 
   // Connect to a free config — identical path to a subscription connect (spec #8).
   ipcMain.handle('free:connect-specific-node', async (_event, input) => {
-    const { nodeId, nodeUri, directDomains, rescueOptions } = input ?? {}
-    return connectFreeConfig({ nodeId, nodeUri, directDomains, rescueOptions })
+    const { nodeId, nodeUri, directDomains, rescueOptions, enginePreference } = input ?? {}
+    return connectFreeConfig({ nodeId, nodeUri, directDomains, rescueOptions, enginePreference })
   })
 
   ipcMain.handle('free:remove-node', async (_event, nodeId) => {
@@ -2991,7 +3023,7 @@ function registerIpcHandlers() {
     freeConfigState.error = null
     expectedEngineStop = true
     try {
-      await stopLocalProxy({ userDataPath: app.getPath('userData') })
+      await connectionEngines.stopSelected({ userDataPath: app.getPath('userData') })
       setVirtualLocationConnected(false)
       return { success: true, error: null }
     } catch (err) {
@@ -3316,7 +3348,7 @@ function createMainWindow() {
       )
 
       void Promise.allSettled([
-        disposeProcessManager({
+        connectionEngines.disposeAll({
           userDataPath:
             app.getPath(
               'userData',
@@ -3628,6 +3660,16 @@ const autoUpdateState = {
   error: null,
   retryAfterConnection: false,
   lastCheckedAt: null,
+}
+
+function getBundledXrayPath() {
+  return isDevelopment
+    ? path.join(__dirname, '..', 'resources', 'xray', 'xray.exe')
+    : path.join(process.resourcesPath, 'xray', 'xray.exe')
+}
+
+function getXrayPath() {
+  return getBundledXrayPath()
 }
 let autoUpdateCheckInFlight = null
 let fallbackUpdateAsset = null
@@ -4009,7 +4051,7 @@ app.on(
     if (telegramCrawlTimer) { clearInterval(telegramCrawlTimer); telegramCrawlTimer = null }
 
     void Promise.allSettled([
-      disposeProcessManager({
+      connectionEngines.disposeAll({
         userDataPath:
           app.getPath(
             'userData',

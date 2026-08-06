@@ -38,6 +38,7 @@ export function useServerConfigCheck() {
       resultKey = nodeId,
       directDomains,
       rescueOptions,
+      enginePreference,
     }: {
       subscriptionId: string | null
       nodeId: string
@@ -52,6 +53,7 @@ export function useServerConfigCheck() {
         dpiBypassAuto?: boolean
         dpiBypass?: boolean
       }
+      enginePreference?: 'xray' | 'sing-box'
     }) => {
       if (!subscriptionId) {
         const result: ConfigCheckResult = {
@@ -95,6 +97,7 @@ export function useServerConfigCheck() {
               nodeId,
               directDomains,
               rescueOptions,
+              enginePreference,
             })
 
         setState((current) => ({

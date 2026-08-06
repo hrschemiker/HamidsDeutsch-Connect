@@ -5,6 +5,7 @@ import {
 } from 'react'
 
 export type EngineProcessStatus = {
+  engineType?: 'xray' | 'sing-box'
   running: boolean
   ready: boolean
   systemProxyEnabled: boolean

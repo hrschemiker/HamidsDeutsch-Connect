@@ -1,7 +1,9 @@
 const net = require('node:net')
+const dns = require('node:dns').promises
 const { performance } = require('node:perf_hooks')
 
-const SINGLE_ATTEMPT_TIMEOUT_MS = 3500
+const SINGLE_ATTEMPT_TIMEOUT_MS = 2200
+const ATTEMPT_COUNT = 3
 const MAX_CONCURRENT_TESTS = 12
 const MAX_SERVERS_PER_REQUEST = 300
 
@@ -38,7 +40,16 @@ function validateServer(server) {
   return true
 }
 
-function testTcpLatency(server) {
+async function resolveTargets(host) {
+  if (net.isIP(host)) return [host]
+  try {
+    const records = await dns.resolve4(host)
+    if (records.length) return [...new Set(records)].slice(0, 2)
+  } catch {}
+  return [host]
+}
+
+function testTcpAttempt(server, host) {
   return new Promise((resolve) => {
     if (!validateServer(server)) {
       resolve({
@@ -82,17 +93,12 @@ function testTcpLatency(server) {
       )
 
       finish({
-        id: server.id,
-        reachable: true,
         latencyMs,
-        error: null,
       })
     })
 
     socket.once('timeout', () => {
       finish({
-        id: server.id,
-        reachable: false,
         latencyMs: null,
         error: 'مهلت اتصال تمام شد.',
       })
@@ -100,8 +106,6 @@ function testTcpLatency(server) {
 
     socket.once('error', (error) => {
       finish({
-        id: server.id,
-        reachable: false,
         latencyMs: null,
         error:
           typeof error?.code === 'string'
@@ -112,14 +116,12 @@ function testTcpLatency(server) {
 
     try {
       socket.connect({
-        host: server.host,
+        host,
         port: server.port,
-        autoSelectFamily: true,
+        family: net.isIP(host) || undefined,
       })
     } catch (error) {
       finish({
-        id: server.id,
-        reachable: false,
         latencyMs: null,
         error:
           error instanceof Error
@@ -128,6 +130,28 @@ function testTcpLatency(server) {
       })
     }
   })
+}
+
+async function testTcpLatency(server) {
+  if (!validateServer(server)) {
+    return { id: typeof server?.id === 'string' ? server.id : 'invalid-server', reachable: false, latencyMs: null, error: 'اطلاعات آدرس یا پورت سرور ناقص است.' }
+  }
+  const targets = await resolveTargets(server.host)
+  const samples = []
+  let lastError = null
+  for (let index = 0; index < ATTEMPT_COUNT; index += 1) {
+    // Keep all samples on the same resolved endpoint. Rotating CDN addresses
+    // measures different servers and can inflate the median dramatically.
+    const result = await testTcpAttempt(server, targets[0])
+    if (typeof result.latencyMs === 'number') samples.push(result.latencyMs)
+    else lastError = result.error
+  }
+  if (!samples.length) return { id: server.id, reachable: false, latencyMs: null, error: lastError || 'اتصال TCP ناموفق بود.' }
+  samples.sort((a, b) => a - b)
+  // Median rejects one-off scheduler/DNS/network spikes and matches what users
+  // perceive more closely than a single cold connection.
+  const latencyMs = samples[Math.floor(samples.length / 2)]
+  return { id: server.id, reachable: true, latencyMs, samples, error: null }
 }
 
 async function testServerBatch(

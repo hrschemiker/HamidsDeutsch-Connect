@@ -421,6 +421,39 @@ public static class WinInetRefresh {
   )
 }
 
+async function enableLocalManualProxy(port = 2080) {
+  const normalizedPort = Number(port)
+  if (!Number.isInteger(normalizedPort) || normalizedPort < 1 || normalizedPort > 65535) {
+    throw new Error('پورت پروکسی محلی معتبر نیست.')
+  }
+
+  const script = `
+$ErrorActionPreference = 'Stop'
+$WarningPreference = 'SilentlyContinue'
+$path = 'Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'
+$key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($path)
+$key.SetValue('ProxyEnable', 1, [Microsoft.Win32.RegistryValueKind]::DWord)
+$key.SetValue('ProxyServer', 'http://127.0.0.1:${normalizedPort}', [Microsoft.Win32.RegistryValueKind]::String)
+$key.SetValue('ProxyOverride', 'localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;192.168.*', [Microsoft.Win32.RegistryValueKind]::String)
+$key.Close()
+try {
+  if (-not ([System.Management.Automation.PSTypeName]'WinInetRefresh').Type) {
+    Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class WinInetRefresh {
+  [DllImport("wininet.dll", SetLastError = true)]
+  public static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
+}
+'@ -WarningAction SilentlyContinue
+  }
+  [WinInetRefresh]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
+  [WinInetRefresh]::InternetSetOption([IntPtr]::Zero, 37, [IntPtr]::Zero, 0) | Out-Null
+} catch {}
+`
+  await runPowerShell(script)
+}
+
 async function readBackupFile(
   backupPath,
 ) {
@@ -545,4 +578,5 @@ module.exports = {
   recoverStaleWindowsProxyState,
   discardWindowsProxyBackup,
   forceDisableLocalManualProxy,
+  enableLocalManualProxy,
 }

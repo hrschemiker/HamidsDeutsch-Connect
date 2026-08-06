@@ -1,7 +1,7 @@
 {
     "name": "hamidsdeutsch-connect",
     "private": true,
-    "version": "2.20.1",
+  "version": "2.22.0",
     "type": "module",
     "scripts": {
         "dev": "vite",
@@ -41,7 +41,7 @@
         "wait-on": "^9.0.10"
     },
     "productName": "Manfaz VPN",
-    "description": "Manfaz VPN — secure Windows VPN client powered by sing-box.",
+    "description": "Manfaz VPN — a multi-engine Windows VPN client with sing-box as the default.",
     "author": "Manfaz VPN",
     "main": "electron/main.cjs"
 }

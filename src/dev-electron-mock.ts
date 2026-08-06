@@ -3,6 +3,7 @@ type ApiValue = Record<string, unknown> | unknown[]
 const noop = () => {}
 
 const idleProcess = {
+  engineType: 'sing-box',
   running: false,
   ready: false,
   systemProxyEnabled: false,
@@ -22,6 +23,7 @@ const idleProcess = {
 function resultFor(path: string): ApiValue {
   const exact: Record<string, ApiValue> = {
     'engine.getInfo': {
+      engineType: 'sing-box',
       installed: true,
       healthy: true,
       path: 'development-preview',

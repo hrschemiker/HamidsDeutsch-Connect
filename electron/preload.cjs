@@ -38,6 +38,15 @@ contextBridge.exposeInMainWorld(
     },
 
     engine: {
+      setPreference: (engineType) =>
+        ipcRenderer.invoke('engine:set-preference', engineType),
+
+      getPreference: () =>
+        ipcRenderer.invoke('engine:get-preference'),
+
+      getXrayCompatibility: (nodeUri) =>
+        ipcRenderer.invoke('engine:get-xray-compatibility', nodeUri),
+
       getInfo: () =>
         ipcRenderer.invoke(
           'engine:get-info',

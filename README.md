@@ -6,7 +6,7 @@
 
 ### Reliable Windows connectivity, backed by sing-box and verified by real network state.
 
-[![Version](https://img.shields.io/badge/version-2.20.0-087f72?style=flat-square)](../../releases/latest)
+[![Version](https://img.shields.io/badge/version-2.22.0-087f72?style=flat-square)](../../releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](https://microsoft.com/windows)
 [![sing-box](https://img.shields.io/badge/powered%20by-sing--box-1f2937?style=flat-square)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/license-MIT-f2c055?style=flat-square)](LICENSE)
@@ -17,7 +17,7 @@
 
 ---
 
-Manfaz is a Windows connectivity client built around a simple rule: the reported state must match the real network state. It manages sing-box connections, system routing, DNS, recovery, and updates as one lifecycle—and verifies the public route before declaring a VPN connection successful.
+Manfaz is a Windows connectivity client built around a simple rule: the reported state must match the real network state. It uses sing-box by default, offers Xray as an optional core, and manages routing, DNS, recovery, and updates as one lifecycle—with strict public-route verification before a VPN connection is declared successful.
 
 ## Core capabilities
 

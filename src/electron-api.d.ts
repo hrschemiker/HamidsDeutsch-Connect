@@ -1,6 +1,7 @@
 export {}
 
 type EngineInfo = {
+  engineType?: 'xray' | 'sing-box'
   installed: boolean
   healthy: boolean
   path: string
@@ -34,6 +35,7 @@ type EngineUpdateResult =
   }
 
 type EngineProcessStatus = {
+  engineType?: 'xray' | 'sing-box'
   running: boolean
   ready: boolean
   systemProxyEnabled: boolean
@@ -448,9 +450,11 @@ type CheckServerConfigInput = {
   nodeId: string
   directDomains: string[]
   rescueOptions?: RescueOptions
+  enginePreference?: 'xray' | 'sing-box'
 }
 
 type CheckServerConfigResult = {
+  engineType?: 'xray' | 'sing-box'
   success: boolean
   checkedAt: string
   nodeId: string | null
@@ -507,6 +511,8 @@ type FreePoolServer = {
 type FreeConnectResult = {
   success: boolean
   nodeId: string | null
+  requiresEngine?: 'sing-box'
+  protocol?: string
   error: string | null
 }
 
@@ -614,6 +620,9 @@ declare global {
       }
 
       engine: {
+        setPreference: (engineType: 'xray' | 'sing-box') => Promise<{ success: boolean; engineType: 'xray' | 'sing-box'; error: string | null }>
+        getPreference: () => Promise<{ engineType: 'xray' | 'sing-box' }>
+        getXrayCompatibility: (nodeUri: string) => Promise<{ compatible: boolean; protocol: string; reason: string | null }>
         getInfo: () =>
           Promise<EngineInfo>
 
@@ -760,6 +769,7 @@ declare global {
           nodeId?: string
           nodeUri?: string
           directDomains?: string[]
+          enginePreference?: 'xray' | 'sing-box'
           rescueOptions?: RescueOptions | null
         }) => Promise<FreeConnectResult>
 
