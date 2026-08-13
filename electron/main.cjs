@@ -3786,7 +3786,7 @@ function compareVersions(left, right) {
 
 async function checkGithubReleaseFallback(reason) {
   const response = await net.fetch(
-    'https://api.github.com/repos/hrschemiker/HamidsDeutsch-Connect/releases/latest',
+    'https://api.github.com/repos/hrschemiker/ManfazVpn-Windows/releases/latest',
     {
       headers: {
         Accept: 'application/vnd.github+json',

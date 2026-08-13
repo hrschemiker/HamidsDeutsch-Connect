@@ -2481,7 +2481,7 @@ function App() {
         </main>
         <footer className="app-footer">
           <span>Made with <span className="app-footer-heart">♥</span> by{' '}
-            <a href="https://github.com/hrschemiker/HamidsDeutsch-Connect" target="_blank" rel="noopener noreferrer" className="app-footer-link">Hamidreza</a>
+            <a href="https://github.com/hrschemiker/ManfazVpn-Windows" target="_blank" rel="noopener noreferrer" className="app-footer-link">Hamidreza</a>
           </span>
         </footer>
       </section>

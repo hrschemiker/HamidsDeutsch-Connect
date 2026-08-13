@@ -43,7 +43,7 @@ compression: maximum
 publish:
   provider: github
   owner: hrschemiker
-  repo: hamidsdeutsch-connect
+  repo: ManfazVpn-Windows
   releaseType: release
 
 win:
