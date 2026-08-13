@@ -855,6 +855,7 @@ declare global {
           proxyDoHEnabled: boolean
           standaloneActive: boolean
           activeConfig: DnsActiveConfig | null
+          smartCloudflare?: { primary: string; secondary: string; label: string }
           error: string | null
         }>
         test: (input: { server: Exclude<DnsServerId, 'off'>; primary?: string; secondary?: string }) => Promise<{
@@ -881,6 +882,15 @@ declare global {
         setProxyDoH: (enabled: boolean) => Promise<{
           success: boolean
           proxyDoHEnabled: boolean
+          error: string | null
+        }>
+        listProfiles: () => Promise<{
+          success: boolean
+          profiles: Array<{ id: string; name: string; primary: string; secondary: string }>
+        }>
+        saveProfiles: (profiles: Array<{ id: string; name: string; primary: string; secondary: string }>) => Promise<{
+          success: boolean
+          profiles: Array<{ id: string; name: string; primary: string; secondary: string }>
           error: string | null
         }>
       }
@@ -996,6 +1006,7 @@ type AppUpdateState = {
 
 type DnsServerId =
   | 'off'
+  | 'cloudflare-smart'
   | 'cloudflare'
   | 'cloudflare-family'
   | 'google'

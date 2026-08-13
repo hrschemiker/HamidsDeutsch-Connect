@@ -86,8 +86,10 @@ function tcpPing(ip, port) {
 
 async function scanCloudflareIps({ port = 443, onProgress } = {}) {
   const allIps = []
+  const liveCidrs = await fetchCloudflareIpsFromCdn().catch(() => null)
+  const cidrs = Array.isArray(liveCidrs) && liveCidrs.length > 0 ? liveCidrs : CF_CIDRS
 
-  for (const cidr of CF_CIDRS) {
+  for (const cidr of cidrs) {
     const sample = sampleCidr(cidr, SAMPLE_PER_CIDR)
     allIps.push(...sample)
   }
@@ -132,6 +134,7 @@ async function scanCloudflareIps({ port = 443, onProgress } = {}) {
     reachable: results.length,
     port,
     results: results.slice(0, MAX_RESULTS),
+    source: liveCidrs ? 'cloudflare-live' : 'bundled-fallback',
   }
 }
 

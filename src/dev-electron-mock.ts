@@ -65,7 +65,7 @@ function resultFor(path: string): ApiValue {
       standaloneDoHServer: 'off',
       customDnsPrimary: '',
       customDnsSecondary: '',
-      preferredDnsServer: 'cloudflare',
+      preferredDnsServer: 'cloudflare-smart',
       preferredDnsPrimary: '',
       preferredDnsSecondary: '',
       proxyDoHEnabled: false,
@@ -73,6 +73,8 @@ function resultFor(path: string): ApiValue {
       activeConfig: null,
       error: null,
     },
+    'doh.listProfiles': { success: true, profiles: [] },
+    'doh.saveProfiles': { success: true, profiles: [], error: null },
     'system.getPrivilegeStatus': {
       isWindows: true,
       isElevated: false,

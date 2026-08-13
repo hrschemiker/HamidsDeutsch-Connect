@@ -114,7 +114,15 @@ async function setTestResult(id, working, latencyMs) {
   const now = new Date().toISOString()
   for (const s of pool.servers) {
     if (s.id === id) {
-      s.working = Boolean(working)
+      if (working) {
+        s.working = true
+        s.consecutiveFailures = 0
+      } else {
+        s.consecutiveFailures = Math.max(0, Number(s.consecutiveFailures) || 0) + 1
+        // One timeout is often just a transient filtering or network event.
+        // Hide/prune only after two consecutive real-relay failures.
+        if (s.consecutiveFailures >= 2) s.working = false
+      }
       s.latencyMs = typeof latencyMs === 'number' ? latencyMs : s.latencyMs
       s.lastTestedAt = now
       break
@@ -123,7 +131,7 @@ async function setTestResult(id, working, latencyMs) {
   await writePool(pool)
 }
 
-/** Remove every config whose last test failed (working === false). */
+/** Remove configs that failed two consecutive real-relay tests. */
 async function pruneDead() {
   const pool = await readPool()
   const before = pool.servers.length

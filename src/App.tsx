@@ -34,10 +34,11 @@ type DnsProfile = {
   primary: string
   secondary: string
   custom: boolean
-  server: 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom'
+  server: 'cloudflare-smart' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom'
 }
 
 const BUILTIN_DNS_PROFILES: DnsProfile[] = [
+  { id: 'cloudflare-smart', name: 'Cloudflare Smart', primary: 'Auto', secondary: '1.1.1.1', custom: false, server: 'cloudflare-smart' },
   { id: 'cloudflare', name: 'Cloudflare', primary: '1.1.1.1', secondary: '1.0.0.1', custom: false, server: 'cloudflare' },
   { id: 'cloudflare-family', name: 'Cloudflare Family', primary: '1.1.1.3', secondary: '1.0.0.3', custom: false, server: 'cloudflare-family' },
   { id: 'google', name: 'Google', primary: '8.8.8.8', secondary: '8.8.4.4', custom: false, server: 'google' },
@@ -283,6 +284,10 @@ function App() {
     localStorage.setItem('hd-lang', l)
   }
 
+  useEffect(() => {
+    document.documentElement.lang = lang === 'fa' ? 'fa' : 'en'
+  }, [lang])
+
   const t = (key: string, fallback?: string): string =>
     TR[lang]?.[key] ?? fallback ?? TR['en']?.[key] ?? TR['fa'][key] ?? key
 
@@ -368,9 +373,6 @@ function App() {
   // Speed test
   const [speedTestResult, setSpeedTestResult] = useState<{ mbps: number | null; running: boolean; error: string | null } | null>(null)
 
-  // Geo-block auto-run trigger
-  const [geoBlockTrigger, setGeoBlockTrigger] = useState(0)
-
   // Subscription server connection progress (shown inline in servers list)
   const [subConnectingNodeId, setSubConnectingNodeId] = useState<string | null>(null)
   const [subConnectingStep, setSubConnectingStep] = useState<string | null>(null)
@@ -381,7 +383,6 @@ function App() {
   // Bandwidth monitor
   const [_traffic, setTraffic] = useState<{ up: number; down: number } | null>(null)
   const trafficIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const prevTrafficRef = useRef<{ up: number; down: number } | null>(null)
   const [trafficSpeed, setTrafficSpeed] = useState<{ upSpeed: number; downSpeed: number } | null>(null)
 
   // QR code modal
@@ -404,24 +405,27 @@ function App() {
     void window.hamidsDeutsch.startup.getCloseToTray().then((r) => { setCloseToTray(r.enabled) }).catch(() => {})
   }, [])
 
-  type DnsServer = 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom'
+  type DnsServer = 'off' | 'cloudflare-smart' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom'
   const [standaloneDoH, setStandaloneDoH] = useState<DnsServer>('off')
   const [standaloneDoHLoading, setStandaloneDoHLoading] = useState(false)
   const [customDnsPrimary, setCustomDnsPrimary] = useState('')
   const [customDnsSecondary, setCustomDnsSecondary] = useState('')
-  const [preferredDnsServer, setPreferredDnsServer] = useState<DnsServer>('cloudflare')
+  const [preferredDnsServer, setPreferredDnsServer] = useState<DnsServer>('cloudflare-smart')
   const [preferredDnsPrimary, setPreferredDnsPrimary] = useState('')
   const [preferredDnsSecondary, setPreferredDnsSecondary] = useState('')
   const [dnsApplyError, setDnsApplyError] = useState<string | null>(null)
   const [proxyDoH, setProxyDoH] = useState(false)
+  const [smartCloudflareIp, setSmartCloudflareIp] = useState('1.1.1.1')
   const [customDnsProfiles, setCustomDnsProfiles] = useState<DnsProfile[]>(loadCustomDnsProfiles)
   const [selectedDnsProfileId, setSelectedDnsProfileId] = useState(() => {
     const custom = loadCustomDnsProfiles()
     return custom[0]?.id ?? 'cloudflare'
   })
   const allDnsProfiles = useMemo(
-    () => [...customDnsProfiles, ...BUILTIN_DNS_PROFILES],
-    [customDnsProfiles],
+    () => [...customDnsProfiles, ...BUILTIN_DNS_PROFILES.map((profile) =>
+      profile.id === 'cloudflare-smart' ? { ...profile, primary: smartCloudflareIp } : profile,
+    )],
+    [customDnsProfiles, smartCloudflareIp],
   )
   const activeDnsProfile = useMemo(() => {
     if (standaloneDoH === 'off') return null
@@ -437,12 +441,14 @@ function App() {
         server: 'custom' as const,
       }
     }
-    return BUILTIN_DNS_PROFILES.find((profile) => profile.server === standaloneDoH) ?? null
-  }, [customDnsPrimary, customDnsProfiles, customDnsSecondary, standaloneDoH])
+    const builtIn = BUILTIN_DNS_PROFILES.find((profile) => profile.server === standaloneDoH) ?? null
+    return builtIn?.id === 'cloudflare-smart' ? { ...builtIn, primary: smartCloudflareIp } : builtIn
+  }, [customDnsPrimary, customDnsProfiles, customDnsSecondary, standaloneDoH, smartCloudflareIp])
 
   function saveDnsProfiles(next: DnsProfile[]) {
     setCustomDnsProfiles(next)
     try { localStorage.setItem('manfaz:dns-profiles', JSON.stringify(next)) } catch {}
+    void window.hamidsDeutsch.doh.saveProfiles(next.map(({ id, name, primary, secondary }) => ({ id, name, primary, secondary })))
     if (!next.some((profile) => profile.id === selectedDnsProfileId)) {
       setSelectedDnsProfileId(next[0]?.id ?? 'cloudflare')
     }
@@ -487,14 +493,28 @@ function App() {
     }
   }
   useEffect(() => {
+    void window.hamidsDeutsch.doh.listProfiles().then((result) => {
+      const diskProfiles = result.profiles.map((profile) => ({ ...profile, custom: true, server: 'custom' as const }))
+      const localProfiles = loadCustomDnsProfiles()
+      const merged: DnsProfile[] = [...diskProfiles]
+      for (const profile of localProfiles) {
+        if (!merged.some((item) => item.primary === profile.primary && item.secondary === profile.secondary)) merged.push(profile)
+      }
+      if (merged.length) {
+        setCustomDnsProfiles(merged)
+        try { localStorage.setItem('manfaz:dns-profiles', JSON.stringify(merged)) } catch {}
+        void window.hamidsDeutsch.doh.saveProfiles(merged.map(({ id, name, primary, secondary }) => ({ id, name, primary, secondary })))
+      }
+    }).catch(() => {})
     void window.hamidsDeutsch.doh.getSettings().then((r) => {
       setStandaloneDoH(r.standaloneDoHServer)
       setCustomDnsPrimary(r.customDnsPrimary)
       setCustomDnsSecondary(r.customDnsSecondary)
-      setPreferredDnsServer(r.preferredDnsServer ?? 'cloudflare')
+      setPreferredDnsServer(r.preferredDnsServer ?? 'cloudflare-smart')
       setPreferredDnsPrimary(r.preferredDnsPrimary ?? '')
       setPreferredDnsSecondary(r.preferredDnsSecondary ?? '')
       setProxyDoH(r.proxyDoHEnabled)
+      setSmartCloudflareIp(r.smartCloudflare?.primary ?? '1.1.1.1')
       if (r.standaloneDoHServer !== 'off' && r.standaloneDoHServer !== 'custom') {
         setSelectedDnsProfileId(r.standaloneDoHServer)
       }
@@ -593,9 +613,8 @@ function App() {
             exitIp: null,
           })
         }
-        // Auto speed test and geo-block test: run after connect
+        // Auto speed test: run after connect
         setSpeedTestResult({ mbps: null, running: true, error: null })
-        setGeoBlockTrigger((n) => n + 1)
         setTimeout(() => {
           void window.hamidsDeutsch.speedtest.run().then((r) => {
             setSpeedTestResult({ mbps: r.mbps, running: false, error: r.error })
@@ -638,17 +657,10 @@ function App() {
   // Bandwidth monitor: poll Clash API while connected
   useEffect(() => {
     if (appHeroConnected) {
-      prevTrafficRef.current = null
       trafficIntervalRef.current = setInterval(async () => {
         try {
           const r = await window.hamidsDeutsch.engine.getTraffic()
-          if (prevTrafficRef.current) {
-            setTrafficSpeed({
-              upSpeed: Math.max(0, r.up - prevTrafficRef.current.up),
-              downSpeed: Math.max(0, r.down - prevTrafficRef.current.down),
-            })
-          }
-          prevTrafficRef.current = { up: r.up, down: r.down }
+          setTrafficSpeed({ upSpeed: Math.max(0, r.up), downSpeed: Math.max(0, r.down) })
           setTraffic({ up: r.up, down: r.down })
         } catch {}
       }, 1000)
@@ -659,7 +671,6 @@ function App() {
       }
       setTraffic(null)
       setTrafficSpeed(null)
-      prevTrafficRef.current = null
     }
     return () => {
       if (trafficIntervalRef.current) {
@@ -1844,7 +1855,7 @@ function App() {
           </div>
         </div>
 
-        <nav className="navigation navigation-top" aria-label={t('nav.settings')}>
+        <nav className="navigation navigation-top" aria-label={lang === 'fa' ? 'ناوبری اصلی' : 'Main navigation'}>
           {navigationItems.map((item) => (
             <button
               className={
@@ -2056,7 +2067,6 @@ function App() {
               showReconnectBar={showReconnectBar}
               lastConnectionType={lastConnectionType}
               onQuickReconnect={() => void quickReconnect()}
-              geoBlockTrigger={geoBlockTrigger}
               dataLoading={serverNodes.loading || subscriptions.loading}
               trafficSpeed={trafficSpeed}
               onNavigateToTools={() => setActivePage('settings')}
@@ -2521,14 +2531,14 @@ function App() {
         />
       )}
       {testStopPrompt && (
-        <div className="killswitch-overlay" role="alertdialog" aria-modal="true">
-          <div className="killswitch-dialog">
-            <div className="killswitch-icon"><BrandIcon name="pulse" size={34} /></div>
+        <div className="test-stop-overlay" role="alertdialog" aria-modal="true">
+          <div className="test-stop-dialog">
+            <div className="test-stop-icon"><BrandIcon name="refresh" size={24} /></div>
             <h2>{lang === 'fa' ? 'آزمایش کانفیگ‌ها در جریان است' : 'Testing in progress'}</h2>
             <p>{lang === 'fa'
               ? 'همین حالا در حال آزمایش دانلود/آپلود کانفیگ‌های رایگان هستیم. برای برقراری اتصال باید آزمایش متوقف شود. متوقف کنیم و وصل شویم؟'
               : 'Free configs are being download/upload tested right now. Connecting will stop the test. Stop testing and connect?'}</p>
-            <div className="killswitch-actions">
+            <div className="test-stop-actions">
               <button className="primary-button" type="button" onClick={() => void resolveTestStop(true)}>
                 {lang === 'fa' ? 'توقف آزمایش و اتصال' : 'Stop test & connect'}
               </button>
@@ -2681,7 +2691,6 @@ type HomePageProps = {
   showReconnectBar: boolean
   lastConnectionType: string | null
   onQuickReconnect: () => void
-  geoBlockTrigger: number
   dataLoading: boolean
   trafficSpeed: { upSpeed: number; downSpeed: number } | null
   onShowQr: (compositeId: string) => void
@@ -2732,7 +2741,7 @@ function HomePage({
   freePhase,
   freeNodeName,
   freeLatencyMs,
-  freeProgress: _freeProgress,
+  freeProgress,
   freeError,
   onFreeConnect,
   onFreeDisconnect,
@@ -2740,7 +2749,6 @@ function HomePage({
   showReconnectBar,
   lastConnectionType,
   onQuickReconnect,
-  geoBlockTrigger: _geoBlockTrigger,
   dataLoading,
   topSubServers,
   topFreeServers,
@@ -2760,7 +2768,7 @@ function HomePage({
   const showReconnect = showReconnectBar && !reconnectDismissed
 
   // ── Reconnect countdown (UX #10) ──────────────────────────────────────────
-  const [_reconnectSecs, setReconnectSecs] = useState(1)
+  const [reconnectSecs, setReconnectSecs] = useState(1)
   useEffect(() => {
     if (freePhase !== 'reconnecting') { setReconnectSecs(1); return }
     setReconnectSecs(1)
@@ -2892,6 +2900,14 @@ function HomePage({
       onFreeDisconnect()
     } else {
       handleFreeConnect()
+    }
+  }
+
+  function handleHeroVisualClick() {
+    if (activeMethod === 'free') handleFreeToggle()
+    else if (activeMethod === 'dns') onDnsDisconnect()
+    else if (activeMethod === 'subscription') {
+      requireSwitch(t('btn.disconnect'), 'اتصال قطع می‌شود. ادامه می‌دهید؟', () => { setSwitchConfirm(null); onMainAction() })
     }
   }
 
@@ -3077,9 +3093,21 @@ function HomePage({
               ))}
             </div>
           )}
+          {freeProgress && !heroConnected && (
+            <p className="free-progress-line" role="status">{freeProgress}</p>
+          )}
         </div>
 
-        <div className="hero-visual">
+        <div
+          className={`hero-visual${heroConnected ? ' hero-visual-clickable' : ''}`}
+          role={heroConnected ? 'button' : undefined}
+          tabIndex={heroConnected ? 0 : undefined}
+          aria-label={heroConnected ? t('btn.disconnect') : undefined}
+          onClick={heroConnected ? handleHeroVisualClick : undefined}
+          onKeyDown={heroConnected ? (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleHeroVisualClick() }
+          } : undefined}
+        >
           <div className={orbitClass}>
             <div className="connection-orbit-middle">
               <div className="connection-orbit-core">
@@ -3092,13 +3120,10 @@ function HomePage({
             </div>
           </div>
           {heroConnected && (
-            <button type="button" className="hero-disconnect-button" onClick={() => {
-            if (activeMethod === 'free') handleFreeToggle()
-            else if (activeMethod === 'dns') onDnsDisconnect()
-            else if (activeMethod === 'subscription') {
-              requireSwitch(t('btn.disconnect'), 'اتصال قطع می‌شود. ادامه می‌دهید؟', () => { setSwitchConfirm(null); onMainAction() })
-            }
-          }}>
+            <span className="orbit-disconnect-hint" aria-hidden="true">{t('hero.clickToDisconnect')}</span>
+          )}
+          {heroConnected && (
+            <button type="button" className="hero-disconnect-button" onClick={handleHeroVisualClick}>
               <BrandIcon name="power" size={16} />
               <span>{t('btn.disconnect')}</span>
             </button>
@@ -3110,6 +3135,7 @@ function HomePage({
         <div className="reconnect-bar">
           <span className="reconnect-bar-label">
             {t('reconnect.label')} {lastConnectionType === 'free' ? t('reconnect.free') : lastConnectionType === 'codespace' ? 'Codespace' : lastConnectionType === 'bpb' ? 'BPB' : t('reconnect.subscription')}
+            {freePhase === 'reconnecting' && <span className="reconnect-countdown">{reconnectSecs}s</span>}
           </span>
           <button className="primary-button reconnect-bar-btn" type="button" onClick={onQuickReconnect}>
             {t('reconnect.button')}
@@ -3371,7 +3397,7 @@ function HomePage({
         </article>
 
         <article className="manfaz-promo-card">
-          <img src="manfaz-service-banner-v1.png" alt="" />
+          <img src="manfaz-service-banner-v1.png" alt="" loading="lazy" />
           <div className="manfaz-promo-shade" />
           <div className="manfaz-promo-copy">
             <span>{lang === 'fa' ? 'MANFAZ PREMIUM' : 'MANFAZ PREMIUM'}</span>
@@ -3664,7 +3690,7 @@ function EmptyPage({
 }) {
   return (
     <section className="empty-state">
-      <div className="empty-state-icon">
+      <div className="empty-state-icon" aria-hidden="true">
         {icon}
       </div>
       <h2>{title}</h2>
@@ -6100,7 +6126,7 @@ function StatisticsPage({
     <div className="page-stack">
       <section className="quick-statistics">
         <article className="statistic-card">
-          <span className="statistic-icon">
+          <span className="statistic-icon" aria-hidden="true">
             ✓
           </span>
           <div>
@@ -6116,7 +6142,7 @@ function StatisticsPage({
         </article>
 
         <article className="statistic-card">
-          <span className="statistic-icon">
+          <span className="statistic-icon" aria-hidden="true">
             !
           </span>
           <div>
@@ -6132,7 +6158,7 @@ function StatisticsPage({
         </article>
 
         <article className="statistic-card">
-          <span className="statistic-icon">
+          <span className="statistic-icon" aria-hidden="true">
             ◷
           </span>
           <div>
@@ -6148,7 +6174,7 @@ function StatisticsPage({
         </article>
 
         <article className="statistic-card">
-          <span className="statistic-icon">
+          <span className="statistic-icon" aria-hidden="true">
             T
           </span>
           <div>
@@ -6630,7 +6656,7 @@ function SettingsPage({
   onCheckAppUpdate: () => Promise<unknown>
   onDownloadAppUpdate: () => Promise<unknown>
   onInstallAppUpdate: () => Promise<unknown>
-  standaloneDoH: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom'
+  standaloneDoH: 'off' | 'cloudflare-smart' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom'
   standaloneDoHLoading: boolean
   customDnsPrimary: string
   customDnsSecondary: string
@@ -6640,7 +6666,7 @@ function SettingsPage({
   onRemoveDnsProfile: (id: string) => void
   onCustomDnsChange: (primary: string, secondary: string) => void
   onStandaloneDoHChange: (
-    server: 'off' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom',
+    server: 'off' | 'cloudflare-smart' | 'cloudflare' | 'cloudflare-family' | 'google' | 'adguard' | 'shecan' | 'radar' | 'electro' | 'custom',
     primary?: string,
     secondary?: string,
   ) => Promise<void>
@@ -6885,8 +6911,8 @@ function SettingsPage({
               void window.hamidsDeutsch.engine.setPreference(engine)
             }}
           >
-            <option value="xray">Xray Core · {lang === 'fa' ? 'پیش‌فرض' : 'Default'}</option>
-            <option value="sing-box">sing-box · {lang === 'fa' ? 'سازگاری تکمیلی' : 'Extended compatibility'}</option>
+            <option value="sing-box">sing-box · {lang === 'fa' ? 'پیش‌فرض' : 'Default'}</option>
+            <option value="xray">Xray Core · {lang === 'fa' ? 'انتخاب جایگزین' : 'Alternative engine'}</option>
           </select>
         </label>
 
@@ -6999,7 +7025,8 @@ function SettingsPage({
             }}
           >
             <option value="off">{lang === 'fa' ? 'غیرفعال' : 'Off'}</option>
-            <option value="cloudflare">Cloudflare (1.1.1.1)</option>
+            <option value="cloudflare-smart">Cloudflare Smart ({lang === 'fa' ? 'بهترین IP تأییدشده' : 'verified best IP'})</option>
+            <option value="cloudflare">Cloudflare Traditional (1.1.1.1)</option>
             <option value="cloudflare-family">Cloudflare Family (1.1.1.3)</option>
             <option value="google">Google (8.8.8.8)</option>
             <option value="adguard">AdGuard (94.140.14.14)</option>
@@ -7956,13 +7983,17 @@ function SubscriptionConverterSection({ onNavigateToSubscriptions: _onNavigateTo
 
   async function convert() {
     if (!subUrl.trim()) return
+    const approved = window.confirm(
+      'این ابزار لینک اشتراک را برای تبدیل به سرویس عمومی انتخاب‌شده می‌فرستد. لینک اشتراک ممکن است محرمانه باشد. ادامه می‌دهید؟',
+    )
+    if (!approved) return
     setConverting(true)
     setResult(null)
     setError(null)
     const r = await window.hamidsDeutsch.tools.convertSubscription({ subscriptionUrl: subUrl.trim(), backendId, targetId })
     setConverting(false)
-    if (r.success && r.convertUrl) {
-      setResult(r.convertUrl)
+    if (r.success && r.convertedContent) {
+      setResult(r.convertedContent)
     } else {
       setError(r.error ?? 'Failed')
     }
@@ -7980,6 +8011,7 @@ function SubscriptionConverterSection({ onNavigateToSubscriptions: _onNavigateTo
       <div className="section-kicker">{t('tools.converter.kicker')}</div>
       <h3 className="section-title">{t('tools.converter.title')}</h3>
       <p className="section-desc">{t('tools.converter.desc')}</p>
+      <p className="inline-notice">لینک اشتراک برای تبدیل به سرویس عمومی انتخاب‌شده ارسال می‌شود؛ فقط با سرویس مورد اعتماد ادامه دهید.</p>
       <div className="field-stack">
         <label className="field-label">{t('tools.converter.urlLabel')}</label>
         <input

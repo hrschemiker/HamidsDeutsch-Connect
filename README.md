@@ -6,7 +6,7 @@
 
 ### Reliable Windows connectivity, backed by sing-box and verified by real network state.
 
-[![Version](https://img.shields.io/badge/version-2.22.0-087f72?style=flat-square)](../../releases/latest)
+[![Version](https://img.shields.io/badge/version-2.23.0-087f72?style=flat-square)](../../releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](https://microsoft.com/windows)
 [![sing-box](https://img.shields.io/badge/powered%20by-sing--box-1f2937?style=flat-square)](https://github.com/SagerNet/sing-box)
 [![License](https://img.shields.io/badge/license-MIT-f2c055?style=flat-square)](LICENSE)
@@ -57,9 +57,9 @@ The Kill Switch arms only after a verified VPN session exists. Expected stops, m
 
 ## DNS profiles
 
-Built-in profiles include Cloudflare, Cloudflare Family, Google, AdGuard, Shecan, Radar, and Electro. Custom IPv4 resolver pairs are validated before application, stored locally, prioritized over built-in profiles, and can be used either independently or alongside a VPN connection.
+Built-in profiles include Cloudflare Smart, Cloudflare Traditional, Cloudflare Family, Google, AdGuard, Shecan, Radar, and Electro. Custom IPv4 resolver pairs are validated before application, stored as named profiles, prioritized over built-in profiles, and can be used either independently or alongside a VPN connection.
 
-Cloudflare is the safe default when no custom profile exists.
+Cloudflare Smart is the safe default when no custom profile exists. A scanned edge is accepted only after a real encrypted DNS query; `1.1.1.1` remains the automatic fallback and a separate traditional profile.
 
 ## Rescue and routing tools
 

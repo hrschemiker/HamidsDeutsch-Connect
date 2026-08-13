@@ -86,6 +86,7 @@ const {
   getCfScanCache,
   saveCfScanCache,
   isCloudflareHost,
+  isCloudflareIp,
 } = require('./cf-scan-store.cjs')
 
 const {
@@ -108,6 +109,11 @@ const {
   exportSettings,
   importSettings,
 } = require('./settings-backup.cjs')
+
+const {
+  listDnsProfiles,
+  saveDnsProfiles,
+} = require('./dns-profile-store.cjs')
 
 const {
   startLocalProxy,
@@ -216,6 +222,7 @@ function scheduleCfScanInterval(intervalHours) {
         const scanResult = await scanCloudflareIps({ port: 443 })
         if (scanResult.reachable > 0) {
           await saveCfScanCache(app.getPath('userData'), scanResult.results ?? [])
+          await resolveSmartCloudflareDns().catch(() => {})
         }
       } catch {}
     }, intervalHours * 60 * 60 * 1000)
@@ -227,11 +234,15 @@ let closeToTrayEnabled = true
 let standaloneDoHServer = 'off'   // 'off' | 'cloudflare' | 'google'
 let customDnsPrimary = ''
 let customDnsSecondary = ''
-let preferredDnsServer = 'cloudflare'
+let preferredDnsServer = 'cloudflare-smart'
 let preferredDnsPrimary = ''
 let preferredDnsSecondary = ''
 let proxyDoHEnabled = false
 let autoUpdateEnabled = true
+let smartCloudflareDnsConfig = {
+  primary: '1.1.1.1', secondary: '1.0.0.1', label: 'Cloudflare Smart',
+  template: 'https://cloudflare-dns.com/dns-query',
+}
 
 function getAppSettingsPath() {
   return path.join(app.getPath('userData'), 'HamidsDeutsch-Connect', 'app-settings.json')
@@ -251,7 +262,7 @@ async function loadAppSettings() {
     preferredDnsServer = parsed.preferredDnsServer
       ?? (parsed.standaloneDoHServer && parsed.standaloneDoHServer !== 'off'
         ? parsed.standaloneDoHServer
-        : 'cloudflare')
+        : 'cloudflare-smart')
     preferredDnsPrimary = typeof parsed.preferredDnsPrimary === 'string'
       ? parsed.preferredDnsPrimary
       : customDnsPrimary
@@ -265,7 +276,7 @@ async function loadAppSettings() {
     standaloneDoHServer = 'off'
     customDnsPrimary = ''
     customDnsSecondary = ''
-    preferredDnsServer = 'cloudflare'
+    preferredDnsServer = 'cloudflare-smart'
     preferredDnsPrimary = ''
     preferredDnsSecondary = ''
     proxyDoHEnabled = false
@@ -291,6 +302,7 @@ async function saveAppSettings() {
 }
 
 const VPN_DNS_PRESETS = {
+  'cloudflare-smart': { primary: '1.1.1.1', secondary: '1.0.0.1', label: 'Cloudflare Smart' },
   cloudflare: { primary: '1.1.1.1', secondary: '1.0.0.1', label: 'Cloudflare' },
   'cloudflare-family': { primary: '1.1.1.3', secondary: '1.0.0.3', label: 'Cloudflare Family' },
   google: { primary: '8.8.8.8', secondary: '8.8.4.4', label: 'Google' },
@@ -300,8 +312,13 @@ const VPN_DNS_PRESETS = {
   electro: { primary: '78.157.42.100', secondary: '78.157.42.101', label: 'Electro' },
 }
 
-function getPreferredVpnDnsConfig() {
+function getPreferredVpnDnsConfig(engineType = 'sing-box') {
   if (preferredDnsServer === 'off') return null
+  if (preferredDnsServer === 'cloudflare-smart') {
+    return engineType === 'xray'
+      ? { ...VPN_DNS_PRESETS.cloudflare }
+      : { ...smartCloudflareDnsConfig }
+  }
   if (preferredDnsServer === 'custom') {
     const primary = String(preferredDnsPrimary ?? '').trim()
     if (!primary) return null
@@ -312,6 +329,32 @@ function getPreferredVpnDnsConfig() {
     }
   }
   return VPN_DNS_PRESETS[preferredDnsServer] ?? VPN_DNS_PRESETS.cloudflare
+}
+
+async function resolveSmartCloudflareDns() {
+  const traditional = {
+    primary: '1.1.1.1', secondary: '1.0.0.1', label: 'Cloudflare Smart',
+    template: 'https://cloudflare-dns.com/dns-query',
+  }
+  const cache = await getCfScanCache(app.getPath('userData')).catch(() => null)
+  const candidates = Array.isArray(cache?.results)
+    ? cache.results.map((item) => item?.ip).filter(Boolean).slice(0, 10)
+    : []
+  for (const primary of candidates) {
+    try {
+      const tested = await testDnsConfig('custom', {
+        ...traditional,
+        primary,
+        secondary: '1.1.1.1',
+      })
+      if (tested.results?.some((result) => result.address === primary && result.success)) {
+        smartCloudflareDnsConfig = { ...traditional, primary, secondary: '1.1.1.1' }
+        return smartCloudflareDnsConfig
+      }
+    } catch {}
+  }
+  smartCloudflareDnsConfig = traditional
+  return traditional
 }
 
 // Legacy single-value save — kept so existing callers still work
@@ -465,6 +508,19 @@ async function resolveCfCleanIp(userDataPath) {
     return cache?.bestIp ?? null
   } catch {
     return null
+  }
+}
+
+async function isCloudflareBackedUri(uri) {
+  try {
+    const parsed = new URL(String(uri))
+    const host = parsed.hostname
+    if (isCloudflareHost(host)) return true
+    const dns = require('node:dns').promises
+    const addresses = await dns.resolve4(host)
+    return addresses.length > 0 && addresses.every(isCloudflareIp)
+  } catch {
+    return false
   }
 }
 
@@ -758,7 +814,7 @@ async function refreshWorkingPings() {
  * Connect to a free config EXACTLY like a subscription: build the normal runtime
  * config and start the engine. No separate free-runtime, no extra gate.
  */
-async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOptions = null, enginePreference = 'xray' }) {
+async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOptions = null, enginePreference = 'sing-box' }) {
   const { createAndCheckConfig } = require('./sing-box-config-service.cjs')
   // Never connect while a test is running — stop it first so a leftover test
   // engine can't disrupt the real connection.
@@ -782,7 +838,7 @@ async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOp
   }
   if (!uri) return { success: false, error: 'کانفیگ رایگان پیدا نشد.' }
 
-  const requestedEngine = enginePreference === 'sing-box' ? 'sing-box' : 'xray'
+  const requestedEngine = enginePreference === 'xray' ? 'xray' : 'sing-box'
   const compatibility = getXrayCompatibility(uri)
   if (requestedEngine === 'xray' && !compatibility.compatible) {
     return { success: false, requiresEngine: 'sing-box', protocol: compatibility.protocol, error: compatibility.reason }
@@ -794,11 +850,13 @@ async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOp
     try { await connectionEngines.stopSelected({ userDataPath }) } catch {}
   }
 
-  const [upstreamProxy, utlsSettings, cleanIp] = await Promise.all([
+  const [upstreamProxy, utlsSettings, scannedCleanIp, cloudflareBacked] = await Promise.all([
     getUpstreamProxy(userDataPath).catch(() => null),
     getUTlsSettings(userDataPath).catch(() => null),
     resolveCfCleanIp(userDataPath),
+    isCloudflareBackedUri(uri),
   ])
+  const cleanIp = cloudflareBacked ? scannedCleanIp : null
 
   async function build(cfCleanIp) {
     const params = {
@@ -812,7 +870,7 @@ async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOp
       localPort: 2080,
       setSystemProxy: true,
       proxyDoH: proxyDoHEnabled,
-      vpnDns: getPreferredVpnDnsConfig(),
+      vpnDns: getPreferredVpnDnsConfig(requestedEngine),
       upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
       utlsSettings,
       cfCleanIp,
@@ -2246,9 +2304,9 @@ function registerIpcHandlers() {
             ? input.directDomains
             : []
 
-        const requestedEngine = input?.enginePreference === 'sing-box'
-          ? 'sing-box'
-          : 'xray'
+        const requestedEngine = input?.enginePreference === 'xray'
+          ? 'xray'
+          : 'sing-box'
 
         const rescueOptions =
           input?.rescueOptions &&
@@ -2302,11 +2360,13 @@ function registerIpcHandlers() {
           )
         }
 
-        const [upstreamProxy, utlsSettings, cleanIp] = await Promise.all([
+        const [upstreamProxy, utlsSettings, scannedCleanIp, cloudflareBacked] = await Promise.all([
           getUpstreamProxy(app.getPath('userData')).catch(() => null),
           getUTlsSettings(app.getPath('userData')).catch(() => null),
           resolveCfCleanIp(app.getPath('userData')),
+          isCloudflareBackedUri(nodeUri),
         ])
+        const cleanIp = cloudflareBacked ? scannedCleanIp : null
 
         const effectiveRescueOptions = utlsSettings?.fragmentEnabled
           ? { ...(rescueOptions ?? {}), enabled: true, recordFragment: true }
@@ -2325,7 +2385,7 @@ function registerIpcHandlers() {
           directDomains,
           rescueOptions: effectiveRescueOptions,
           proxyDoH: proxyDoHEnabled,
-          vpnDns: getPreferredVpnDnsConfig(),
+          vpnDns: getPreferredVpnDnsConfig(requestedEngine),
           upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
           utlsSettings,
           cfCleanIp: cleanIp,
@@ -2443,7 +2503,11 @@ function registerIpcHandlers() {
         }
 
         const { getApps } = require('./split-tunnel-store.cjs')
-        const directApps = await getApps(app.getPath('userData')).catch(() => [])
+        const [directApps, upstreamProxy, utlsSettings] = await Promise.all([
+          getApps(app.getPath('userData')).catch(() => []),
+          getUpstreamProxy(app.getPath('userData')).catch(() => null),
+          getUTlsSettings(app.getPath('userData')).catch(() => null),
+        ])
 
         const result =
           await createAndCheckTunConfig({
@@ -2459,7 +2523,9 @@ function registerIpcHandlers() {
             directDomains,
             rescueOptions,
             directApps,
-            vpnDns: getPreferredVpnDnsConfig(),
+            vpnDns: getPreferredVpnDnsConfig('sing-box'),
+            upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
+            utlsSettings,
           })
 
         console.log(
@@ -2840,16 +2906,32 @@ function registerIpcHandlers() {
       standaloneActive: status.active,
       activeConfig: status.config,
       error: null,
+      smartCloudflare: { ...smartCloudflareDnsConfig },
+    }
+  })
+
+  ipcMain.handle('doh:list-profiles', async () => ({
+    success: true,
+    profiles: await listDnsProfiles(app.getPath('userData')),
+  }))
+
+  ipcMain.handle('doh:save-profiles', async (_event, profiles) => {
+    try {
+      return { success: true, profiles: await saveDnsProfiles(app.getPath('userData'), profiles), error: null }
+    } catch (error) {
+      return { success: false, profiles: [], error: error?.message ?? 'Saving DNS profiles failed.' }
     }
   })
 
   ipcMain.handle('doh:test', async (_event, input) => {
     try {
       const server = input?.server
-      const custom = server === 'custom'
+      const custom = server === 'cloudflare-smart'
+        ? await resolveSmartCloudflareDns()
+        : server === 'custom'
         ? { primary: input?.primary, secondary: input?.secondary, label: 'Custom DNS' }
         : null
-      return await testDnsConfig(server, custom)
+      return await testDnsConfig(server === 'cloudflare-smart' ? 'custom' : server, custom)
     } catch (error) {
       return { success: false, results: [], error: error?.message ?? 'DNS test failed.' }
     }
@@ -2884,7 +2966,9 @@ function registerIpcHandlers() {
 
   ipcMain.handle('doh:set-standalone', async (_event, input) => {
     const server = typeof input === 'string' ? input : input?.server
-    const custom = server === 'custom'
+    const custom = server === 'cloudflare-smart'
+      ? await resolveSmartCloudflareDns()
+      : server === 'custom'
       ? { primary: input?.primary, secondary: input?.secondary, label: 'Custom DNS' }
       : null
     const prev = standaloneDoHServer
@@ -2897,7 +2981,16 @@ function registerIpcHandlers() {
         // Manfaz proxy left enabled by an interrupted VPN session.
         await restoreWindowsProxyState(app.getPath('userData'))
       } else {
-        await enableStandaloneDoH(server, custom, app.getPath('userData'))
+        try {
+          await enableStandaloneDoH(server === 'cloudflare-smart' ? 'custom' : server, custom, app.getPath('userData'))
+        } catch (error) {
+          if (server !== 'cloudflare-smart' || custom?.primary === '1.1.1.1') throw error
+          smartCloudflareDnsConfig = {
+            primary: '1.1.1.1', secondary: '1.0.0.1', label: 'Cloudflare Smart',
+            template: 'https://cloudflare-dns.com/dns-query',
+          }
+          await enableStandaloneDoH('custom', smartCloudflareDnsConfig, app.getPath('userData'))
+        }
       }
       standaloneDoHServer = server
       if (server === 'custom') {
@@ -3092,11 +3185,11 @@ function registerIpcHandlers() {
   // stuck local system proxy (127.0.0.1:2080), kills orphan sing-box engines
   // holding the ports, and removes any leftover kill-switch firewall block.
   ipcMain.handle('network:repair', async () => {
-    const steps = { proxy: false, engines: false, killswitch: false }
+    const steps = { proxy: false, engines: false, dns: false, killswitch: false }
     try {
       // Stop our own engine first so we don't fight it.
       expectedEngineStop = true
-      await stopLocalProxy({ userDataPath: app.getPath('userData') }).catch(() => {})
+      await connectionEngines.stopEveryEngine(app.getPath('userData')).catch(() => {})
     } catch {}
     try {
       const { forceDisableLocalManualProxy } = require('./windows-proxy-state.cjs')
@@ -3107,6 +3200,12 @@ function registerIpcHandlers() {
       const { freeEnginePorts } = require('./sing-box-process-manager.cjs')
       freeEnginePorts()
       steps.engines = true
+    } catch {}
+    try {
+      await disableStandaloneDoH(app.getPath('userData'))
+      standaloneDoHServer = 'off'
+      await saveAppSettings().catch(() => {})
+      steps.dns = true
     } catch {}
     try {
       const result = await require('./kill-switch.cjs').deactivateKillSwitch()
@@ -4007,6 +4106,7 @@ app.whenReady().then(async () => {
       const scanResult = await scanCloudflareIps({ port: 443 })
       if (scanResult.reachable > 0) {
         await saveCfScanCache(app.getPath('userData'), scanResult.results ?? [])
+        await resolveSmartCloudflareDns().catch(() => {})
         console.log(`[CF-Scan] Auto-scan complete. Best IP: ${scanResult.results?.[0]?.ip} (${scanResult.results?.[0]?.latencyMs}ms)`)
       }
     } catch (err) {

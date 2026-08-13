@@ -78,9 +78,10 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'هسته برنامه',
-    'version': 'نسخه ۲.۲۱.۰',
+    'version': 'نسخه ۲.۲۳.۰',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
+    'hero.clickToDisconnect': 'برای قطع اتصال، کلیک کن',
     'hero.adminRequired': 'برای TUN دسترسی Administrator لازم است',
     'hero.adminDesc': 'بدون آن، برنامه همچنان از System Proxy امن استفاده می‌کند.',
     'hero.requestingAccess': 'در حال درخواست دسترسی...',
@@ -560,8 +561,8 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Empty home state ─────────────────────────────────────────────────────
     'home.empty.title': 'هنوز هیچ اتصالی تنظیم نشده',
-    'home.empty.step1': 'لینک اشتراک V2Ray را در تب «اشتراک‌ها» اضافه کن',
-    'home.empty.step2': 'یا توکن GitHub را در «تنظیمات» پیکربندی کن',
+    'home.empty.step1': 'لینک اشتراک V2Ray را از صفحه «سرورها» اضافه کن',
+    'home.empty.step2': 'یا یک کانفیگ را به‌صورت دستی در «سرورها» اضافه کن',
     'home.empty.step3': 'یا از «سرور رایگان» در پایین همین صفحه استفاده کن',
 
     // ── Guide keyboard shortcut mention ──────────────────────────────────────
@@ -747,9 +748,10 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'Engine Core',
-    'version': 'Version 2.22.0',
+    'version': 'Version 2.23.0',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
+    'hero.clickToDisconnect': 'Click to disconnect',
     'hero.adminRequired': 'Administrator access required for TUN',
     'hero.adminDesc': 'Without it, the app will continue using secure System Proxy.',
     'hero.requestingAccess': 'Requesting access...',
@@ -1288,8 +1290,8 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Empty home state ─────────────────────────────────────────────────────
     'home.empty.title': 'No connection configured yet',
-    'home.empty.step1': 'Add a V2Ray subscription link in the "Subscriptions" tab',
-    'home.empty.step2': 'Or configure your GitHub token in "Settings"',
+    'home.empty.step1': 'Add a V2Ray subscription link from the "Servers" page',
+    'home.empty.step2': 'Or add a config manually on the "Servers" page',
     'home.empty.step3': 'Or use "Free Server" at the bottom of this page',
 
     // ── Guide keyboard shortcut mention ──────────────────────────────────────

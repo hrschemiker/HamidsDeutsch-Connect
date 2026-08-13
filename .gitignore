@@ -31,3 +31,6 @@ resources/sing-box/*.dll
 release/
 release-reports/
 backup-*/
+
+# Local runtime cache
+.freebuff/

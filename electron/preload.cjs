@@ -333,6 +333,8 @@ contextBridge.exposeInMainWorld(
       setPreferred: (input) => ipcRenderer.invoke('doh:set-preferred', input),
       setStandalone: (input) => ipcRenderer.invoke('doh:set-standalone', input),
       setProxyDoH: (enabled) => ipcRenderer.invoke('doh:set-proxy-doh', enabled),
+      listProfiles: () => ipcRenderer.invoke('doh:list-profiles'),
+      saveProfiles: (profiles) => ipcRenderer.invoke('doh:save-profiles', profiles),
     },
 
 

@@ -37,13 +37,14 @@ async function createAndCheckXrayConfig({
   vpnDns = null,
   utlsSettings = null,
   cfCleanIp = null,
+  upstreamProxy = null,
 }) {
   const compatibility = getXrayCompatibility(nodeUri)
   if (!compatibility.compatible) throw new Error(compatibility.reason)
 
   const outbound = buildOutbound(nodeUri, { rescueOptions, utlsSettings, cfCleanIp })
   const safeDirectDomains = normalizeDirectDomains(directDomains)
-  const config = buildConfig(outbound, safeDirectDomains, vpnDns)
+  const config = buildConfig(outbound, safeDirectDomains, vpnDns, upstreamProxy)
   const runtimeDirectory = path.join(userDataPath, 'HamidsDeutsch-Connect', 'runtime')
   const configPath = path.join(runtimeDirectory, 'xray-config.json')
   await fs.mkdir(runtimeDirectory, { recursive: true })
@@ -65,7 +66,7 @@ async function createAndCheckXrayConfig({
   }
 }
 
-function buildConfig(proxyOutbound, directDomains, vpnDns) {
+function buildConfig(proxyOutbound, directDomains, vpnDns, upstreamProxy) {
   const routingRules = []
   if (directDomains.length > 0) {
     routingRules.push({ type: 'field', domain: directDomains.map((value) => `domain:${value}`), outboundTag: 'direct' })
@@ -76,11 +77,24 @@ function buildConfig(proxyOutbound, directDomains, vpnDns) {
   )
 
   const dnsAddress = String(vpnDns?.primary || '1.1.1.1').trim()
+  const chainedProxyOutbound = upstreamProxy?.enabled && upstreamProxy?.host
+    ? { ...proxyOutbound, proxySettings: { tag: 'upstream-proxy', transportLayer: true } }
+    : proxyOutbound
   const outbounds = [
-    proxyOutbound,
+    chainedProxyOutbound,
     { tag: 'direct', protocol: 'freedom', settings: { domainStrategy: 'UseIPv4' } },
     { tag: 'block', protocol: 'blackhole', settings: {} },
   ]
+  if (upstreamProxy?.enabled && upstreamProxy?.host) {
+    const protocol = upstreamProxy.type === 'http' ? 'http' : 'socks'
+    outbounds.push({
+      tag: 'upstream-proxy',
+      protocol,
+      settings: {
+        servers: [{ address: upstreamProxy.host, port: upstreamProxy.port }],
+      },
+    })
+  }
   if (proxyOutbound.streamSettings?.sockopt?.dialerProxy === 'fragment') {
     outbounds.push({
       tag: 'fragment',

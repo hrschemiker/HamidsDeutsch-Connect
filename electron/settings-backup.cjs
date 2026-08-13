@@ -8,6 +8,7 @@ const BACKUP_FILES = Object.freeze([
   'utls-settings.json',
   'cf-scan-settings.json',
   'upstream-proxy.json',
+  'dns-profiles.json',
   'subscriptions.json',
   'manual-nodes.json',
   'hidden-nodes.json',

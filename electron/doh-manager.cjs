@@ -86,7 +86,7 @@ async function runPS(command, timeout = 20000) {
 
 async function getActiveAdapters() {
   const { stdout } = await runPS(
-    `Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.Name -ne 'HamidsDeutsch' } | Select-Object -ExpandProperty Name`,
+    `Get-NetAdapter -Physical | Where-Object { $_.Status -eq 'Up' -and $_.Name -ne 'HamidsDeutsch' } | Select-Object -ExpandProperty Name`,
   )
   return stdout.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)
 }
@@ -117,9 +117,11 @@ function normalizeCustomConfig(custom) {
   return {
     primary,
     secondary: secondary || null,
-    template: null,
+    template: custom?.template === 'https://cloudflare-dns.com/dns-query'
+      ? custom.template
+      : null,
     label: String(custom?.label ?? 'Custom DNS').trim().slice(0, 60) || 'Custom DNS',
-    encrypted: false,
+    encrypted: custom?.template === 'https://cloudflare-dns.com/dns-query',
   }
 }
 
@@ -150,7 +152,9 @@ async function testDnsAddress(address) {
 async function testDnsConfig(server, custom = null) {
   const config = resolveConfig(server, custom)
   const addresses = [config.primary, config.secondary].filter(Boolean)
-  const results = await Promise.all(addresses.map(testDnsAddress))
+  const results = await Promise.all(addresses.map((address) =>
+    config.template ? testDohAddress(address, config.template) : testDnsAddress(address),
+  ))
   return {
     success: results.some((result) => result.success),
     config,
@@ -158,6 +162,28 @@ async function testDnsConfig(server, custom = null) {
     error: results.some((result) => result.success)
       ? null
       : 'The selected DNS servers did not answer a real DNS query.',
+  }
+}
+
+async function testDohAddress(address, template) {
+  try {
+    const endpoint = new URL(template)
+    endpoint.searchParams.set('name', 'example.com')
+    endpoint.searchParams.set('type', 'A')
+    const { stdout } = await execFileAsync('curl.exe', [
+      '--silent', '--show-error', '--fail', '--ipv4', '--max-time', '10',
+      '--resolve', `${endpoint.hostname}:443:${address}`,
+      '--header', 'accept: application/dns-json',
+      endpoint.toString(),
+    ], { timeout: 12000, windowsHide: true, encoding: 'utf8', maxBuffer: 256 * 1024 })
+    const parsed = JSON.parse(stdout)
+    const answer = Array.isArray(parsed?.Answer)
+      ? parsed.Answer.find((item) => net.isIP(String(item?.data ?? '')) === 4)?.data
+      : null
+    if (!answer) throw new Error('DoH returned no IPv4 answer.')
+    return { address, success: true, answer, transport: 'doh', error: null }
+  } catch (error) {
+    return { address, success: false, answer: null, transport: 'doh', error: error?.message ?? 'DoH query failed.' }
   }
 }
 
@@ -252,6 +278,11 @@ async function enableStandaloneDoH(server, custom = null, userDataPath = null) {
         ).catch(() => {})
       }
     }
+
+    await runPS(
+      `Clear-DnsClientCache -ErrorAction SilentlyContinue; Resolve-DnsName -Name 'example.com' -DnsOnly -QuickTimeout -ErrorAction Stop | Where-Object { $_.Type -eq 'A' } | Select-Object -First 1 -ExpandProperty IPAddress`,
+      15000,
+    )
 
     activeConfig = { server, ...config }
     standaloneActive = true

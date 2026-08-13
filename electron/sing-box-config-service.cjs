@@ -163,6 +163,7 @@ async function createAndCheckTunConfig({
   utlsSettings = null,
   directApps = [],
   vpnDns = null,
+  upstreamProxy = null,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -221,6 +222,7 @@ async function createAndCheckTunConfig({
       setSystemProxy,
       directApps,
       vpnDns,
+      upstreamProxy,
     )
 
   const runtimeDirectory = path.join(
@@ -1285,7 +1287,17 @@ function buildProxyDnsBlock(directDomains = [], vpnDns = null) {
   }
   const selectedAddress = vpnDns?.primary || '1.1.1.1'
   const tlsServerName = encryptedDnsServers[selectedAddress]
-  const selectedDns = tlsServerName
+  const selectedDns = vpnDns?.template
+    ? {
+        tag: 'dns-proxy',
+        type: 'https',
+        server: selectedAddress,
+        server_port: 443,
+        path: '/dns-query',
+        detour: 'proxy',
+        tls: { enabled: true, server_name: 'cloudflare-dns.com' },
+      }
+    : tlsServerName
     ? {
         tag: 'dns-proxy',
         type: 'tls',
@@ -1407,6 +1419,7 @@ function buildTunConfig(
   setSystemProxy = false,
   directApps = [],
   vpnDns = null,
+  upstreamProxy = null,
 ) {
   const appEntries = Array.isArray(directApps) ? directApps : []
   const appNames = Array.from(new Set(appEntries.map((entry) =>
@@ -1466,12 +1479,17 @@ function buildTunConfig(
     ],
 
     outbounds: [
-      { ...proxyOutbound, domain_resolver: 'dns-direct' },
+      {
+        ...proxyOutbound,
+        domain_resolver: 'dns-direct',
+        ...(upstreamProxy?.enabled && upstreamProxy?.host ? { detour: 'upstream-proxy' } : {}),
+      },
       {
         type: 'direct',
         tag: 'direct',
         domain_resolver: 'dns-direct',
       },
+      ...(upstreamProxy?.enabled && upstreamProxy?.host ? [buildUpstreamProxyOutbound(upstreamProxy)] : []),
     ],
 
     dns: buildProxyDnsBlock(directDomains, vpnDns),
