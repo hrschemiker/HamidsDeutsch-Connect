@@ -1,0 +1,77 @@
+name: Release
+
+# Builds the Windows installer on a real Windows runner and publishes it as a
+# GitHub release. Triggered by pushing a v* tag, or manually from the Actions
+# tab against any branch.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g. v2.24.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # sing-box.exe is intentionally not committed (see resources/sing-box/README.txt).
+      # Fetch the release the client is built against so the installer ships a
+      # working default engine.
+      - name: Fetch sing-box engine
+        shell: pwsh
+        env:
+          SING_BOX_VERSION: 1.13.12
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:SING_BOX_VERSION
+          $name = "sing-box-$version-windows-amd64"
+          $url = "https://github.com/SagerNet/sing-box/releases/download/v$version/$name.zip"
+          Invoke-WebRequest -Uri $url -OutFile sing-box.zip
+          Expand-Archive -Path sing-box.zip -DestinationPath sing-box-dist -Force
+          Copy-Item "sing-box-dist/$name/sing-box.exe" resources/sing-box/sing-box.exe
+          & resources/sing-box/sing-box.exe version
+
+      - name: Build installer
+        run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve release tag
+        id: tag
+        shell: pwsh
+        run: |
+          $tag = if ($env:GITHUB_REF -like 'refs/tags/*') {
+            $env:GITHUB_REF -replace '^refs/tags/', ''
+          } else {
+            '${{ github.event.inputs.tag }}'
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Manfaz VPN ${{ steps.tag.outputs.tag }}
+          body_path: release-notes/${{ steps.tag.outputs.tag }}.md
+          draft: true
+          files: |
+            release/Manfaz-VPN-Setup-*.exe
+            release/Manfaz-VPN-Setup-*.exe.blockmap
+            release/latest.yml
