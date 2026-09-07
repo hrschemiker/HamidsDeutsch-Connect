@@ -70,7 +70,7 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: Manfaz VPN ${{ steps.tag.outputs.tag }}
           body_path: release-notes/${{ steps.tag.outputs.tag }}.md
-          draft: true
+          draft: false
           files: |
             release/Manfaz-VPN-Setup-*.exe
             release/Manfaz-VPN-Setup-*.exe.blockmap
