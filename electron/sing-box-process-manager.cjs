@@ -1314,6 +1314,13 @@ async function stopSpecificProcess(
   processState.ready = false
   processState.systemProxyEnabled =
     false
+  // Must be cleared here too. Leaving them set made a stopped TUN session keep
+  // reporting `connectionMode: 'tun'` and `tunEnabled: true`, so the UI stayed
+  // on "Connected via TUN" long after the tunnel was gone.
+  processState.tunEnabled =
+    false
+  processState.connectionMode =
+    null
   processState.pid = null
   processState.stoppedAt =
     new Date().toISOString()

@@ -467,90 +467,11 @@ type CheckServerConfigResult = {
   error: string | null
 }
 
-type FreeConfigPhase =
-  | 'idle'
-  | 'fetching'
-  | 'testing'
-  | 'connecting'
-  | 'connected'
-  | 'reconnecting'
-  | 'error'
-
-type FreeConfigStatus = {
-  phase: FreeConfigPhase
-  nodeId: string | null
-  nodeName: string | null
-  latencyMs: number | null
-  error: string | null
-  userDisconnected: boolean
-}
-
 type SplitApp = {
   name: string
   processName: string
   path: string
   icon: string | null
-}
-
-type FreePoolServer = {
-  id: string
-  uri: string
-  protocol: string | null
-  host: string | null
-  port: number | null
-  security: string | null
-  country: string | null
-  flag: string | null
-  source: string | null
-  working: boolean | null
-  latencyMs: number | null
-  lastTestedAt: string | null
-  addedAt: string
-}
-
-type FreeConnectResult = {
-  success: boolean
-  nodeId: string | null
-  requiresEngine?: 'sing-box'
-  protocol?: string
-  error: string | null
-}
-
-type FreePoolMeta = {
-  total: number
-  working: number
-  untested: number
-  lastRefreshedAt: string | null
-  channels: Record<string, number>
-}
-
-type FreePoolResult = {
-  success: boolean
-  servers: FreePoolServer[]
-  meta: FreePoolMeta | null
-  added?: number
-  tested?: number
-  removed?: number
-  error: string | null
-}
-
-type FreePoolStatusEvent = {
-  total: number
-  working: number
-  untested: number
-  testing: boolean
-  testDone: number
-  testTotal: number
-  lastRefreshedAt: string | null
-}
-
-type FreePoolUpdatedEvent = {
-  added: number
-}
-
-type FreeProgressEvent = {
-  message: string
-  phase: FreeConfigPhase
 }
 
 type OpenExtensionFolderResult = {
@@ -754,46 +675,6 @@ declare global {
         getHiddenNodes: () => Promise<string[]>
       }
 
-      free: {
-        crawl: () => Promise<FreePoolResult>
-
-        testStart: () => Promise<FreePoolResult>
-
-        stopTesting: () => Promise<{ stopped: boolean; wasTesting: boolean }>
-
-        crawlDeep: () => Promise<FreePoolResult>
-
-        refreshPings: () => Promise<FreePoolResult>
-
-        connectSpecificNode: (input: {
-          nodeId?: string
-          nodeUri?: string
-          directDomains?: string[]
-          enginePreference?: 'xray' | 'sing-box'
-          rescueOptions?: RescueOptions | null
-        }) => Promise<FreeConnectResult>
-
-        removeNode: (nodeId: string) => Promise<FreePoolResult>
-
-        disconnect: () => Promise<{ success: boolean; error: string | null }>
-
-        getStatus: () => Promise<FreeConfigStatus>
-
-        getPool: () => Promise<FreePoolResult>
-
-        onProgress: (
-          callback: (payload: FreeProgressEvent) => void,
-        ) => () => void
-
-        onPoolUpdated: (
-          callback: (payload: FreePoolUpdatedEvent) => void,
-        ) => () => void
-
-        onPoolStatus: (
-          callback: (payload: FreePoolStatusEvent) => void,
-        ) => () => void
-      }
-
       speedtest: {
         run: () => Promise<{ success: boolean; mbps: number | null; bytes: number; elapsedSec: number; error: string | null }>
       }
@@ -805,11 +686,12 @@ declare global {
       }
 
       killswitch: {
-        get: () => Promise<{ enabled: boolean; active: boolean }>
-        set: (enabled: boolean) => Promise<{ enabled: boolean; error?: string }>
-        deactivate: () => Promise<{ success: boolean; error: string | null }>
+        get: () => Promise<{ enabled: boolean; active: boolean; available: boolean }>
+        set: (enabled: boolean) => Promise<{ enabled: boolean; reason?: 'needs-admin'; error?: string | null }>
+        deactivate: () => Promise<{ success: boolean; active: boolean; error: string | null }>
         onActivated: (callback: (payload: { firewall: boolean }) => void) => () => void
         onDeactivated: (callback: (payload: unknown) => void) => () => void
+        onFailed: (callback: (payload: { error: string }) => void) => () => void
       }
 
       geoblock: {

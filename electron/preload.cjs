@@ -206,61 +206,6 @@ contextBridge.exposeInMainWorld(
         ),
     },
 
-    free: {
-      // Crawl the two Telegram channels for new configs (through the tunnel).
-      crawl: () =>
-        ipcRenderer.invoke('free:crawl'),
-
-      // Run the one-by-one working test (disconnect first).
-      testStart: () =>
-        ipcRenderer.invoke('free:test-start'),
-
-      // Stop an in-flight working test so a connection can be established.
-      stopTesting: () =>
-        ipcRenderer.invoke('free:stop-testing'),
-
-      // One-shot deep crawl: ignore throttle + cursor, re-scan 200 posts/channel.
-      crawlDeep: () =>
-        ipcRenderer.invoke('free:crawl-deep'),
-
-      // Re-measure ping of the configs that passed the working test.
-      refreshPings: () =>
-        ipcRenderer.invoke('free:refresh-pings'),
-
-      connectSpecificNode: (input) =>
-        ipcRenderer.invoke('free:connect-specific-node', input),
-
-      removeNode: (nodeId) =>
-        ipcRenderer.invoke('free:remove-node', nodeId),
-
-      disconnect: () =>
-        ipcRenderer.invoke('free:disconnect'),
-
-      getStatus: () =>
-        ipcRenderer.invoke('free:get-status'),
-
-      getPool: () =>
-        ipcRenderer.invoke('free:get-pool'),
-
-      onProgress: (callback) => {
-        const listener = (_event, payload) => callback(payload)
-        ipcRenderer.on('free:progress', listener)
-        return () => ipcRenderer.removeListener('free:progress', listener)
-      },
-
-      onPoolUpdated: (callback) => {
-        const listener = (_event, payload) => callback(payload)
-        ipcRenderer.on('free:pool-updated', listener)
-        return () => ipcRenderer.removeListener('free:pool-updated', listener)
-      },
-
-      onPoolStatus: (callback) => {
-        const listener = (_event, payload) => callback(payload)
-        ipcRenderer.on('free:pool-status', listener)
-        return () => ipcRenderer.removeListener('free:pool-status', listener)
-      },
-    },
-
     apps: {
       list: () => ipcRenderer.invoke('apps:list'),
       add: () => ipcRenderer.invoke('apps:add'),
@@ -280,6 +225,12 @@ contextBridge.exposeInMainWorld(
         const listener = (_event, payload) => callback(payload)
         ipcRenderer.on('killswitch:deactivated', listener)
         return () => ipcRenderer.removeListener('killswitch:deactivated', listener)
+      },
+      // Fired when an armed kill switch could NOT block the network (no admin).
+      onFailed: (callback) => {
+        const listener = (_event, payload) => callback(payload)
+        ipcRenderer.on('killswitch:failed', listener)
+        return () => ipcRenderer.removeListener('killswitch:failed', listener)
       },
     },
 

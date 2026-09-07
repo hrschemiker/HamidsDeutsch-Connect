@@ -68,17 +68,6 @@ function loadCustomDnsProfiles(): DnsProfile[] {
   }
 }
 
-// ── Free Config types ────────────────────────────────────────────────────────
-
-type FreeConfigPhase =
-  | 'idle'
-  | 'fetching'
-  | 'testing'
-  | 'connecting'
-  | 'connected'
-  | 'reconnecting'
-  | 'error'
-
 type AppUpdateState = {
   phase: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'
   availableVersion: string | null
@@ -111,23 +100,6 @@ function normalizeUpdateState(value: unknown): AppUpdateState {
     retryAfterConnection: state.retryAfterConnection === true,
     lastCheckedAt: typeof state.lastCheckedAt === 'string' ? state.lastCheckedAt : null,
   }
-}
-
-// New free-config model: 6-digit id + country flag, no display name.
-type FreePoolServer = {
-  id: string
-  uri: string
-  protocol: string | null
-  host: string | null
-  port: number | null
-  security: string | null
-  country: string | null
-  flag: string | null
-  source: string | null
-  working: boolean | null
-  latencyMs: number | null
-  lastTestedAt: string | null
-  addedAt: string
 }
 
 // ── Theme ────────────────────────────────────────────────────────────────────
@@ -284,9 +256,17 @@ function App() {
     localStorage.setItem('hd-lang', l)
   }
 
+  // Mirror language and theme onto <html>: the root element paints the page
+  // background, the native scrollbars and the form controls, and it is outside
+  // the shell div that carries dir/data-theme for the app's own styles.
   useEffect(() => {
     document.documentElement.lang = lang === 'fa' ? 'fa' : 'en'
+    document.documentElement.dir = lang === 'fa' ? 'rtl' : 'ltr'
   }, [lang])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+  }, [theme])
 
   const t = (key: string, fallback?: string): string =>
     TR[lang]?.[key] ?? fallback ?? TR['en']?.[key] ?? TR['fa'][key] ?? key
@@ -335,18 +315,6 @@ function App() {
   const automaticConnectionBusyRef = useRef(false)
 
 
-  const [freePhase, setFreePhase] = useState<FreeConfigPhase>('idle')
-  const [freeNodeName, setFreeNodeName] = useState<string | null>(null)
-  const [freeLatencyMs, setFreeLatencyMs] = useState<number | null>(null)
-  const [freeProgress, setFreeProgress] = useState<string | null>(null)
-  const [freeError, setFreeError] = useState<string | null>(null)
-  const [freePool, setFreePool] = useState<FreePoolServer[]>([])
-  const [freePoolMeta, setFreePoolMeta] = useState<{ total: number; working: number; untested: number; lastRefreshedAt: string | null } | null>(null)
-  const [freeTest, setFreeTest] = useState<{ testing: boolean; done: number; total: number }>({ testing: false, done: 0, total: 0 })
-  // Testing and connecting are mutually exclusive. When the user tries to connect
-  // mid-test we ask first; accepting stops the test, declining keeps it running.
-  const [testStopPrompt, setTestStopPrompt] = useState(false)
-  const testStopResolver = useRef<((accepted: boolean) => void) | null>(null)
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     title: string
     message: string
@@ -389,10 +357,8 @@ function App() {
   const [qrUri, setQrUri] = useState<string | null>(null)
 
   // Last connection for one-tap reconnect
-  const [lastConnectionType, setLastConnectionType] = useState<'free' | 'subscription' | null>(null)
+  const [lastConnectionType, setLastConnectionType] = useState<'subscription' | null>(null)
   const [showReconnectBar, setShowReconnectBar] = useState(false)
-  // Session-scoped by design: survives tab navigation, resets on every app launch.
-  const [freeRiskAcknowledged, setFreeRiskAcknowledged] = useState(false)
 
   // Ctrl+Enter keyboard shortcut toggle (UX #9)
   const [ctrlEnterEnabled, setCtrlEnterEnabled] = useState<boolean>(() => {
@@ -401,6 +367,9 @@ function App() {
   const [closeToTray, setCloseToTray] = useState(true)
   const [killSwitch, setKillSwitch] = useState(false)
   const [killSwitchActive, setKillSwitchActive] = useState(false)
+  const [killSwitchAvailable, setKillSwitchAvailable] = useState(false)
+  const [killSwitchError, setKillSwitchError] = useState<string | null>(null)
+  const [killSwitchReleasing, setKillSwitchReleasing] = useState(false)
   useEffect(() => {
     void window.hamidsDeutsch.startup.getCloseToTray().then((r) => { setCloseToTray(r.enabled) }).catch(() => {})
   }, [])
@@ -563,12 +532,16 @@ function App() {
 
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true)
   const [updateState, setUpdateState] = useState<AppUpdateState>(EMPTY_UPDATE_STATE)
+  // Read from the running app, never a hand-maintained string: a stale version
+  // in the header is worse than none at all when a user reports a bug.
+  const [appVersion, setAppVersion] = useState<string | null>(null)
 
   useEffect(() => {
     if (!window.hamidsDeutsch.updater) return
     void window.hamidsDeutsch.updater.getSettings().then((result) => {
       setAutoUpdateEnabled(result?.enabled !== false)
       setUpdateState(normalizeUpdateState(result?.state))
+      if (typeof result?.currentVersion === 'string') setAppVersion(result.currentVersion)
     }).catch(() => {})
     return window.hamidsDeutsch.updater.onState((state) => setUpdateState(normalizeUpdateState(state)))
   }, [])
@@ -581,37 +554,33 @@ function App() {
         engineProcess.status.systemProxyEnabled
 
   // ── Toast on disconnect ───────────────────────────────────────────────────
-  const appHeroConnected = connectionVerified || freePhase === 'connected'
-  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const appHeroConnected = connectionVerified
+  const [toastMessage, setToastMessage] = useState<{ text: string; tone: 'info' | 'error' } | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevHeroConnectedRef = useRef(false)
   const hasConnectedRef = useRef(false)
   const connectionStartRef = useRef<{ at: string; mode: string; serverName: string | null; protocol: string | null; latencyMs: number | null } | null>(null)
   const intentionalDisconnectRef = useRef(false)
 
+  // Tone matters: a failure shown with a green success tick reads as "done".
+  function showToast(message: string, durationMs = 3200, tone: 'info' | 'error' = 'info') {
+    setToastMessage({ text: message, tone })
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), durationMs)
+  }
+
   useEffect(() => {
     if (appHeroConnected) {
       hasConnectedRef.current = true
       if (!prevHeroConnectedRef.current) {
-        const mode: 'free' | 'subscription' = freePhase === 'connected' ? 'free' : 'subscription'
-        setLastConnectionType(mode)
+        setLastConnectionType('subscription')
         setShowReconnectBar(false)
         connectionStartRef.current = {
           at: new Date().toISOString(),
-          mode,
-          serverName: freePhase === 'connected' ? (freeNodeName ?? null) : (selectedServer.selectedServer?.name ?? null),
-          protocol: freePhase === 'connected' ? null : (selectedServer.selectedServer?.protocol ?? null),
+          mode: 'subscription',
+          serverName: selectedServer.selectedServer?.name ?? null,
+          protocol: selectedServer.selectedServer?.protocol ?? null,
           latencyMs: null,
-        }
-        // Record free sessions in diagnostics (subscription sessions are recorded in prepareAndStart)
-        if (mode === 'free') {
-          diagnostics.beginSession({
-            serverName: freeNodeName ?? 'free',
-            subscriptionName: 'کانفیگ رایگان',
-            mode: 'system-proxy',
-            latencyMs: freeLatencyMs ?? null,
-            exitIp: null,
-          })
         }
         // Auto speed test: run after connect
         setSpeedTestResult({ mbps: null, running: true, error: null })
@@ -619,7 +588,7 @@ function App() {
           void window.hamidsDeutsch.speedtest.run().then((r) => {
             setSpeedTestResult({ mbps: r.mbps, running: false, error: r.error })
           }).catch(() => {
-            setSpeedTestResult({ mbps: null, running: false, error: 'خطا در اجرای تست' })
+            setSpeedTestResult({ mbps: null, running: false, error: t('speedtest.failed') })
           })
         }, 2000)
       }
@@ -631,9 +600,7 @@ function App() {
       setSpeedTestResult(null)
       if (!intentionalDisconnectRef.current) setShowReconnectBar(true)
       intentionalDisconnectRef.current = false
-      setToastMessage('اتصال قطع شد · پراکسی ویندوز بازگردانی شد')
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-      toastTimerRef.current = setTimeout(() => setToastMessage(null), 3200)
+      showToast(t('toast.disconnected'))
       if (startEntry) {
         const now = new Date().toISOString()
         const durationMs = Date.now() - new Date(startEntry.at).getTime()
@@ -646,10 +613,6 @@ function App() {
           protocol: startEntry.protocol,
           latencyMs: startEntry.latencyMs,
         })
-        // End diagnostics session for free/codespace/bpb (subscription sessions end in stopLocalProxy)
-        if (startEntry.mode === 'free' || startEntry.mode === 'codespace' || startEntry.mode === 'bpb') {
-          diagnostics.endSession('manual')
-        }
       }
     }
   }, [appHeroConnected]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -698,59 +661,51 @@ function App() {
     return () => clearTimeout(timer)
   }, [])
 
-  useEffect(() => {
-    void window.hamidsDeutsch.free.getPool().then((r) => {
-      if (r.success) {
-        setFreePool(r.servers)
-        if (r.meta) setFreePoolMeta({ total: r.meta.total, working: r.meta.working, untested: r.meta.untested, lastRefreshedAt: r.meta.lastRefreshedAt })
+  // Lift the firewall block. Never hide the overlay on a failed release —
+  // that would tell the user their internet is back while it is still cut off.
+  async function releaseKillSwitch(reconnect: boolean) {
+    setKillSwitchReleasing(true)
+    try {
+      const result = await window.hamidsDeutsch.killswitch
+        .deactivate()
+        .catch((error: unknown) => ({
+          success: false,
+          active: true,
+          error: error instanceof Error ? error.message : null,
+        }))
+      if (!result.success) {
+        setKillSwitchError(result.error ?? t('killswitch.releaseFailed'))
+        return
       }
-    })
-    const unsubProgress = window.hamidsDeutsch.free.onProgress(({ message, phase }) => {
-      setFreeProgress(message)
-      // Background crawl/test emit 'fetching'/'testing' progress; don't let those
-      // hijack the phase while the user is actively connecting/connected. Only
-      // reflect terminal phases here — the connect handlers own 'connecting'.
-      setFreePhase((cur) => {
-        if (cur === 'connecting' || cur === 'connected') return cur
-        if (phase === 'connected' || phase === 'error') return phase
-        return cur
-      })
-    })
-    const unsubPoolUpdated = window.hamidsDeutsch.free.onPoolUpdated((payload) => {
-      void window.hamidsDeutsch.free.getPool().then((r) => {
-        if (r.success) setFreePool(r.servers)
-      })
-      if (payload.added > 0) {
-        setToastMessage(`${payload.added} کانفیگ رایگان جدید پیدا شد`)
-        if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-        toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500)
-      }
-    })
-    const unsubPoolStatus = window.hamidsDeutsch.free.onPoolStatus((payload) => {
-      setFreePoolMeta({
-        total: payload.total,
-        working: payload.working,
-        untested: payload.untested,
-        lastRefreshedAt: payload.lastRefreshedAt,
-      })
-      setFreeTest({ testing: payload.testing, done: payload.testDone, total: payload.testTotal })
-      if (payload.testing) {
-        void window.hamidsDeutsch.free.getPool().then((r) => { if (r.success) setFreePool(r.servers) })
-      }
-    })
-    return () => { unsubProgress(); unsubPoolUpdated(); unsubPoolStatus() }
-  }, [])
+      setKillSwitchError(null)
+      setKillSwitchActive(false)
+      if (reconnect) void smartHeroConnect()
+    } finally {
+      setKillSwitchReleasing(false)
+    }
+  }
 
   // Kill switch: load setting + react to activation/deactivation events.
   useEffect(() => {
     void window.hamidsDeutsch.killswitch.get().then((s) => {
       setKillSwitch(s.enabled)
       setKillSwitchActive(s.active)
+      setKillSwitchAvailable(s.available)
     }).catch(() => {})
-    const offA = window.hamidsDeutsch.killswitch.onActivated(() => setKillSwitchActive(true))
+    const offA = window.hamidsDeutsch.killswitch.onActivated(() => {
+      setKillSwitchActive(true)
+      setKillSwitchError(null)
+    })
     const offD = window.hamidsDeutsch.killswitch.onDeactivated(() => setKillSwitchActive(false))
-    return () => { offA(); offD() }
-  }, [])
+    // The tunnel dropped but the firewall rule could not be written. Say so
+    // loudly instead of leaving the user believing they are still protected.
+    const offF = window.hamidsDeutsch.killswitch.onFailed((payload) => {
+      setKillSwitchActive(false)
+      setKillSwitchError(payload?.error ?? t('killswitch.failed'))
+      showToast(t('killswitch.failed'), 6000, 'error')
+    })
+    return () => { offA(); offD(); offF() }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-update subscriptions once the first tunnel is up (their URLs are often
   // only reachable through the connection). On-open refresh is already handled
@@ -764,79 +719,6 @@ function App() {
     const timer = setTimeout(() => { void serverNodes.loadAll().catch(() => {}) }, 4000)
     return () => clearTimeout(timer)
   }, [connectionVerified, serverNodes])
-
-  // Connect to the best working free config — same path as a subscription (spec #8).
-  async function connectFreeNodeWithSelectedEngine(nodeId: string) {
-    let result = await window.hamidsDeutsch.free.connectSpecificNode({
-      nodeId,
-      directDomains: directDomains.domains,
-      enginePreference: connectionSettings.settings.engine,
-    })
-    if (!result.success && result.requiresEngine === 'sing-box') {
-      const accepted = await requestConfirmation(
-        'تغییر موتور اتصال',
-        `این کانفیگ ${result.protocol || ''} با Xray سازگار نیست و به sing-box نیاز دارد. موتور به sing-box تغییر کند؟`,
-      )
-      if (accepted) {
-        connectionSettings.update({ engine: 'sing-box' })
-        await window.hamidsDeutsch.engine.setPreference('sing-box')
-        result = await window.hamidsDeutsch.free.connectSpecificNode({
-          nodeId,
-          directDomains: directDomains.domains,
-          enginePreference: 'sing-box',
-        })
-      }
-    }
-    return result
-  }
-
-  async function connectFreeConfig() {
-    if (!(await confirmStopTestingIfNeeded())) return
-    if (standaloneDoH !== 'off' && !(await restoreSystemDns())) return
-    setFreePhase('connecting')
-    setFreeProgress('در حال اتصال به کانفیگ رایگان...')
-    setFreeError(null)
-    setFreeNodeName(null)
-    setFreeLatencyMs(null)
-    try {
-      const list = await window.hamidsDeutsch.free.getPool()
-      const best = list.success ? list.servers.find((s) => s.working === true) ?? list.servers[0] : undefined
-      if (!best) {
-        setFreePhase('error')
-        setFreeError('هنوز کانفیگ رایگانی ذخیره نشده. ابتدا یک‌بار از طریق اشتراک وصل شو تا کانفیگ‌ها پیدا شوند.')
-        return
-      }
-      setLastConnectionType('free')
-      const result = await connectFreeNodeWithSelectedEngine(best.id)
-      if (result.success) {
-        setFreeNodeName(`${best.id} ${best.flag ?? ''}`.trim())
-        setFreePhase('connected')
-        setFreeError(null)
-      } else {
-        setFreePhase('error')
-        setFreeError(result.error ?? 'اتصال ناموفق بود.')
-      }
-    } catch (err) {
-      setFreePhase('error')
-      setFreeError(err instanceof Error ? err.message : 'خطای ناشناخته')
-    } finally {
-      setFreeProgress(null)
-    }
-  }
-
-  async function disconnectFreeConfig() {
-    intentionalDisconnectRef.current = true
-    try {
-      await window.hamidsDeutsch.free.disconnect()
-      if (standaloneDoH !== 'off') await restoreSystemDns()
-      setFreePhase('idle')
-      setFreeNodeName(null)
-      setFreeLatencyMs(null)
-      setFreeError(null)
-    } catch {
-      // ignore
-    }
-  }
 
   const automaticLatencyTestKey = useRef<string | null>(null)
 
@@ -951,6 +833,34 @@ function App() {
     return () => clearInterval(id)
   }, [appHeroConnected, latency, serverNodes.nodes.length])
 
+  // Poll the exit IP until it differs from the pre-tunnel baseline. TUN routes
+  // are installed asynchronously by Windows, so the first probe after start
+  // often still reports the direct IP even on a perfectly healthy tunnel.
+  async function verifyTunExitIp(
+    baselineIp: string | null,
+    attempts = 8,
+    delayMs = 1500,
+  ): Promise<string | null> {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      if (attempt > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+      }
+
+      // The engine died while we were waiting — no point polling further.
+      const status = await engineProcess.refreshStatus()
+      if (status && !status.running) return null
+
+      const currentIp = await window.hamidsDeutsch.network
+        .getCurrentIp()
+        .catch(() => null)
+
+      if (currentIp?.success && currentIp.ip && currentIp.ip !== baselineIp) {
+        return currentIp.ip
+      }
+    }
+    return null
+  }
+
   async function attemptServerConnection(
     node: SafeServerNode,
     onStep?: (step: string) => void,
@@ -962,7 +872,7 @@ function App() {
       return {
         success: false as const,
         fatal: true as const,
-        error: 'اشتراک این سرور مشخص نیست.',
+        error: t('connect.error.noSubscription'),
       }
     }
 
@@ -971,18 +881,23 @@ function App() {
     setTunBaselineIp(null)
     setTunCurrentIp(null)
 
-    onStep?.('بررسی کانفیگ سرور...')
+    onStep?.(t('connect.step.checkConfig'))
     let requestedEngine = connectionSettings.settings.engine
     const xrayProtocols = new Set(['vless', 'vmess', 'trojan', 'ss', 'shadowsocks'])
     const needsSingBox = requestedEngine === 'xray' && !xrayProtocols.has(node.protocol.toLowerCase())
     const tunNeedsSingBox = requestedEngine === 'xray' && connectionSettings.settings.mode === 'tun'
     if (needsSingBox || tunNeedsSingBox) {
       const reason = tunNeedsSingBox
-        ? 'حالت TUN در این نسخه به موتور sing-box نیاز دارد.'
-        : `پروتکل ${node.protocol} توسط Xray این نسخه پشتیبانی نمی‌شود.`
-      const accepted = window.confirm(`${reason}\n\nآیا موتور برای این اتصال به sing-box تغییر کند؟`)
+        ? t('connect.engine.tunNeedsSingBox')
+        : `${t('connect.engine.protocolUnsupported')} (${node.protocol})`
+      // In-app dialog, not window.confirm(): a native modal freezes the whole
+      // renderer and looks nothing like the rest of the app.
+      const accepted = await requestConfirmation(
+        t('connect.engine.switchTitle'),
+        `${reason} ${t('connect.engine.switchQuestion')}`,
+      )
       if (!accepted) {
-        return { success: false as const, fatal: true as const, error: `${reason} اتصال لغو شد.` }
+        return { success: false as const, fatal: true as const, error: `${reason} ${t('connect.error.cancelled')}` }
       }
       requestedEngine = 'sing-box'
       connectionSettings.update({ engine: 'sing-box' })
@@ -1010,11 +925,11 @@ function App() {
         fatal: false as const,
         error:
           checkResult.error ??
-          'کانفیگ توسط sing-box تأیید نشد.',
+          t('connect.error.configRejected'),
       }
     }
 
-    onStep?.('راه‌اندازی پروکسی...')
+    onStep?.(t('connect.step.startProxy'))
     const startResult = await engineProcess.start()
 
     if (!startResult.success) {
@@ -1025,7 +940,7 @@ function App() {
       }
     }
 
-    onStep?.('تایید تغییر IP...')
+    onStep?.(t('connect.step.verifyIp'))
     let localVerification =
       await ipVerification.verify()
 
@@ -1077,7 +992,7 @@ function App() {
           fatal: false as const,
           error:
             localVerification.error ??
-            'این سرور ترافیک واقعی عبور نداد.',
+            t('connect.error.noRealTraffic'),
         }
       }
     }
@@ -1107,8 +1022,7 @@ function App() {
       return {
         success: false as const,
         fatal: true as const,
-        error:
-          'حالت «فقط TUN» انتخاب شده، اما برنامه با دسترسی Administrator اجرا نشده است.',
+        error: t('connect.error.tunNeedsAdmin'),
       }
     }
 
@@ -1116,6 +1030,7 @@ function App() {
       wantsTun &&
       canUseTun
     ) {
+      onStep?.(t('connect.step.tun'))
       const tunCheck =
         await window.hamidsDeutsch
           .servers
@@ -1130,6 +1045,8 @@ function App() {
               rescueSettings.settings,
           })
 
+      let tunError: string | null = tunCheck.success ? null : (tunCheck.error ?? null)
+
       if (tunCheck.success) {
         await engineProcess.stop()
         ipVerification.reset()
@@ -1137,22 +1054,21 @@ function App() {
         const tunStart =
           await engineProcess.startTun()
 
-        if (tunStart.success) {
-          const currentIp =
-            await window.hamidsDeutsch
-              .network
-              .getCurrentIp()
+        if (!tunStart.success) {
+          tunError = tunStart.error ?? null
+        } else {
+          // Windows needs a moment to install the TUN routes and flush the old
+          // ones. Probing the exit IP once, immediately, reads the pre-tunnel
+          // route and tears down a TUN that was actually about to work — so
+          // poll until the IP really changes.
+          const verifiedIp = await verifyTunExitIp(baselineIp)
 
-          if (
-            currentIp.success &&
-            currentIp.ip &&
-            currentIp.ip !== baselineIp
-          ) {
+          if (verifiedIp) {
             setTunBaselineIp(
               baselineIp,
             )
             setTunCurrentIp(
-              currentIp.ip,
+              verifiedIp,
             )
             setTunVerified(true)
 
@@ -1165,11 +1081,12 @@ function App() {
               fatal: false as const,
               mode: 'tun' as const,
               exitIp:
-                currentIp.ip,
+                verifiedIp,
               error: null,
             }
           }
 
+          tunError = t('connect.error.tunNoTraffic')
           await engineProcess.stop()
         }
       }
@@ -1184,10 +1101,13 @@ function App() {
         return {
           success: false as const,
           fatal: false as const,
-          error:
-            'راه‌اندازی یا تأیید TUN ناموفق بود و fallback غیرفعال است.',
+          error: tunError
+            ? `${t('connect.error.tunFailed')} ${tunError}`
+            : t('connect.error.tunFailed'),
         }
       }
+
+      onStep?.(t('connect.step.tunFallback'))
 
       const restartLocal =
         await engineProcess.start()
@@ -1198,7 +1118,7 @@ function App() {
           fatal: false as const,
           error:
             restartLocal.error ??
-            'بازگشت از TUN به پروکسی محلی ناموفق بود.',
+            t('connect.error.tunFallbackFailed'),
         }
       }
 
@@ -1217,7 +1137,7 @@ function App() {
           fatal: false as const,
           error:
             fallbackVerification.error ??
-            'تأیید اتصال fallback ناموفق بود.',
+            t('connect.error.fallbackUnverified'),
         }
       }
     }
@@ -1234,7 +1154,7 @@ function App() {
         fatal: true as const,
         error:
           systemProxyResult.error ??
-          'فعال‌سازی System Proxy ناموفق بود.',
+          t('connect.error.systemProxyFailed'),
       }
     }
 
@@ -1255,7 +1175,7 @@ function App() {
         fatal: false as const,
         error:
           finalVerification.error ??
-          'System Proxy فعال شد، اما تغییر IP نهایی تأیید نشد.',
+          t('connect.error.finalIpUnverified'),
       }
     }
 
@@ -1283,7 +1203,7 @@ function App() {
       type:
         'connection-attempt',
       message:
-        'آزمایش اتصال واقعی به سرور آغاز شد.',
+        t('diag.attemptStarted'),
       serverName:
         node.name,
       subscriptionName:
@@ -1342,7 +1262,7 @@ function App() {
         'connection-failure',
       message:
         result.error ??
-        'اتصال واقعی برقرار نشد.',
+        t('connect.error.notEstablished'),
       serverName:
         node.name,
       subscriptionName:
@@ -1352,35 +1272,13 @@ function App() {
     })
   }
 
-  // Returns true if it's OK to connect now. If a free-config test is running,
-  // asks the user first: accept → stop the test and proceed; decline → keep
-  // testing and abort the connect.
-  function confirmStopTestingIfNeeded(): Promise<boolean> {
-    if (!freeTest.testing) return Promise.resolve(true)
-    return new Promise<boolean>((resolve) => {
-      testStopResolver.current = resolve
-      setTestStopPrompt(true)
-    })
-  }
-
-  async function resolveTestStop(accepted: boolean) {
-    setTestStopPrompt(false)
-    const resolve = testStopResolver.current
-    testStopResolver.current = null
-    if (accepted) {
-      await window.hamidsDeutsch.free.stopTesting().catch(() => {})
-    }
-    resolve?.(accepted)
-  }
-
   async function prepareAndStart(
     node: SafeServerNode,
   ) {
-    if (!(await confirmStopTestingIfNeeded())) return
     if (standaloneDoH !== 'off' && !(await restoreSystemDns())) return
     setConnectionActionError(null)
     setSubConnectingNodeId(node.id)
-    setSubConnectingStep('در حال قطع اتصال قبلی...')
+    setSubConnectingStep(t('connect.step.stopPrevious'))
     setLastConnectionType('subscription')
 
     if (engineProcess.status.running) {
@@ -1418,8 +1316,6 @@ function App() {
     ) {
       return
     }
-
-    if (!(await confirmStopTestingIfNeeded())) return
 
     automaticConnectionBusyRef.current = true
     setAutomaticConnectionRunning(true)
@@ -1493,7 +1389,7 @@ function App() {
 
       if (candidates.length === 0) {
         setConnectionActionError(
-          'هیچ سرور معتبری برای اتصال وجود ندارد.',
+          t('connect.error.noValidServer'),
         )
         return
       }
@@ -1530,7 +1426,7 @@ function App() {
       }
 
       let lastError =
-        'هیچ‌کدام از سرورها اتصال واقعی برقرار نکردند.'
+        t('connect.error.allServersFailed')
 
       for (const node of orderedCandidates) {
         recordAttempt(node)
@@ -1571,42 +1467,20 @@ function App() {
     }
   }
 
-  // Smart hero-button connect: priority order
-  //   1. Subscription servers (user-configured) → fastest server
-  //   2. Free configs (fetch and connect)
-  //   3. BPB Panel (if panelUrl saved) → quick-connect
-  //   4. GitHub Codespace (if token saved)
+  // Hero-button connect: pick the fastest healthy subscription server. Without a
+  // subscription there is nothing to connect to, so say so instead of failing
+  // silently.
   async function smartHeroConnect() {
-    if (!(await confirmStopTestingIfNeeded())) return
-    // Priority 1: user has valid subscription servers
     if (serverNodes.nodes.some((n) => n.valid)) {
       void connectToFirstHealthyServer()
       return
     }
-
-    // Priority 2: try the best working free config
-    try {
-      const list = await window.hamidsDeutsch.free.getPool()
-      const best = list.success ? list.servers.find((s) => s.working === true) ?? list.servers[0] : undefined
-      if (best) {
-        setLastConnectionType('free')
-        const freeResult = await connectFreeNodeWithSelectedEngine(best.id)
-        if (freeResult.success) {
-          setFreeNodeName(`${best.id} ${best.flag ?? ''}`.trim())
-          setFreePhase('connected')
-          return
-        }
-      }
-    } catch {
-      // fall through
-    }
+    setConnectionActionError(t('home.noSubscription'))
   }
 
   async function quickReconnect() {
     if (appHeroConnected) return
-    if (lastConnectionType === 'free') {
-      void connectFreeConfig()
-    } else if (lastConnectionType === 'subscription') {
+    if (lastConnectionType === 'subscription') {
       // Reconnect to the last used subscription server directly, falling back to fastest
       const node = selectedServer.selectedServer
         ? serverNodes.nodes.find((n) => n.id === selectedServer.selectedServer?.id) ?? fastestServer
@@ -1634,7 +1508,7 @@ function App() {
 
     connectionWatchdogBusyRef.current = true
     setConnectionWatchdogMessage(
-      'اتصال قطع شد؛ در حال بازیابی خودکار...',
+      t('connect.watchdog.recovering'),
     )
 
     diagnostics.endSession(
@@ -1652,7 +1526,7 @@ function App() {
       if (!stopResult.success) {
         setConnectionActionError(
           stopResult.error ??
-          'آزادسازی Proxy ویندوز ناموفق بود.',
+          t('connect.error.proxyReleaseFailed'),
         )
         return
       }
@@ -1672,14 +1546,14 @@ function App() {
 
     if (!verificationResult.success) {
       setConnectionActionError(
-        verificationResult.error ?? 'بررسی تغییر IP ناموفق بود.',
+        verificationResult.error ?? t('connect.error.ipCheckFailed'),
       )
       return
     }
 
     if (!verificationResult.changed) {
       setConnectionActionError(
-        'IP مستقیم و IP عبوری از پروکسی یکسان هستند.',
+        t('connect.error.sameIp'),
       )
     }
   }
@@ -1871,7 +1745,7 @@ function App() {
               <span className="navigation-icon"><BrandIcon name={item.icon} size={19} /></span>
               <span className="navigation-label">{item.label}</span>
               {item.id === 'settings' && engineUpdateAvailable && (
-                <span className="nav-update-dot" title="به‌روزرسانی موجود است" />
+                <span className="nav-update-dot" title={t('nav.updateAvailable')} />
               )}
             </button>
           ))}
@@ -1890,7 +1764,11 @@ function App() {
                 ? `${engine.info.engineType === 'xray' ? 'Xray' : 'sing-box'} ${engine.info.version}`
                 : t('home.core.unavailable')}
           />
-          <span className="topnav-version">{t('version', 'نسخه ۰.۱.۰')}</span>
+          {appVersion && (
+            <span className="topnav-version" dir="ltr">
+              {`${t('version.label')} ${appVersion}`}
+            </span>
+          )}
         </div>
       </header>
 
@@ -2004,8 +1882,6 @@ function App() {
               ipVerificationResult={ipVerification.result}
               ipVerificationChecking={ipVerification.checking}
               isConnected={connectionVerified}
-              freeRiskAcknowledged={freeRiskAcknowledged}
-              onAcknowledgeFreeRisk={() => setFreeRiskAcknowledged(true)}
               dnsProfiles={allDnsProfiles}
               selectedDnsProfileId={selectedDnsProfileId}
               dnsActive={standaloneDoH !== 'off'}
@@ -2033,9 +1909,7 @@ function App() {
               latencyTesting={latency.testing}
               latencyError={latency.error}
               onMainAction={() => {
-                if (freePhase === 'connected') {
-                  void disconnectFreeConfig()
-                } else if (engineProcess.status.running) {
+                if (engineProcess.status.running) {
                   void stopLocalProxy()
                 } else {
                   void smartHeroConnect()
@@ -2056,16 +1930,8 @@ function App() {
               onOpenDirectSites={() => setActivePage('direct-sites')}
               onOpenRescue={() => setActivePage('settings')}
               onOpenSettings={() => setActivePage('settings')}
-              freePhase={freePhase}
-              freeNodeName={freeNodeName}
-              freeLatencyMs={freeLatencyMs}
-              freeProgress={freeProgress}
-              freeError={freeError}
-              onFreeConnect={() => void connectFreeConfig()}
-              onFreeDisconnect={() => void disconnectFreeConfig()}
               speedTest={speedTestResult}
               showReconnectBar={showReconnectBar}
-              lastConnectionType={lastConnectionType}
               onQuickReconnect={() => void quickReconnect()}
               dataLoading={serverNodes.loading || subscriptions.loading}
               trafficSpeed={trafficSpeed}
@@ -2085,36 +1951,9 @@ function App() {
                   .slice(0, 5)
                   .map((n) => ({ id: n.id, name: n.name, protocol: n.protocol, latencyMs: latency.results[n.id]?.latencyMs ?? null }))
               })()}
-              topFreeServers={freePool
-                .filter((s) => s.working === true)
-                .sort((a, b) => (a.latencyMs ?? 9999) - (b.latencyMs ?? 9999))
-                .slice(0, 5)}
               onConnectSubServer={(id) => {
                 const node = serverNodes.nodes.find((n) => n.id === id)
                 if (node) void prepareAndStart(node)
-              }}
-              onConnectFreeServer={async (server) => {
-                if (standaloneDoH !== 'off' && !(await restoreSystemDns())) return
-                setFreePhase('connecting')
-                setFreeProgress(`اتصال به ${server.id}...`)
-                setFreeError(null)
-                setLastConnectionType('free')
-                try {
-                  const result = await connectFreeNodeWithSelectedEngine(server.id)
-                  if (result.success) {
-                    setFreePhase('connected')
-                    setFreeNodeName(`${server.id} ${server.flag ?? ''}`.trim())
-                    setFreeError(null)
-                  } else {
-                    setFreePhase('error')
-                    setFreeError(result.error ?? 'اتصال ناموفق بود.')
-                  }
-                } catch (err) {
-                  setFreePhase('error')
-                  setFreeError(err instanceof Error ? err.message : 'خطا')
-                } finally {
-                  setFreeProgress(null)
-                }
               }}
             />
           )}
@@ -2145,7 +1984,7 @@ function App() {
                   automaticLatencyTestKey.current = null
                   return { success: true as const, error: null }
                 }
-                return { success: false as const, error: result.error ?? 'دریافت سرورها ناموفق بود.' }
+                return { success: false as const, error: result.error ?? t('servers.loadFailed') }
               }}
               loadingServerSubscriptionId={serverNodes.refreshingSubscriptionId}
               subscriptionInfoMap={serverNodes.subscriptionInfoMap}
@@ -2182,102 +2021,8 @@ function App() {
               onSelectServer={selectedServer.selectServer}
               onClearSelectedServer={selectedServer.clearSelectedServer}
               onOpenSubscriptions={() => setActivePage('servers')}
-              freePool={freePool}
-              freePoolMeta={freePoolMeta}
-              freePhase={freePhase}
-              onConnectFreeNode={async (server) => {
-                setFreePhase('connecting')
-                setFreeProgress(`اتصال به ${server.id}...`)
-                setFreeError(null)
-                setLastConnectionType('free')
-                try {
-                  const result = await connectFreeNodeWithSelectedEngine(server.id)
-                  if (result.success) {
-                    setFreePhase('connected')
-                    setFreeNodeName(`${server.id} ${server.flag ?? ''}`.trim())
-                    setFreeError(null)
-                    setActivePage('home')
-                  } else {
-                    setFreePhase('error')
-                    setFreeError(result.error ?? 'اتصال ناموفق بود.')
-                  }
-                } catch (err) {
-                  setFreePhase('error')
-                  setFreeError(err instanceof Error ? err.message : 'خطا')
-                } finally {
-                  setFreeProgress(null)
-                }
-              }}
-              freeTest={freeTest}
-              onCrawlFreePool={async () => {
-                const result = await window.hamidsDeutsch.free.crawl()
-                if (result.success) {
-                  setFreePool(result.servers)
-                  if (result.meta) setFreePoolMeta({ total: result.meta.total, working: result.meta.working, untested: result.meta.untested, lastRefreshedAt: result.meta.lastRefreshedAt })
-                }
-              }}
-              onDeepCrawlFreePool={async () => {
-                // Requires an active tunnel (Telegram is blocked in Iran).
-                if (!appHeroConnected) {
-                  setToastMessage('برای بررسی کامل کانال‌ها ابتدا باید متصل باشی.')
-                  if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-                  toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500)
-                  return
-                }
-                const result = await window.hamidsDeutsch.free.crawlDeep()
-                if (result.success) {
-                  setFreePool(result.servers)
-                  if (result.meta) setFreePoolMeta({ total: result.meta.total, working: result.meta.working, untested: result.meta.untested, lastRefreshedAt: result.meta.lastRefreshedAt })
-                  setToastMessage(`بررسی کامل انجام شد. ${result.added ?? 0} کانفیگ جدید اضافه شد.`)
-                  if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-                  toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500)
-                }
-              }}
-              onRefreshFreePings={async () => {
-                // Re-measures ping — disconnects like the working test does.
-                const ok = await requestConfirmation(
-                  lang === 'fa' ? 'به‌روزرسانی پینگ‌ها' : 'Refresh latency',
-                  lang === 'fa'
-                    ? 'اتصال فعلی قطع می‌شود و پینگ کانفیگ‌های سالم دوباره اندازه‌گیری خواهد شد. ادامه می‌دهی؟'
-                    : 'The current connection will stop while healthy configs are measured again. Continue?',
-                )
-                if (!ok) return
-                intentionalDisconnectRef.current = true
-                await window.hamidsDeutsch.free.disconnect().catch(() => {})
-                if (engineProcess.status.running) await engineProcess.stop().catch(() => {})
-                const result = await window.hamidsDeutsch.free.refreshPings()
-                if (result.success) {
-                  setFreePool(result.servers)
-                  if (result.meta) setFreePoolMeta({ total: result.meta.total, working: result.meta.working, untested: result.meta.untested, lastRefreshedAt: result.meta.lastRefreshedAt })
-                }
-              }}
-              onTestFreePool={async () => {
-                // The test disconnects the current tunnel — confirm first (spec #3).
-                const ok = await requestConfirmation(
-                  lang === 'fa' ? 'آزمایش کانفیگ‌ها' : 'Test configurations',
-                  lang === 'fa'
-                    ? 'اتصال فعلی قطع می‌شود و آزمایش ممکن است چند دقیقه طول بکشد. می‌توانی هر زمان آن را متوقف کنی.'
-                    : 'The current connection will stop and testing may take a few minutes. You can stop it at any time.',
-                )
-                if (!ok) return
-                intentionalDisconnectRef.current = true
-                await window.hamidsDeutsch.free.disconnect().catch(() => {})
-                if (engineProcess.status.running) await engineProcess.stop().catch(() => {})
-                const result = await window.hamidsDeutsch.free.testStart()
-                if (result.success) {
-                  setFreePool(result.servers)
-                  if (result.meta) setFreePoolMeta({ total: result.meta.total, working: result.meta.working, untested: result.meta.untested, lastRefreshedAt: result.meta.lastRefreshedAt })
-                }
-              }}
               onConnectSubNode={(node) => void prepareAndStart(node)}
               onStopConnection={() => void stopLocalProxy()}
-              onRemoveFreeNode={async (nodeId) => {
-                const r = await window.hamidsDeutsch.free.removeNode(nodeId)
-                if (r.success) {
-                  setFreePool(r.servers)
-                  if (r.meta) setFreePoolMeta({ total: r.meta.total, working: r.meta.working, untested: r.meta.untested, lastRefreshedAt: r.meta.lastRefreshedAt })
-                }
-              }}
               subConnectingNodeId={subConnectingNodeId}
               subConnectingStep={subConnectingStep}
               onAddManualNode={async (uri) => {
@@ -2396,21 +2141,27 @@ function App() {
                 await window.hamidsDeutsch.startup.setCloseToTray(v)
               }}
               killSwitch={killSwitch}
+              killSwitchAvailable={killSwitchAvailable}
               onKillSwitchToggle={async (v) => {
                 const previous = killSwitch
                 setKillSwitch(v)
                 const result = await window.hamidsDeutsch.killswitch.set(v)
                 if (result.error || result.enabled !== v) {
                   setKillSwitch(previous)
-                  setToastMessage(
-                    result.error ??
-                    (lang === 'fa'
-                      ? 'ذخیره تنظیم Kill Switch ناموفق بود.'
-                      : 'Could not save the Kill Switch setting.'),
+                  showToast(
+                    result.reason === 'needs-admin'
+                      ? t('settings.killSwitch.needsAdmin')
+                      : result.error ?? t('killswitch.saveFailed'),
+                    4200,
+                    'error',
                   )
-                  if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-                  toastTimerRef.current = setTimeout(() => setToastMessage(null), 4200)
+                  return
                 }
+                // Re-read privilege state: it can only be gained by relaunching
+                // elevated, and the switch is useless without it.
+                void window.hamidsDeutsch.killswitch.get()
+                  .then((state) => setKillSwitchAvailable(state.available))
+                  .catch(() => {})
               }}
               autoUpdateEnabled={autoUpdateEnabled}
               updateState={updateState}
@@ -2486,37 +2237,41 @@ function App() {
         </footer>
       </section>
       {toastMessage && (
-        <div className="toast" role="status" aria-live="polite">
-          <span className="toast-icon"><BrandIcon name="check" size={18} /></span>
-          <span>{toastMessage}</span>
+        <div
+          className={toastMessage.tone === 'error' ? 'toast toast-error' : 'toast'}
+          role={toastMessage.tone === 'error' ? 'alert' : 'status'}
+          aria-live={toastMessage.tone === 'error' ? 'assertive' : 'polite'}
+        >
+          <span className="toast-icon">
+            <BrandIcon name={toastMessage.tone === 'error' ? 'shield' : 'check'} size={18} />
+          </span>
+          <span>{toastMessage.text}</span>
         </div>
       )}
       {updateState.availableVersion && ['available', 'downloading', 'ready'].includes(updateState.phase) && (
         <div className="update-banner" role="status">
           {updateState.phase === 'ready' ? (
             <>
-              <span>نسخه {updateState.availableVersion} آماده نصب است</span>
+              <span>{t('update.readyToInstall')} — {updateState.availableVersion}</span>
               <button
                 type="button"
                 className="update-banner-btn"
                 onClick={() => window.hamidsDeutsch.updater.installUpdate()}
               >
-                نصب و ری‌استارت
+                {t('update.installRestart')}
               </button>
-              <button type="button" className="update-banner-dismiss" onClick={() => setUpdateState((s) => ({ ...s, availableVersion: null }))}>×</button>
+              <button type="button" className="update-banner-dismiss" onClick={() => setUpdateState((s) => ({ ...s, availableVersion: null }))} aria-label={t('btn.close')}>×</button>
             </>
           ) : updateState.phase === 'available' ? (
             <>
-              <span>نسخه {updateState.availableVersion} منتشر شده است</span>
+              <span>{t('update.released')} — {updateState.availableVersion}</span>
               <button type="button" className="update-banner-btn" onClick={() => void window.hamidsDeutsch.updater.downloadUpdate()}>
-                دانلود با اجازه من
+                {t('update.download')}
               </button>
-              <button type="button" className="update-banner-dismiss" onClick={() => setUpdateState((s) => ({ ...s, availableVersion: null }))}>×</button>
+              <button type="button" className="update-banner-dismiss" onClick={() => setUpdateState((s) => ({ ...s, availableVersion: null }))} aria-label={t('btn.close')}>×</button>
             </>
           ) : (
-            <>
-              <span>در حال دانلود نسخه {updateState.availableVersion} · {updateState.percent}%</span>
-            </>
+            <span>{t('update.downloading')} {updateState.availableVersion} · {updateState.percent}%</span>
           )}
         </div>
       )}
@@ -2530,44 +2285,20 @@ function App() {
           onCancel={() => resolvePendingConfirmation(false)}
         />
       )}
-      {testStopPrompt && (
-        <div className="test-stop-overlay" role="alertdialog" aria-modal="true">
-          <div className="test-stop-dialog">
-            <div className="test-stop-icon"><BrandIcon name="refresh" size={24} /></div>
-            <h2>{lang === 'fa' ? 'آزمایش کانفیگ‌ها در جریان است' : 'Testing in progress'}</h2>
-            <p>{lang === 'fa'
-              ? 'همین حالا در حال آزمایش دانلود/آپلود کانفیگ‌های رایگان هستیم. برای برقراری اتصال باید آزمایش متوقف شود. متوقف کنیم و وصل شویم؟'
-              : 'Free configs are being download/upload tested right now. Connecting will stop the test. Stop testing and connect?'}</p>
-            <div className="test-stop-actions">
-              <button className="primary-button" type="button" onClick={() => void resolveTestStop(true)}>
-                {lang === 'fa' ? 'توقف آزمایش و اتصال' : 'Stop test & connect'}
-              </button>
-              <button className="text-button" type="button" onClick={() => void resolveTestStop(false)}>
-                {lang === 'fa' ? 'ادامه آزمایش' : 'Keep testing'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {killSwitchActive && (
-        <div className="killswitch-overlay" role="alertdialog" aria-modal="true">
+        <div className="killswitch-overlay" role="alertdialog" aria-modal="true" aria-labelledby="killswitch-title">
           <div className="killswitch-dialog">
             <div className="killswitch-icon"><BrandIcon name="lock" size={34} /></div>
-            <h2>{lang === 'fa' ? 'اینترنت مسدود شد' : 'Internet Blocked'}</h2>
-            <p>{lang === 'fa'
-              ? 'اتصال VPN به‌طور ناگهانی قطع شد و Kill Switch فعال شده تا از نشت اطلاعات جلوگیری کند. برای وصل‌شدن دوباره تلاش کن یا اینترنت را بازگردان.'
-              : 'The VPN dropped unexpectedly and the kill switch blocked all internet to prevent leaks. Reconnect, or restore your internet.'}</p>
+            <h2 id="killswitch-title">{t('killswitch.blocked.title')}</h2>
+            <p>{t('killswitch.blocked.desc')}</p>
+            {killSwitchError && <p className="killswitch-error" role="alert">{killSwitchError}</p>}
             <div className="killswitch-actions">
-              <button className="primary-button" type="button" onClick={async () => {
-                await window.hamidsDeutsch.killswitch.deactivate().catch(() => {})
-                setKillSwitchActive(false)
-                void smartHeroConnect()
-              }}>{lang === 'fa' ? 'اتصال مجدد' : 'Reconnect'}</button>
-              <button className="text-button" type="button" onClick={async () => {
-                await window.hamidsDeutsch.killswitch.deactivate().catch(() => {})
-                setKillSwitchActive(false)
-              }}>{lang === 'fa' ? 'بازگرداندن اینترنت' : 'Restore internet'}</button>
+              <button className="primary-button" type="button" disabled={killSwitchReleasing} onClick={() => void releaseKillSwitch(true)}>
+                {killSwitchReleasing ? t('btn.processing') : t('killswitch.reconnect')}
+              </button>
+              <button className="text-button" type="button" disabled={killSwitchReleasing} onClick={() => void releaseKillSwitch(false)}>
+                {t('killswitch.restore')}
+              </button>
             </div>
           </div>
         </div>
@@ -2649,8 +2380,6 @@ type HomePageProps = {
   }
   ipVerificationChecking: boolean
   isConnected: boolean
-  freeRiskAcknowledged: boolean
-  onAcknowledgeFreeRisk: () => void
   dnsProfiles: DnsProfile[]
   selectedDnsProfileId: string
   dnsActive: boolean
@@ -2677,19 +2406,9 @@ type HomePageProps = {
   onOpenRescue: () => void
   onOpenSettings: () => void
   topSubServers: Array<{ id: string; name: string; protocol: string; latencyMs: number | null }>
-  topFreeServers: FreePoolServer[]
   onConnectSubServer: (id: string) => void
-  onConnectFreeServer: (server: FreePoolServer) => void
-  freePhase: FreeConfigPhase
-  freeNodeName: string | null
-  freeLatencyMs: number | null
-  freeProgress: string | null
-  freeError: string | null
-  onFreeConnect: () => void
-  onFreeDisconnect: () => void
   speedTest: { mbps: number | null; running: boolean; error: string | null } | null
   showReconnectBar: boolean
-  lastConnectionType: string | null
   onQuickReconnect: () => void
   dataLoading: boolean
   trafficSpeed: { upSpeed: number; downSpeed: number } | null
@@ -2712,8 +2431,6 @@ function HomePage({
   ipVerificationResult,
   ipVerificationChecking,
   isConnected,
-  freeRiskAcknowledged,
-  onAcknowledgeFreeRisk,
   dnsProfiles,
   selectedDnsProfileId,
   dnsActive,
@@ -2738,22 +2455,12 @@ function HomePage({
   onOpenServers,
   onOpenDirectSites: _onOpenDirectSites,
   onOpenRescue: _onOpenRescue,
-  freePhase,
-  freeNodeName,
-  freeLatencyMs,
-  freeProgress,
-  freeError,
-  onFreeConnect,
-  onFreeDisconnect,
   speedTest,
   showReconnectBar,
-  lastConnectionType,
   onQuickReconnect,
   dataLoading,
   topSubServers,
-  topFreeServers,
   onConnectSubServer,
-  onConnectFreeServer,
   trafficSpeed,
   onShowQr,
   onNavigateToTools: _onNavigateToTools,
@@ -2767,18 +2474,8 @@ function HomePage({
   function setShowReconnectBarLocal(v: boolean) { if (!v) setReconnectDismissed(true) }
   const showReconnect = showReconnectBar && !reconnectDismissed
 
-  // ── Reconnect countdown (UX #10) ──────────────────────────────────────────
-  const [reconnectSecs, setReconnectSecs] = useState(1)
-  useEffect(() => {
-    if (freePhase !== 'reconnecting') { setReconnectSecs(1); return }
-    setReconnectSecs(1)
-    const id = setInterval(() => setReconnectSecs((s) => s + 1), 1000)
-    return () => clearInterval(id)
-  }, [freePhase])
-
   // ── Error banner (top of hero, auto-dismisses after 10s or on connection) ──
-  const freeConnectedLocal = freePhase === 'connected'
-  const heroConnectedLocal = isConnected || freeConnectedLocal || dnsActive
+  const heroConnectedLocal = isConnected || dnsActive
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const errorBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dismissErrorBanner = () => {
@@ -2786,8 +2483,7 @@ function HomePage({
     setErrorBanner(null)
   }
   // Collect errors into banner
-  const activeError = (freePhase === 'error' && freeError) ? freeError
-    : processError ? processError
+  const activeError = processError ? processError
         : (latencyError && !heroConnectedLocal) ? latencyError
     : null
   useEffect(() => {
@@ -2843,42 +2539,21 @@ function HomePage({
     setSwitchConfirm({ title, message, onConfirm })
   }
 
-  function handleFreeConnect() {
-    if (otherMethodActive) {
-      requireSwitch(
-        'تغییر روش اتصال',
-        'اتصال فعلی قطع می‌شود و از طریق سرور رایگان مجدداً متصل می‌شوید. ادامه می‌دهید؟',
-        () => {
-          setSwitchConfirm(null)
-          onFreeConnect()
-        },
-      )
-    } else {
-      onFreeConnect()
-    }
-  }
-
-  const freeConnected = freeConnectedLocal
-  const vpnConnectionActive = isConnected || freeConnected
-  const otherMethodActive = processStatus.running || freeConnected || dnsActive
+  const vpnConnectionActive = isConnected
   const heroConnected = heroConnectedLocal
-  const activeMethod: 'free' | 'subscription' | 'dns' | null =
-    freeConnected ? 'free' : processStatus.running ? 'subscription' : dnsActive ? 'dns' : null
+  const activeMethod: 'subscription' | 'dns' | null =
+    processStatus.running ? 'subscription' : dnsActive ? 'dns' : null
 
   const isConnecting = processBusy && !heroConnected
-  const isReconnecting = freePhase === 'reconnecting'
   const orbitClass = [
     'connection-orbit',
-    isReconnecting ? 'connection-orbit-reconnecting' :
-      heroConnected ? 'connection-orbit-online' :
+    heroConnected ? 'connection-orbit-online' :
       isConnecting ? 'connection-orbit-connecting' : '',
   ].filter(Boolean).join(' ')
 
   const [adminBannerDismissed, setAdminBannerDismissed] = useState(false)
-  // bpbConnecting removed — BPB connects via BPB tab only
 
   const isSubConnecting = processBusy && !isConnected
-  const isFreeActive = freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' || freeConnected
 
   function handleSubscriptionConnect() {
     // During connecting or when connected: always stop/cancel
@@ -2886,8 +2561,8 @@ function HomePage({
       void onStop()
     } else if (activeMethod) {
       requireSwitch(
-        'تغییر روش اتصال',
-        'اتصال فعلی قطع می‌شود و از طریق اشتراک شخصی متصل می‌شوید. ادامه می‌دهید؟',
+        t('confirm.switchMethod.title'),
+        t('confirm.switchMethod.toSubscription'),
         () => { setSwitchConfirm(null); void onStartFastest() },
       )
     } else {
@@ -2895,42 +2570,21 @@ function HomePage({
     }
   }
 
-  function handleFreeToggle() {
-    if (isFreeActive) {
-      onFreeDisconnect()
-    } else {
-      handleFreeConnect()
-    }
-  }
-
   function handleHeroVisualClick() {
-    if (activeMethod === 'free') handleFreeToggle()
-    else if (activeMethod === 'dns') onDnsDisconnect()
+    if (activeMethod === 'dns') onDnsDisconnect()
     else if (activeMethod === 'subscription') {
-      requireSwitch(t('btn.disconnect'), 'اتصال قطع می‌شود. ادامه می‌دهید؟', () => { setSwitchConfirm(null); onMainAction() })
+      requireSwitch(t('btn.disconnect'), t('confirm.disconnect'), () => { setSwitchConfirm(null); onMainAction() })
     }
   }
 
   // ── Connection stages ──────────────────────────────────────────────────────
   type StageStatus = 'idle' | 'active' | 'done' | 'error'
   function getSubStages(): { icon: string; label: string; status: StageStatus }[] {
-    if (activeMethod === 'free' || (!activeMethod && (freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting'))) {
-      const fetching = freePhase === 'fetching'
-      const testing = freePhase === 'testing'
-      const connecting = freePhase === 'connecting' || freePhase === 'reconnecting'
-      const connected = freePhase === 'connected'
-      return [
-        { icon: '↓', label: 'دریافت سرورها', status: fetching ? 'active' : (testing || connecting || connected) ? 'done' : 'idle' },
-        { icon: '◎', label: 'آزمون پینگ', status: testing ? 'active' : (connecting || connected) ? 'done' : 'idle' },
-        { icon: '⬡', label: 'اتصال', status: connecting ? 'active' : connected ? 'done' : 'idle' },
-        { icon: '✓', label: 'تأیید IP', status: connected && isConnected ? 'done' : connected ? 'active' : 'idle' },
-      ]
-    }
     if (isConnecting || activeMethod === 'subscription') {
       return [
-        { icon: '◌', label: `شروع ${processStatus.engineType === 'xray' ? 'Xray' : 'sing-box'}`, status: processBusy && !processStatus.ready ? 'active' : (processStatus.ready || isConnected) ? 'done' : 'idle' },
-        { icon: '⇄', label: 'پراکسی محلی', status: processStatus.ready && !isConnected ? 'active' : isConnected ? 'done' : 'idle' },
-        { icon: '✓', label: 'تأیید IP', status: ipVerificationChecking ? 'active' : isConnected ? 'done' : 'idle' },
+        { icon: '◌', label: `${t('stage.startEngine')} ${processStatus.engineType === 'xray' ? 'Xray' : 'sing-box'}`, status: processBusy && !processStatus.ready ? 'active' : (processStatus.ready || isConnected) ? 'done' : 'idle' },
+        { icon: '⇄', label: t('stage.localProxy'), status: processStatus.ready && !isConnected ? 'active' : isConnected ? 'done' : 'idle' },
+        { icon: '✓', label: t('stage.verifyIp'), status: ipVerificationChecking ? 'active' : isConnected ? 'done' : 'idle' },
       ]
     }
     return []
@@ -2938,7 +2592,6 @@ function HomePage({
 
   const subStages = getSubStages()
   const showStages = subStages.length > 0 && (isConnecting ||
-    freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting' ||
     (heroConnected && subStages.some(s => s.status !== 'idle')))
 
   return (
@@ -2946,7 +2599,7 @@ function HomePage({
       {errorBanner && (
         <div className="error-banner" role="alert">
           <span className="error-banner-text">{friendlyError(errorBanner)}</span>
-          <button className="error-banner-close" type="button" onClick={dismissErrorBanner} aria-label="بستن"><BrandIcon name="close" size={16} /></button>
+          <button className="error-banner-close" type="button" onClick={dismissErrorBanner} aria-label={t('btn.close')}><BrandIcon name="close" size={16} /></button>
         </div>
       )}
       {!administratorAvailable && !processStatus.running && !adminBannerDismissed && (
@@ -2967,7 +2620,7 @@ function HomePage({
             className="admin-banner-close"
             type="button"
             onClick={() => setAdminBannerDismissed(true)}
-            aria-label="بستن"
+            aria-label={t('btn.close')}
           >✕</button>
         </div>
       )}
@@ -2983,9 +2636,7 @@ function HomePage({
                   : 'status-label-dot'
               }
             />
-            {activeMethod === 'free'
-                ? `${t('home.free.title')} ${t('status.connected')}${freeNodeName ? ` · ${freeNodeName}` : ''}${freeLatencyMs ? ` · ${freeLatencyMs} ms` : ''}${isConnected ? ` · IP ${ipVerificationResult.proxyIp ?? t('stats.confirmed')}` : ''}`
-                : activeMethod === 'dns'
+            {activeMethod === 'dns'
                   ? `DNS · ${activeDnsProfile?.name ?? 'Custom'} · ${activeDnsProfile?.primary ?? ''}`
                 : isConnected
                   ? processStatus.connectionMode === 'tun'
@@ -3004,10 +2655,10 @@ function HomePage({
                 {elapsedSecs >= 0 && (
                   <span className="hero-meter-pill"><BrandIcon name="clock" size={14} /> {formatElapsed(elapsedSecs)}</span>
                 )}
-                <span className="hero-meter-pill bw-up" title={lang === 'fa' ? 'سرعت ارسال' : 'Upload speed'}>
+                <span className="hero-meter-pill bw-up" title={t('stats.uploadSpeed')}>
                   <BrandIcon name="upload" size={14} /> {formatBytes(trafficSpeed?.upSpeed ?? 0)}/s
                 </span>
-                <span className="hero-meter-pill bw-down" title={lang === 'fa' ? 'سرعت دریافت' : 'Download speed'}>
+                <span className="hero-meter-pill bw-down" title={t('stats.downloadSpeed')}>
                   <BrandIcon name="download" size={14} /> {formatBytes(trafficSpeed?.downSpeed ?? 0)}/s
                 </span>
                 {speedTest?.running ? (
@@ -3038,38 +2689,13 @@ function HomePage({
                   : <BrandIcon name={activeMethod === 'subscription' ? 'stop' : 'play'} size={20} />}
               </span>
               <span className="method-btn-label">
-                <strong>{isSubConnecting ? '■ توقف' : activeMethod === 'subscription' ? t('btn.disconnect') : t('hero.connectFastest')}</strong>
+                <strong>{isSubConnecting ? `■ ${t('btn.stop')}` : activeMethod === 'subscription' ? t('btn.disconnect') : t('hero.connectFastest')}</strong>
                 <small>
                   {activeMethod === 'subscription' && isConnected
                     ? (processStatus.connectionMode === 'tun' ? `TUN · ${tunCurrentIp ?? '—'}` : `IP ${ipVerificationResult.proxyIp ?? '—'}`)
                     : fastestServer ? fastestServer.name : t('home.fastest.unknown')}
                 </small>
               </span>
-            </button>
-
-            {/* ── Free Subscription — Teal ── */}
-            <button
-              className={`method-btn method-btn-teal${isFreeActive ? ' method-btn-active' : ''}`}
-              type="button"
-              onClick={handleFreeToggle}
-            >
-              <span className="method-btn-icon">
-                {freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting' || freePhase === 'reconnecting'
-                  ? <span className="connection-stage-spinner" aria-hidden="true" />
-                  : <BrandIcon name={freeConnected ? 'stop' : 'globe'} size={20} />}
-              </span>
-              <span className="method-btn-label">
-                <strong>
-                  {freeConnected ? t('hero.disconnectFree')
-                    : freePhase === 'fetching' ? '■ توقف'
-                    : freePhase === 'testing' ? '■ توقف'
-                    : freePhase === 'connecting' ? '■ توقف'
-                    : freePhase === 'reconnecting' ? '■ توقف'
-                    : 'سرور رایگان'}
-                </strong>
-                <small>{freeConnected && freeNodeName ? freeNodeName : 'V2ray Collector'}</small>
-              </span>
-              {!isFreeActive && <span className="method-btn-free-tag">{t('home.freeTag')}</span>}
             </button>
 
           </div>
@@ -3092,9 +2718,6 @@ function HomePage({
                 </div>
               ))}
             </div>
-          )}
-          {freeProgress && !heroConnected && (
-            <p className="free-progress-line" role="status">{freeProgress}</p>
           )}
         </div>
 
@@ -3134,13 +2757,12 @@ function HomePage({
       {showReconnect && !heroConnected && (
         <div className="reconnect-bar">
           <span className="reconnect-bar-label">
-            {t('reconnect.label')} {lastConnectionType === 'free' ? t('reconnect.free') : lastConnectionType === 'codespace' ? 'Codespace' : lastConnectionType === 'bpb' ? 'BPB' : t('reconnect.subscription')}
-            {freePhase === 'reconnecting' && <span className="reconnect-countdown">{reconnectSecs}s</span>}
+            {t('reconnect.label')} {t('reconnect.subscription')}
           </span>
           <button className="primary-button reconnect-bar-btn" type="button" onClick={onQuickReconnect}>
             {t('reconnect.button')}
           </button>
-          <button className="text-button" type="button" onClick={() => setShowReconnectBarLocal(false)}>✕</button>
+          <button className="text-button" type="button" onClick={() => setShowReconnectBarLocal(false)} aria-label={t('btn.close')}>✕</button>
         </div>
       )}
 
@@ -3170,24 +2792,18 @@ function HomePage({
           <div>
             <span className="statistic-label">{t('stats.currentServer')}</span>
             <strong>
-              {activeMethod === 'free' && freeNodeName
-                ? freeNodeName
-                : lastConnectionType === 'bpb'
-                  ? 'BPB Panel'
-                  : selectedServer?.name ?? '—'}
+              {selectedServer?.name ?? '—'}
             </strong>
           </div>
         </article>
         <article className="statistic-card" style={{ animationDelay: '160ms' }}>
           <span className="statistic-icon"><BrandIcon name="clock" size={22} /></span>
           <div>
-            <span className="statistic-label">{t('stats.latency', 'پینگ')}</span>
+            <span className="statistic-label">{t('stats.latency')}</span>
             <strong dir="ltr">
-              {activeMethod === 'free' && freeLatencyMs != null
-                ? `${freeLatencyMs} ms`
-                : activeMethod === 'subscription' && selectedServerLatency?.latencyMs != null
-                  ? `${selectedServerLatency.latencyMs} ms`
-                  : '—'}
+              {activeMethod === 'subscription' && selectedServerLatency?.latencyMs != null
+                ? `${selectedServerLatency.latencyMs} ms`
+                : '—'}
             </strong>
           </div>
         </article>
@@ -3297,7 +2913,7 @@ function HomePage({
                 ? (lang === 'fa' ? 'در حال اعمال…' : 'Applying…')
                 : dnsActive
                   ? t('btn.disconnect')
-                  : (lang === 'fa' ? 'اتصال DNS' : 'Connect DNS')}
+                  : t('dns.connect')}
             </button>
           </div>
         </article>
@@ -3307,22 +2923,21 @@ function HomePage({
         <ConfirmDialog
           title={switchConfirm.title}
           message={switchConfirm.message}
-          confirmLabel="بله، تغییر بده"
-          cancelLabel="انصراف"
+          confirmLabel={t('confirm.switchServer.ok')}
           onConfirm={switchConfirm.onConfirm}
           onCancel={() => setSwitchConfirm(null)}
         />
       )}
 
-      {/* ── Top-5 sub + free server mini-lists ── */}
+      {/* ── Top-5 subscription server mini-list ── */}
       <section className="connection-choice-grid top-servers-grid">
         <article className="top-server-card">
           <div className="top-server-card-header">
-            <span className="panel-kicker">{t('home.topSub.kicker', 'بهترین سرورهای اشتراک')}</span>
+            <span className="panel-kicker">{t('home.topSub.kicker')}</span>
             <button className="text-button" type="button" onClick={onOpenServers}>{t('home.fastest.viewServers')}</button>
           </div>
           {topSubServers.length === 0 ? (
-            <p className="top-server-empty">{latencyTesting ? t('home.fastest.testing') : t('home.topSub.empty', 'سرور آزمایش‌شده‌ای یافت نشد')}</p>
+            <p className="top-server-empty">{latencyTesting ? t('home.fastest.testing') : t('home.topSub.empty')}</p>
           ) : (
             <ul className="top-server-list">
               {topSubServers.map((s) => (
@@ -3333,66 +2948,20 @@ function HomePage({
                     className="top-server-qr-btn"
                     type="button"
                     title="QR Code"
+                    aria-label="QR Code"
                     onClick={() => onShowQr(s.id)}
                   >⬡</button>
                   <button
                     className="top-server-connect-btn"
                     type="button"
                     disabled={processBusy}
+                    title={t('btn.connect')}
+                    aria-label={`${t('btn.connect')} — ${s.name}`}
                     onClick={() => onConnectSubServer(s.id)}
                   >▶</button>
                 </li>
               ))}
             </ul>
-          )}
-        </article>
-
-        <article className={`top-server-card free-config-card${freeRiskAcknowledged ? ' free-config-revealed' : ''}`}>
-          <div className="top-server-card-header">
-            <span className="panel-kicker">{t('home.topFree.kicker', 'بهترین سرورهای رایگان')}</span>
-          </div>
-          <div className="free-config-sensitive-content" aria-hidden={!freeRiskAcknowledged}>
-            {topFreeServers.length === 0 ? (
-              <p className="top-server-empty">{t('home.topFree.empty', 'هنوز سرور رایگانی آزمایش نشده')}</p>
-            ) : (
-              <ul className="top-server-list">
-                {topFreeServers.map((s) => (
-                  <li key={s.id} className="top-server-row">
-                    <span className="top-server-name" dir="ltr">{s.flag ?? '🏳️'} {s.id}</span>
-                    <span className="top-server-latency" dir="ltr">{s.latencyMs != null ? `${s.latencyMs} ms` : '—'}</span>
-                    <button
-                      className="top-server-connect-btn"
-                      type="button"
-                      disabled={!freeRiskAcknowledged}
-                      onClick={() => {
-                        if (activeMethod || isFreeActive) {
-                          requireSwitch('تغییر روش', 'اتصال فعلی قطع و به سرور رایگان انتخابی متصل می‌شوید.', () => {
-                            setSwitchConfirm(null)
-                            onConnectFreeServer(s)
-                          })
-                        } else {
-                          onConnectFreeServer(s)
-                        }
-                      }}
-                    >▶</button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {!freeRiskAcknowledged && (
-            <div className="free-risk-gate" role="note">
-              <span className="free-risk-icon"><BrandIcon name="shield" size={24} /></span>
-              <strong>{lang === 'fa' ? 'فقط برای مواقع ضروری' : 'Emergency use only'}</strong>
-              <p>
-                {lang === 'fa'
-                  ? 'کانفیگ‌های عمومی رایگان تحت کنترل Manfaz نیستند و امنیت یا حریم خصوصی آن‌ها تضمین نمی‌شود.'
-                  : 'Public free configurations are not controlled by Manfaz. Their security and privacy cannot be guaranteed.'}
-              </p>
-              <button className="warning-ack-button" type="button" onClick={onAcknowledgeFreeRisk}>
-                {lang === 'fa' ? 'متوجه شدم' : 'I understand'}
-              </button>
-            </div>
           )}
         </article>
 
@@ -3572,20 +3141,6 @@ function friendlyError(raw: string | null | undefined): string {
   if (msg.includes('ip') || msg.includes('تغییر')) return 'IP تغییر نکرد — تانل برقرار نشد'
   if (msg.includes('sing-box') || msg.includes('engine')) return 'موتور sing-box خطا داد'
   return raw
-}
-
-// ── formatRelativeTime ─────────────────────────────────────────────────────────
-
-function formatRelativeTime(iso: string): string {
-  const timestamp = new Date(iso).getTime()
-  if (!Number.isFinite(timestamp)) return '—'
-  const diff = Math.max(0, Date.now() - timestamp)
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'همین الان'
-  if (mins < 60) return `${mins} دقیقه پیش`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs} ساعت پیش`
-  return `${Math.floor(hrs / 24)} روز پیش`
 }
 
 // ── CopyButton ────────────────────────────────────────────────────────────────
@@ -4292,23 +3847,13 @@ function ServersPage({
   configCheckingNodeId,
   configCheckResults,
   processRunning,
-  freePool,
-  freePoolMeta,
-  freePhase,
   onCheckConfig,
   onTestLatency,
   onSelectServer,
   onClearSelectedServer,
   onOpenSubscriptions,
-  onConnectFreeNode,
-  freeTest,
-  onCrawlFreePool,
-  onDeepCrawlFreePool,
-  onRefreshFreePings,
-  onTestFreePool,
   onConnectSubNode,
   onStopConnection,
-  onRemoveFreeNode,
   subConnectingNodeId,
   subConnectingStep,
   onAddManualNode,
@@ -4345,23 +3890,13 @@ function ServersPage({
     }
   >
   processRunning: boolean
-  freePool: FreePoolServer[]
-  freePoolMeta: { total: number; working: number; untested: number; lastRefreshedAt: string | null } | null
-  freePhase: FreeConfigPhase
   onCheckConfig: (node: SafeServerNode) => void
   onTestLatency: () => void
   onSelectServer: (server: PublicServer) => void
   onClearSelectedServer: () => void
   onOpenSubscriptions: () => void
-  onConnectFreeNode: (server: FreePoolServer) => void
-  freeTest: { testing: boolean; done: number; total: number }
-  onCrawlFreePool: () => void
-  onDeepCrawlFreePool: () => void
-  onRefreshFreePings: () => void
-  onTestFreePool: () => void
   onConnectSubNode: (node: SafeServerNode) => void
   onStopConnection: () => void
-  onRemoveFreeNode: (nodeId: string) => void
   subConnectingNodeId: string | null
   subConnectingStep: string | null
   onAddManualNode: (uri: string) => Promise<{ success: boolean; error?: string }>
@@ -4380,10 +3915,6 @@ function ServersPage({
   const [manualAdding, setManualAdding] = useState(false)
   const [manualError, setManualError] = useState<string | null>(null)
   const [showManualInput, setShowManualInput] = useState(false)
-
-  // Free-pool search + protocol filter
-  const [freeSearch, setFreeSearch] = useState('')
-  const [freeProtoFilter, setFreeProtoFilter] = useState<'all' | 'vless' | 'vmess' | 'trojan' | 'ss' | 'reality'>('all')
 
   type SortMode = 'ping' | 'name' | 'protocol' | 'reality'
   const [sortMode, setSortMode] = useState<SortMode>(() => {
@@ -4500,9 +4031,9 @@ function ServersPage({
           <h2>{t('servers.empty.title')}</h2>
           <p>{t('servers.empty.desc')}</p>
           <ol className="empty-state-steps">
-            <li>{t('servers.empty.step1', 'از فرم بالای صفحه یک اشتراک اضافه کنید')}</li>
-            <li>{t('servers.empty.step2', 'یا یک لینک سرور دستی وارد کنید')}</li>
-            <li>{t('servers.empty.step3', 'برای گزینه‌های بدون اشتراک از مخزن رایگان پایین استفاده کنید')}</li>
+            <li>{t('servers.empty.step1')}</li>
+            <li>{t('servers.empty.step2')}</li>
+            <li>{t('servers.empty.step3')}</li>
           </ol>
           <button className="primary-button" type="button" onClick={onOpenSubscriptions}>
             {t('servers.goSubs')}
@@ -4896,10 +4427,9 @@ function ServersPage({
 
       {switchConfirm && (
         <ConfirmDialog
-          title="تغییر سرور"
-          message={`اتصال فعلی قطع می‌شود و سرور «${switchConfirm.server.name}» انتخاب می‌شود. ادامه می‌دهید؟`}
-          confirmLabel="بله، تغییر بده"
-          cancelLabel="انصراف"
+          title={t('confirm.switchServer.title')}
+          message={`${t('confirm.switchServer.message')} «${switchConfirm.server.name}»`}
+          confirmLabel={t('confirm.switchServer.ok')}
           onConfirm={() => {
             onSelectServer(switchConfirm.server)
             setSwitchConfirm(null)
@@ -4908,144 +4438,6 @@ function ServersPage({
         />
       )}
 
-      <section className="free-pool-section">
-          <div className="panel-heading">
-            <div>
-              <span className="panel-kicker free-pool-kicker">مخزن رایگان</span>
-              <h3>سرورهای رایگان ذخیره‌شده</h3>
-            </div>
-            <div className="free-pool-meta">
-              {freeTest.testing && <span className="free-pool-refreshing-dot" title="در حال آزمایش..." />}
-              <span className="status-pill">
-                {freeTest.testing
-                  ? `آزمایش ${freeTest.done}/${freeTest.total}`
-                  : freePoolMeta
-                    ? `${freePoolMeta.total} کانفیگ · ${freePoolMeta.working} سالم`
-                    : `${freePool.length} کانفیگ`}
-                {!freeTest.testing && freePoolMeta?.lastRefreshedAt && ` · ${formatRelativeTime(freePoolMeta.lastRefreshedAt)}`}
-              </span>
-              <button
-                className="free-pool-refresh-btn"
-                type="button"
-                disabled={freeTest.testing || freePhase === 'connecting'}
-                onClick={() => void onCrawlFreePool()}
-                title="جستجوی کانفیگ‌های جدید در کانال‌های تلگرام"
-              >⟳ جستجوی جدید</button>
-              <button
-                className="free-pool-refresh-btn"
-                type="button"
-                disabled={freeTest.testing || freePool.length === 0}
-                onClick={() => void onTestFreePool()}
-                title="آزمایش کارکرد همه کانفیگ‌ها (اتصال قطع می‌شود)"
-              >⚡ آزمایش کارکرد</button>
-              <button
-                className="free-pool-refresh-btn"
-                type="button"
-                disabled={freeTest.testing || freePhase === 'connecting'}
-                onClick={() => void onDeepCrawlFreePool()}
-                title="بررسی کامل ۲۰۰ پست آخر هر دو کانال بدون محدودیت (حتی پست‌های قبلاً بررسی‌شده) — نیازمند اتصال فعال"
-              >⤓ بررسی کامل کانال‌ها</button>
-              <button
-                className="free-pool-refresh-btn"
-                type="button"
-                disabled={freeTest.testing || (freePoolMeta?.working ?? 0) === 0}
-                onClick={() => void onRefreshFreePings()}
-                title="بروزرسانی پینگ کانفیگ‌های سالم باقی‌مانده (اتصال قطع می‌شود)"
-              >⟲ بروزرسانی پینگ</button>
-            </div>
-          </div>
-          {/* Search + protocol filter */}
-          <div className="free-pool-toolbar">
-            <input
-              className="free-pool-search"
-              type="text"
-              dir="auto"
-              value={freeSearch}
-              onChange={(e) => setFreeSearch(e.target.value)}
-              placeholder={t('free.searchPlaceholder')}
-            />
-            <div className="free-pool-filters">
-              {(['all', 'reality', 'vless', 'vmess', 'trojan', 'ss'] as const).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  className={`free-pool-filter-chip${freeProtoFilter === f ? ' is-active' : ''}`}
-                  onClick={() => setFreeProtoFilter(f)}
-                >
-                  {f === 'all' ? t('free.filterAll') : f === 'reality' ? 'REALITY' : f.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="free-pool-list">
-            {(() => {
-              const q = freeSearch.trim().toLowerCase()
-              const filtered = freePool
-                .filter((s) => {
-                  if (freeProtoFilter === 'all') return true
-                  if (freeProtoFilter === 'reality') return (s.security ?? '').toLowerCase() === 'reality'
-                  return (s.protocol ?? '').toLowerCase() === freeProtoFilter
-                })
-                .filter((s) => {
-                  if (!q) return true
-                  return (
-                    s.id.includes(q) ||
-                    (s.country ?? '').toLowerCase().includes(q) ||
-                    (s.protocol ?? '').toLowerCase().includes(q)
-                  )
-                })
-              if (filtered.length === 0) {
-                return <div className="free-pool-empty">{t('free.noMatch')}</div>
-              }
-              return filtered.map((server, index) => {
-                const pct = server.latencyMs != null
-                  ? Math.max(6, Math.min(100, Math.round(100 - (server.latencyMs / 400) * 100)))
-                  : 0
-                return (
-                  <div key={server.id} className="free-pool-row">
-                    <span className="free-pool-rank">{index + 1}</span>
-                    <span className="free-pool-flag" title={server.country ?? ''}>{server.flag ?? '🏳️'}</span>
-                    <div className="free-pool-main">
-                      <strong dir="ltr">
-                        {server.id}
-                        {server.working === true && <span className="free-pool-ok-dot" title="سالم"> ●</span>}
-                      </strong>
-                      <small dir="ltr"><ProtocolBadge protocol={server.protocol ?? '—'} /> {server.country ?? '—'}</small>
-                    </div>
-                    {/* Colored ping bar (same style as subscription list) */}
-                    <div className="free-pool-latency">
-                      <span className="bpb-ping is-online" dir="ltr">
-                        {server.latencyMs != null ? `${server.latencyMs} ms` : server.working === null ? '—' : ''}
-                      </span>
-                      <span
-                        className="free-pool-latency-bar"
-                        style={pct > 0 ? ({ '--lat-pct': `${pct}%`, '--lat-color': getLatencyColor(server.latencyMs) } as React.CSSProperties) : undefined}
-                      />
-                    </div>
-                    <button
-                      className="free-pool-connect-btn"
-                      type="button"
-                      disabled={freePhase === 'fetching' || freePhase === 'testing' || freePhase === 'connecting'}
-                      onClick={() => onConnectFreeNode(server)}
-                      title={t('servers.selectThis')}
-                    >
-                      ▶
-                    </button>
-                    <button
-                      className="free-pool-delete-btn"
-                      type="button"
-                      onClick={() => onRemoveFreeNode(server.id)}
-                      title={t('free.delete')}
-                      aria-label={t('free.delete')}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )
-              })
-            })()}
-          </div>
-        </section>
     </div>
   )
 }
@@ -5572,7 +4964,7 @@ function DirectSitesPage({
         <div className="panel-heading">
           <div>
             <span className="panel-kicker">
-              {t('direct.add.kicker', 'دامنه‌های مستقیم')}
+              {t('direct.add.kicker')}
             </span>
             <h3>
               {t('direct.add.title')}
@@ -6556,6 +5948,7 @@ function SettingsPage({
   closeToTray,
   onCloseToTrayToggle,
   killSwitch,
+  killSwitchAvailable,
   onKillSwitchToggle,
   autoUpdateEnabled,
   updateState,
@@ -6642,6 +6035,7 @@ function SettingsPage({
   closeToTray: boolean
   onCloseToTrayToggle: (v: boolean) => Promise<void>
   killSwitch: boolean
+  killSwitchAvailable: boolean
   onKillSwitchToggle: (v: boolean) => Promise<void>
   autoUpdateEnabled: boolean
   updateState: {
@@ -6993,11 +6387,15 @@ function SettingsPage({
         />
 
         <SettingRow
-          title={lang === 'fa' ? 'قطع اضطراری اینترنت (Kill Switch)' : 'Internet Kill Switch'}
-          description={lang === 'fa' ? 'اگر اتصال VPN به‌طور ناگهانی و بدون زدن دکمه قطع، قطع شود، کل اینترنت دستگاه مسدود می‌شود تا نشتی رخ ندهد. (نیازمند اجرا به‌صورت Administrator)' : 'If the VPN drops unexpectedly (not via Disconnect), all device internet is blocked to prevent leaks. (Requires running as Administrator.)'}
-          checked={killSwitch}
+          title={t('settings.killSwitch.title')}
+          description={t('settings.killSwitch.desc')}
+          checked={killSwitch && killSwitchAvailable}
+          disabled={!killSwitchAvailable}
           onChange={(v) => void onKillSwitchToggle(v)}
         />
+        {!killSwitchAvailable && (
+          <p className="setting-row-note" role="note">{t('settings.killSwitch.needsAdmin')}</p>
+        )}
 
         <NetworkRepairRow lang={lang} />
 

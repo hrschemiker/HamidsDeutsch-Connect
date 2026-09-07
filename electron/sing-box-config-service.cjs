@@ -164,6 +164,7 @@ async function createAndCheckTunConfig({
   directApps = [],
   vpnDns = null,
   upstreamProxy = null,
+  clashApiPort = 9090,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -223,6 +224,7 @@ async function createAndCheckTunConfig({
       directApps,
       vpnDns,
       upstreamProxy,
+      clashApiPort,
     )
 
   const runtimeDirectory = path.join(
@@ -1287,15 +1289,30 @@ function buildProxyDnsBlock(directDomains = [], vpnDns = null) {
   }
   const selectedAddress = vpnDns?.primary || '1.1.1.1'
   const tlsServerName = encryptedDnsServers[selectedAddress]
+  // Derive the DoH SNI from the template URL. Hardcoding cloudflare-dns.com
+  // handed a Cloudflare SNI to whatever resolver the user picked, so the TLS
+  // handshake failed and no name resolved inside the tunnel.
+  const templateUrl = (() => {
+    if (!vpnDns?.template) return null
+    try {
+      return new URL(String(vpnDns.template))
+    } catch {
+      return null
+    }
+  })()
+  const templateHost = templateUrl?.hostname || null
   const selectedDns = vpnDns?.template
     ? {
         tag: 'dns-proxy',
         type: 'https',
         server: selectedAddress,
         server_port: 443,
-        path: '/dns-query',
+        path: templateUrl?.pathname || '/dns-query',
         detour: 'proxy',
-        tls: { enabled: true, server_name: 'cloudflare-dns.com' },
+        tls: {
+          enabled: true,
+          server_name: templateHost ?? tlsServerName ?? 'cloudflare-dns.com',
+        },
       }
     : tlsServerName
     ? {
@@ -1420,6 +1437,7 @@ function buildTunConfig(
   directApps = [],
   vpnDns = null,
   upstreamProxy = null,
+  clashApiPort = 9090,
 ) {
   const appEntries = Array.isArray(directApps) ? directApps : []
   const appNames = Array.from(new Set(appEntries.map((entry) =>
@@ -1500,7 +1518,7 @@ function buildTunConfig(
       auto_detect_interface: true,
     },
 
-    experimental: { clash_api: { external_controller: '127.0.0.1:9090' } },
+    experimental: { clash_api: { external_controller: `127.0.0.1:${clashApiPort}` } },
   }
 }
 

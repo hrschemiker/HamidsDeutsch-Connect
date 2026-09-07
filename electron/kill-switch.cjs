@@ -82,10 +82,15 @@ async function refreshKillSwitchActive() {
   return active
 }
 
-/** Block all outbound traffic via a Windows Firewall rule (best-effort). */
-async function activateKillSwitch() {
+/**
+ * Block all outbound traffic via a Windows Firewall rule.
+ *
+ * `force` bypasses the armed check for the drop handler, which disarms first so
+ * a second exit event cannot trigger a second activation.
+ */
+async function activateKillSwitch({ force = false } = {}) {
   if (process.platform !== 'win32') return { success: false, error: 'unsupported platform' }
-  if (!armed) return { success: false, skipped: true, error: 'kill switch is not armed' }
+  if (!force && !armed) return { success: false, skipped: true, error: 'kill switch is not armed' }
   try {
     // `netsh delete rule` exits non-zero when the rule does not exist. Treat
     // absence as the desired state instead of surfacing a false command error.
@@ -93,7 +98,15 @@ async function activateKillSwitch() {
       await execFileAsync('netsh', ['advfirewall', 'firewall', 'delete', 'rule', `name=${RULE_NAME}`], { windowsHide: true, timeout: 8000 })
     }
     await execFileAsync('netsh', ['advfirewall', 'firewall', 'add', 'rule', `name=${RULE_NAME}`, 'dir=out', 'action=block', 'enable=yes', 'profile=any'], { windowsHide: true, timeout: 8000 })
-    active = true
+    // Trust the rule listing, not the exit code: netsh can report success while
+    // silently refusing the rule when the process is not elevated.
+    const confirmed = await refreshKillSwitchActive()
+    if (!confirmed) {
+      return {
+        success: false,
+        error: 'Windows Firewall did not accept the block rule. Run Manfaz VPN as Administrator.',
+      }
+    }
     return { success: true, error: null }
   } catch (err) {
     active = false

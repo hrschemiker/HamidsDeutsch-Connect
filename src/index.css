@@ -60,6 +60,46 @@ html {
   direction: rtl;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+
+  --root-scrollbar-track: #090a0d;
+  --root-scrollbar-thumb: #292d35;
+  --root-scrollbar-thumb-hover: #373c46;
+}
+
+/* The root element carries the app's language and theme (set from App.tsx).
+   Without these, the page kept an RTL, dark-scheme root no matter what the
+   user picked — visible in the scrollbar side, the canvas colour and the way
+   native controls were painted. */
+html[dir="ltr"] {
+  direction: ltr;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  background: #f4f4f2;
+
+  --root-scrollbar-track: #e9e9e6;
+  --root-scrollbar-thumb: #c3c3bd;
+  --root-scrollbar-thumb-hover: #a8a8a1;
+}
+
+/* IRANSansX*FaNum* renders Latin digits as Persian numerals — correct for the
+   Persian UI, wrong for the English one, where an IP came out as ۱۹۲.۱۶۸.
+   Put a Latin face first for English and keep IRANSansX as the fallback. */
+html[lang="en"],
+html[lang="en"] body,
+html[lang="en"] button,
+html[lang="en"] input,
+html[lang="en"] select,
+html[lang="en"] textarea {
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    'IRANSansX',
+    Tahoma,
+    Arial,
+    sans-serif;
 }
 
 body {
@@ -101,15 +141,15 @@ input:focus-visible {
 }
 
 ::-webkit-scrollbar-track {
-  background: #090a0d;
+  background: var(--root-scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  border: 2px solid #090a0d;
+  border: 2px solid var(--root-scrollbar-track);
   border-radius: 999px;
-  background: #292d35;
+  background: var(--root-scrollbar-thumb);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #373c46;
+  background: var(--root-scrollbar-thumb-hover);
 }

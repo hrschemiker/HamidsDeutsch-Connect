@@ -25,6 +25,10 @@
   --amber-soft: rgba(245, 158, 11, 0.13);
   /* Sidebar — truly distinct from main bg */
   --sidebar-bg: rgba(4, 5, 9, 0.97);
+  /* Scrollbars follow the theme instead of staying dark on a light page. */
+  --scrollbar-track: #090a0d;
+  --scrollbar-thumb: #292d35;
+  --scrollbar-thumb-hover: #373c46;
 }
 
 [data-theme="light"] {
@@ -42,6 +46,9 @@
   --red-soft: rgba(212, 70, 70, 0.12);
   --green-soft: rgba(61, 200, 126, 0.12);
   --sidebar-bg: rgba(242, 242, 240, 0.96);
+  --scrollbar-track: #e9e9e6;
+  --scrollbar-thumb: #c3c3bd;
+  --scrollbar-thumb-hover: #a8a8a1;
 }
 
 [data-theme="light"] .application-shell {
@@ -187,7 +194,8 @@ button {
   background: transparent;
   color: var(--text-soft);
   cursor: pointer;
-  text-align: right;
+  /* Logical, not physical: `right` mis-aligns every label in English (LTR). */
+  text-align: start;
   transition:
     background 160ms ease,
     border-color 160ms ease,
@@ -238,7 +246,10 @@ button {
   gap: 4px;
   overflow-x: auto;
   scrollbar-width: none;
-  justify-content: center;
+  /* `safe` keeps the tabs centred while they fit, and falls back to start
+     alignment once they overflow — plain `center` makes the first tabs
+     unreachable inside a scroll container. */
+  justify-content: safe center;
 }
 .navigation-top::-webkit-scrollbar { display: none; }
 
@@ -311,7 +322,7 @@ button {
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin; /* Firefox */
-  scrollbar-color: #292d35 #090a0d;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 .application-shell-top .main-area > main::-webkit-scrollbar {
@@ -320,17 +331,17 @@ button {
 }
 
 .application-shell-top .main-area > main::-webkit-scrollbar-track {
-  background: #090a0d;
+  background: var(--scrollbar-track);
 }
 
 .application-shell-top .main-area > main::-webkit-scrollbar-thumb {
-  border: 2px solid #090a0d;
+  border: 2px solid var(--scrollbar-track);
   border-radius: 999px;
-  background: #292d35;
+  background: var(--scrollbar-thumb);
 }
 
 .application-shell-top .main-area > main::-webkit-scrollbar-thumb:hover {
-  background: #373c46;
+  background: var(--scrollbar-thumb-hover);
 }
 
 .app-footer {
@@ -665,7 +676,6 @@ button {
   color: var(--green);
   box-shadow: 0 0 70px rgba(61, 200, 126, 0.18);
 }
-
 
 .quick-statistics {
   display: grid;
@@ -1489,7 +1499,6 @@ button {
   cursor: not-allowed;
 }
 
-
 /* Fastest and previous server overview */
 
 .connection-choice-grid {
@@ -1580,7 +1589,7 @@ button {
 }
 
 @media (max-width: 900px) {
-  .connection-choice-grid {
+  .connection-choice-grid:not(.top-servers-grid) {
     grid-template-columns: 1fr;
   }
 }
@@ -1646,7 +1655,7 @@ button {
   border: 0;
   background: transparent;
   color: inherit;
-  text-align: right;
+  text-align: start;
   cursor: pointer;
 }
 
@@ -2360,7 +2369,7 @@ button {
 .info-panel {
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
+  inset-inline-start: 0;
   z-index: 200;
   min-width: 240px;
   max-width: 320px;
@@ -2379,11 +2388,12 @@ button {
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
 }
 
-/* When in RTL layout, open towards right so it doesn't clip off-screen */
+/* Headings sit at the inline end, so open the popover inwards to avoid
+   clipping — in either writing direction. */
 .panel-heading .info-btn-wrap .info-panel,
 .heading-end-row .info-panel {
-  left: auto;
-  right: 0;
+  inset-inline-start: auto;
+  inset-inline-end: 0;
 }
 
 /* ── Heading helpers ─────────────────────────────────────────────────────── */
@@ -2586,7 +2596,6 @@ button {
   background: linear-gradient(180deg, #239f40 33%, #ffffff 33% 67%, #da0000 67%);
 }
 
-
 [data-lang="en"] .lang-slider-flag {
   position: absolute;
   inset: 0;
@@ -2742,263 +2751,15 @@ button {
 
 /* ── Free Config Card (home screen) ─────────────────────────────────────── */
 
-.free-config-card {
-  border: 1px solid rgba(45, 212, 191, 0.28);
-  border-radius: 16px;
-  padding: 18px 20px;
-  background: linear-gradient(
-    135deg,
-    rgba(45, 212, 191, 0.07) 0%,
-    rgba(15, 23, 42, 0.42) 100%
-  );
-  transition: opacity 0.2s, filter 0.2s;
-}
-
-
-
-
-
 /* ── Free Pool Section (servers page) ────────────────────────────────────── */
 
-.free-pool-section {
-  margin-top: 28px;
-  border-top: 1px solid var(--border);
-  padding-top: 20px;
-}
-
-.free-pool-kicker {
-  color: var(--teal) !important;
-}
-
-.free-pool-list {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  margin-top: 12px;
-}
-
 /* Free rows mirror the subscription server rows for a consistent look (#4). */
-.free-pool-row {
-  display: grid;
-  grid-template-columns: 30px 26px minmax(0, 1fr) auto 38px 38px;
-  align-items: center;
-  gap: 12px;
-  min-height: 64px;
-  padding: 0 0 0 14px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 13px;
-  background: var(--surface);
-  transition: border-color 160ms ease, box-shadow 160ms ease;
-}
-
-.free-pool-row:hover {
-  border-color: rgba(242, 192, 85, 0.26);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-}
-
-.free-pool-rank {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-muted);
-  font-size: 0.73rem;
-}
-
-.free-pool-main {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.free-pool-main strong {
-  font-size: 0.84rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.free-pool-main small {
-  font-size: 0.71rem;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* Match the subscription server connect button (full-height side button). */
-.free-pool-connect-btn {
-  align-self: stretch;
-  width: 38px;
-  border: none;
-  border-radius: 0;
-  border-inline-start: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  transition: background 140ms ease, color 140ms ease;
-}
-
-.free-pool-connect-btn:hover:not(:disabled) {
-  background: var(--gold-soft);
-  color: var(--gold);
-}
-
-.free-pool-connect-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.free-pool-delete-btn {
-  align-self: stretch;
-  width: 38px;
-  border: none;
-  border-radius: 0;
-  border-inline-start: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  transition: background 140ms ease, color 140ms ease;
-}
-
-.free-pool-delete-btn:hover {
-  background: var(--red-soft);
-  color: var(--red);
-}
 
 /* ── Free pool: search, filters, ping bar, delete ─────────────────────────── */
 
-.free-pool-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  margin: 10px 0 14px;
-}
-
-.free-pool-search {
-  flex: 1 1 220px;
-  min-width: 160px;
-  padding: 8px 12px;
-  border-radius: 9px;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
-  background: rgba(255, 255, 255, 0.04);
-  color: inherit;
-  font-size: 0.82rem;
-  outline: none;
-}
-
-.free-pool-search:focus {
-  border-color: rgba(45, 212, 191, 0.55);
-}
-
-.free-pool-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.free-pool-filter-chip {
-  padding: 5px 11px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: transparent;
-  color: inherit;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  opacity: 0.72;
-  transition: background 140ms, border-color 140ms, opacity 140ms;
-}
-
-.free-pool-filter-chip:hover {
-  opacity: 1;
-}
-
-.free-pool-filter-chip.is-active {
-  background: rgba(45, 212, 191, 0.14);
-  border-color: rgba(45, 212, 191, 0.5);
-  color: var(--teal);
-  opacity: 1;
-}
-
-.free-pool-latency {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  min-width: 74px;
-  padding-block: 12px;
-}
-
-.free-pool-latency-bar {
-  display: block;
-  width: 100%;
-  height: 4px;
-  border-radius: 999px;
-  background: linear-gradient(
-    to right,
-    var(--lat-color, var(--teal)) var(--lat-pct, 0%),
-    rgba(255, 255, 255, 0.1) var(--lat-pct, 0%)
-  );
-}
-
-.free-pool-flag {
-  font-size: 1.15rem;
-  line-height: 1;
-  min-width: 22px;
-  text-align: center;
-}
-
-.free-pool-ok-dot {
-  color: #4ade80;
-  font-size: 0.7rem;
-}
-
-.free-pool-empty {
-  padding: 18px;
-  text-align: center;
-  opacity: 0.6;
-  font-size: 0.82rem;
-}
-
 /* ── Light theme: free config ─────────────────────────────────────────────── */
-
-[data-theme="light"] .free-config-card {
-  background: linear-gradient(135deg, rgba(45, 212, 191, 0.06) 0%, var(--surface) 100%);
-  border-color: rgba(45, 212, 191, 0.25);
-}
-
-[data-theme="light"] .free-pool-row {
-  background: var(--surface);
-  border-color: rgba(0, 0, 0, 0.09);
-}
-
-[data-theme="light"] .free-pool-row:hover {
-  background: rgba(45, 212, 191, 0.04);
-  border-color: rgba(45, 212, 191, 0.3);
-}
-
-[data-theme="light"] .free-config-kicker,
-[data-theme="light"] .free-pool-kicker {
-  color: #0891b2 !important;
-}
-
-[data-theme="light"] .free-latency,
-[data-theme="light"] .free-pool-connect-btn {
-  color: #0891b2;
-}
 
 /* ── Sidebar collapse ─────────────────────────────────────────────────────── */
 
@@ -3075,8 +2836,6 @@ button {
   0%, 100% { opacity: 0.6; transform: scale(0.97); }
   50%       { opacity: 1;   transform: scale(1.03); }
 }
-
-
 
 /* ── Copy button ──────────────────────────────────────────────────────────── */
 
@@ -3190,12 +2949,6 @@ button {
 
 /* ── Free pool meta / refresh status ─────────────────────────────────────── */
 
-.free-pool-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .status-pill {
   display: inline-block;
   padding: 3px 10px;
@@ -3211,15 +2964,6 @@ button {
   background: var(--surface-soft);
   border-color: rgba(0, 0, 0, 0.12);
   color: #52525a;
-}
-
-.free-pool-refreshing-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--gold);
-  animation: poolRefreshPulse 1s ease-in-out infinite;
 }
 
 @keyframes poolRefreshPulse {
@@ -3341,8 +3085,6 @@ button {
 .stats-connected .statistic-card {
   animation: statCardFadeIn 0.3s ease both;
 }
-
-
 
 /* ── REALITY chip on ConnectionChoiceCard ────────────────────────────────── */
 
@@ -3611,8 +3353,9 @@ button {
 /* ── 4 German-flag method buttons ─────────────────────────────────────────── */
 
 .connect-method-buttons {
+  /* auto-fit so the row stays balanced whatever number of methods is shown */
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 10px;
   width: 100%;
   max-width: 420px;
@@ -3688,25 +3431,6 @@ button {
   box-shadow: 0 0 0 2px rgba(255,255,255,0.1), 0 8px 28px rgba(0,0,0,0.6);
 }
 /* Teal — Free Configs */
-.method-btn-teal {
-  background: linear-gradient(145deg, rgba(45,212,191,0.16), rgba(45,212,191,0.08));
-  border-color: rgba(45,212,191,0.32);
-  color: var(--text);
-  box-shadow: 0 4px 20px rgba(45,212,191,0.12);
-}
-.method-btn-teal:hover:not(:disabled) {
-  background: linear-gradient(145deg, rgba(45,212,191,0.24), rgba(45,212,191,0.14));
-  box-shadow: 0 8px 28px rgba(45,212,191,0.2);
-}
-.method-btn-teal.method-btn-active {
-  background: linear-gradient(145deg, rgba(45,212,191,0.28), rgba(45,212,191,0.16));
-  border-color: rgba(45,212,191,0.52);
-  box-shadow: 0 0 0 2px rgba(45,212,191,0.14), 0 8px 28px rgba(45,212,191,0.2);
-}
-.method-btn-teal .method-btn-icon {
-  background: rgba(45,212,191,0.18);
-  color: #2dd4bf;
-}
 
 /* Active state shared pulse */
 .method-btn-active .method-btn-icon {
@@ -3724,13 +3448,6 @@ button {
 @keyframes method-pulse {
   0%, 100% { opacity: 0.3; transform: scale(1); }
   50% { opacity: 0.08; transform: scale(1.12); }
-}
-
-.free-progress-line {
-  margin: 10px auto 0;
-  font-size: 12px;
-  color: var(--text-soft);
-  text-align: center;
 }
 
 /* ── Connection stages ────────────────────────────────────────────────────── */
@@ -3849,12 +3566,14 @@ button {
 }
 
 .method-btn-black.method-btn-active::before { border-color: #fff; }
-.method-btn-teal.method-btn-active::before   { border-color: var(--green); }
 
 /* ── Top-5 server mini-list cards ────────────────────────────────────────── */
 
 .top-servers-grid {
   margin-top: 0;
+  /* Independent of the 3-up DNS grid: this row holds a variable number of
+     cards and must not leave a dead empty column behind. */
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
 .top-server-card {
@@ -3940,29 +3659,6 @@ button {
 }
 
 .top-server-connect-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-
-.free-pool-refresh-btn {
-  padding: 3px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface-hover);
-  color: var(--text-muted);
-  font-size: 11px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 140ms ease, color 140ms ease;
-}
-
-.free-pool-refresh-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text);
-}
-
-.free-pool-refresh-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
@@ -4541,73 +4237,6 @@ button {
   width: 100%;
 }
 
-/* Neutral confirmation dialog (free-config test stop) — not an emergency. */
-.test-stop-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: grid;
-  place-items: center;
-  background: rgba(6, 7, 13, 0.72);
-  backdrop-filter: blur(4px);
-  padding: 24px;
-}
-
-.test-stop-dialog {
-  max-width: 420px;
-  width: 100%;
-  text-align: center;
-  padding: 30px 26px;
-  border: 1px solid color-mix(in srgb, var(--gold) 45%, var(--border));
-  border-radius: 18px;
-  background: var(--surface);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
-}
-
-.test-stop-icon {
-  display: grid;
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 12px;
-  place-items: center;
-  border-radius: 16px;
-  color: var(--gold);
-  background: var(--gold-soft);
-}
-
-.test-stop-dialog h2 {
-  margin: 0 0 10px;
-  font-size: 20px;
-  color: var(--text-primary);
-}
-
-.test-stop-dialog p {
-  margin: 0 0 22px;
-  color: var(--text-soft);
-  font-size: 13px;
-  line-height: 1.9;
-}
-
-.test-stop-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  align-items: center;
-}
-
-.test-stop-actions .primary-button {
-  width: 100%;
-}
-
-[data-theme="light"] .test-stop-dialog {
-  background: #ffffff;
-}
-
-[data-theme="light"] .test-stop-icon {
-  color: #a16207;
-  background: rgba(242, 192, 85, 0.25);
-}
-
 /* v2.18 — one settings scale and a first-class DNS-only connection */
 .settings-page {
   --settings-title-size: 14px;
@@ -4648,7 +4277,7 @@ button {
   border-radius: 11px;
 }
 
-.connection-choice-grid {
+.connection-choice-grid:not(.top-servers-grid) {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -4732,13 +4361,13 @@ button {
 }
 
 @media (max-width: 1120px) {
-  .connection-choice-grid {
+  .connection-choice-grid:not(.top-servers-grid) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
-  .connection-choice-grid {
+  .connection-choice-grid:not(.top-servers-grid) {
     grid-template-columns: 1fr;
   }
 }
@@ -5005,7 +4634,6 @@ button:disabled {
 }
 
 .text-input,
-.free-pool-search,
 select,
 textarea {
   min-height: 42px;
@@ -5015,7 +4643,6 @@ textarea {
 }
 
 .text-input:hover,
-.free-pool-search:hover,
 select:hover,
 textarea:hover {
   border-color: rgba(45, 212, 191, 0.42);
@@ -5117,24 +4744,6 @@ textarea:hover {
   border-color: color-mix(in srgb, var(--green) 45%, transparent);
 }
 
-.free-pool-row {
-  min-height: 68px;
-  background: var(--surface-soft);
-}
-
-.free-pool-connect-btn,
-.free-pool-delete-btn {
-  width: 44px;
-  min-width: 44px;
-}
-
-.free-pool-filter-chip {
-  min-height: 36px;
-  padding-inline: 13px;
-  border-color: var(--border-strong);
-  font-size: 12px;
-}
-
 .fatal-error {
   display: grid;
   min-height: 100dvh;
@@ -5212,8 +4821,7 @@ textarea:hover {
 /* Filled brand actions must stay legible on the light palette. */
 [data-theme="light"] .primary-button,
 [data-theme="light"] .confirm-ok-btn,
-[data-theme="light"] .fatal-error button,
-[data-theme="light"] .free-pool-connect-btn {
+[data-theme="light"] .fatal-error button {
   color: #f5fffd;
   text-shadow: 0 1px 1px rgba(0, 40, 35, 0.2);
 }
@@ -5250,11 +4858,28 @@ textarea:hover {
 }
 
 @media (max-width: 760px) {
+  /* On a narrow window the top nav wraps onto its own row, so a hard 100vh
+     shell clipped the bottom of every page. Let the shell keep the viewport
+     height but scroll the content instead of hiding the overflow. */
   .application-shell,
   .sidebar,
   .main-area {
-    height: auto;
     min-height: 0;
+  }
+
+  .application-shell {
+    height: 100dvh;
+    overflow: auto;
+  }
+
+  .application-shell-top .main-area {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .application-shell-top .main-area > main {
+    overflow-y: visible;
   }
 
   .topbar {
@@ -5319,14 +4944,9 @@ textarea:hover {
     min-height: 0;
   }
 
-  .free-pool-row {
-    grid-template-columns: 26px 24px minmax(0, 1fr) 44px 44px;
-    gap: 8px;
-  }
+  
 
-  .free-pool-latency {
-    display: none;
-  }
+  
 
   .confirm-actions > button {
     flex: 1 1 140px;
@@ -5633,15 +5253,12 @@ textarea:hover {
     inset-inline-end: 10px;
   }
 
-  .input-action-row,
-  .free-pool-toolbar {
+  .input-action-row {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .free-pool-search {
-    flex-basis: auto;
-  }
+  
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -5792,23 +5409,6 @@ textarea:hover {
   opacity: 0.85;
 }
 /* Free tag badge on method buttons */
-.method-btn-free-tag {
-  position: absolute;
-  top: 6px;
-  inset-inline-end: 8px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 2px 5px;
-  border-radius: 4px;
-  pointer-events: none;
-  line-height: 1;
-  /* defaults (teal / Free button) */
-  background: rgba(52, 211, 153, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(52, 211, 153, 0.28);
-}
-
 
 /* v2.17 focused UI corrections */
 .hero-live-stats {
@@ -5940,7 +5540,7 @@ textarea:hover {
 }
 
 /* v2.18 final cascade */
-.connection-choice-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.connection-choice-grid:not(.top-servers-grid) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .settings-page .panel-heading h3,
 .settings-page .setting-row strong,
 .settings-page .setting-title-with-info > strong,
@@ -5959,10 +5559,10 @@ textarea:hover {
   border-radius: 11px;
   white-space: nowrap;
 }
-@media (max-width: 1120px) { .connection-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 760px) { .connection-choice-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1120px) { .connection-choice-grid:not(.top-servers-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .connection-choice-grid:not(.top-servers-grid) { grid-template-columns: 1fr; } }
 
-/* v2.19 — VPN DNS state, free-config safety gate and service promotion */
+/* v2.19 — VPN DNS state and service promotion */
 .dns-choice-vpn-muted {
   opacity: 0.48;
   filter: saturate(0.55);
@@ -5979,77 +5579,6 @@ textarea:hover {
 
 .dns-choice-card {
   position: relative;
-}
-
-.free-config-card {
-  position: relative;
-  min-height: 342px;
-  overflow: hidden;
-}
-
-.free-config-sensitive-content {
-  transition: filter 180ms ease, opacity 180ms ease;
-}
-
-.free-config-card:not(.free-config-revealed) .free-config-sensitive-content,
-.free-config-card:not(.free-config-revealed) .top-server-card-header {
-  opacity: 0.34;
-  filter: blur(7px);
-  user-select: none;
-  pointer-events: none;
-}
-
-.free-risk-gate {
-  position: absolute;
-  z-index: 2;
-  inset: 54px 24px 22px;
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 10px;
-  padding: 18px;
-  text-align: center;
-  border: 1px solid color-mix(in srgb, var(--gold) 32%, var(--border));
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--surface) 68%, transparent);
-  box-shadow: 0 18px 44px rgba(20, 24, 30, 0.14);
-  backdrop-filter: blur(14px);
-}
-
-.free-risk-icon {
-  display: grid;
-  width: 48px;
-  height: 48px;
-  place-items: center;
-  border-radius: 15px;
-  color: var(--gold);
-  background: color-mix(in srgb, var(--gold) 13%, var(--surface));
-}
-
-.free-risk-gate strong {
-  color: var(--text-primary);
-  font-size: 14px;
-}
-
-.free-risk-gate p {
-  max-width: 330px;
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.8;
-}
-
-.warning-ack-button {
-  min-height: 40px;
-  padding: 9px 20px;
-  border: 0;
-  border-radius: 11px;
-  background: var(--gold);
-  color: #fff;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
 }
 
 .manfaz-promo-card {
@@ -6091,13 +5620,16 @@ textarea:hover {
 .manfaz-promo-copy {
   position: absolute;
   z-index: 2;
+  /* Physical left on purpose: the artwork's subject sits on the right and the
+     shade gradient darkens the left, so the copy is anchored there in both
+     writing directions. Only the forced `direction: rtl` is gone — it used to
+     reorder the English copy. */
   left: 24px;
   bottom: 24px;
   display: grid;
   max-width: 58%;
   gap: 8px;
   color: #fff;
-  direction: rtl;
   text-align: left;
 }
 
@@ -6151,4 +5683,37 @@ textarea:hover {
   .manfaz-promo-card {
     min-height: 300px;
   }
+}
+
+
+/* ── Kill Switch: inline notes and failure text ──────────────────────────── */
+
+.setting-row-note {
+  margin: -4px 0 10px;
+  padding-inline-start: 2px;
+  color: var(--amber);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.killswitch-error {
+  margin: 4px 0 0;
+  padding: 9px 11px;
+  border: 1px solid var(--red);
+  border-radius: 10px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+
+/* ── Toast tone ──────────────────────────────────────────────────────────── */
+
+.toast-error {
+  border-color: var(--red);
+}
+
+.toast-error .toast-icon {
+  color: var(--red);
 }

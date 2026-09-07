@@ -14,7 +14,6 @@ const BACKUP_FILES = Object.freeze([
   'hidden-nodes.json',
   'split-tunnel-apps.json',
   'kill-switch.json',
-  'free-config-pool.json',
 ])
 
 const ALLOWED_BACKUP_FILES = new Set(BACKUP_FILES)

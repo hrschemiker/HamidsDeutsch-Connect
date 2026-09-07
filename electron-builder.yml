@@ -30,10 +30,6 @@ extraResources:
     to: python
     filter:
       - "**/*"
-  - from: resources/geoip
-    to: geoip
-    filter:
-      - "**/*"
 
 asar: true
 asarUnpack:

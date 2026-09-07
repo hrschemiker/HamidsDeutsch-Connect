@@ -49,8 +49,89 @@ export const TR: Record<Lang, Record<string, string>> = {
     'status.running': 'در حال اجرا',
     'status.tunConnected': 'متصل با TUN',
 
+    // ── App version / update banner ──────────────────────────────────────────
+    'version.label': 'نسخه',
+    'update.readyToInstall': 'نسخه جدید آماده نصب است',
+    'update.installRestart': 'نصب و راه‌اندازی مجدد',
+    'update.released': 'نسخه جدید منتشر شده است',
+    'update.download': 'دانلود با اجازه من',
+    'update.downloading': 'در حال دانلود نسخه',
+    'nav.updateAvailable': 'به‌روزرسانی موجود است',
+
+    // ── Toasts ───────────────────────────────────────────────────────────────
+    'toast.disconnected': 'اتصال قطع شد · پراکسی ویندوز بازگردانی شد',
+    'speedtest.failed': 'خطا در اجرای تست سرعت',
+
+    // ── Kill Switch ──────────────────────────────────────────────────────────
+    'killswitch.blocked.title': 'اینترنت مسدود شد',
+    'killswitch.blocked.desc': 'اتصال VPN به‌طور ناگهانی قطع شد و Kill Switch فعال شده تا از نشت اطلاعات جلوگیری کند. برای وصل‌شدن دوباره تلاش کن یا اینترنت را بازگردان.',
+    'killswitch.reconnect': 'اتصال مجدد',
+    'killswitch.restore': 'بازگرداندن اینترنت',
+    'killswitch.failed': 'اتصال قطع شد، اما Kill Switch نتوانست اینترنت را مسدود کند. برنامه را با دسترسی Administrator اجرا کن.',
+    'killswitch.releaseFailed': 'برداشتن محدودیت Kill Switch ناموفق بود. برنامه را با دسترسی Administrator اجرا کن.',
+    'killswitch.saveFailed': 'ذخیره تنظیم Kill Switch ناموفق بود.',
+    'settings.killSwitch.title': 'قطع اضطراری اینترنت (Kill Switch)',
+    'settings.killSwitch.desc': 'اگر اتصال VPN به‌طور ناگهانی و بدون زدن دکمه قطع، قطع شود، کل اینترنت دستگاه مسدود می‌شود تا نشتی رخ ندهد. (نیازمند اجرا به‌صورت Administrator)',
+    'settings.killSwitch.needsAdmin': 'برای فعال‌سازی Kill Switch، برنامه باید با دسترسی Administrator اجرا شود.',
+
+    // ── Connection stages / errors ───────────────────────────────────────────
+    'stage.startEngine': 'شروع',
+    'stage.localProxy': 'پراکسی محلی',
+    'stage.verifyIp': 'تأیید IP',
+    'connect.step.checkConfig': 'بررسی کانفیگ سرور...',
+    'connect.step.startProxy': 'راه‌اندازی پروکسی...',
+    'connect.step.verifyIp': 'تأیید تغییر IP...',
+    'connect.step.stopPrevious': 'در حال قطع اتصال قبلی...',
+    'connect.step.tun': 'راه‌اندازی حالت TUN...',
+    'connect.step.tunFallback': 'بازگشت به پروکسی محلی...',
+    'connect.engine.switchTitle': 'تغییر موتور اتصال',
+    'connect.engine.switchQuestion': 'موتور برای این اتصال به sing-box تغییر کند؟',
+    'connect.engine.tunNeedsSingBox': 'حالت TUN در این نسخه به موتور sing-box نیاز دارد.',
+    'connect.engine.protocolUnsupported': 'این پروتکل توسط Xray در این نسخه پشتیبانی نمی‌شود.',
+    'connect.error.cancelled': 'اتصال لغو شد.',
+    'connect.error.noSubscription': 'اشتراک این سرور مشخص نیست.',
+    'connect.error.configRejected': 'کانفیگ توسط موتور تأیید نشد.',
+    'connect.error.noRealTraffic': 'این سرور ترافیک واقعی عبور نداد.',
+    'connect.error.notEstablished': 'اتصال واقعی برقرار نشد.',
+    'connect.error.noValidServer': 'هیچ سرور معتبری برای اتصال وجود ندارد.',
+    'connect.error.allServersFailed': 'هیچ‌کدام از سرورها اتصال واقعی برقرار نکردند.',
+    'connect.error.tunNeedsAdmin': 'حالت «فقط TUN» انتخاب شده، اما برنامه با دسترسی Administrator اجرا نشده است.',
+    'connect.error.tunFailed': 'راه‌اندازی یا تأیید TUN ناموفق بود.',
+    'connect.error.tunNoTraffic': 'تانل TUN بالا آمد اما IP خروجی تغییر نکرد.',
+    'connect.error.tunFallbackFailed': 'بازگشت از TUN به پروکسی محلی ناموفق بود.',
+    'connect.error.fallbackUnverified': 'تأیید اتصال fallback ناموفق بود.',
+    'connect.error.systemProxyFailed': 'فعال‌سازی System Proxy ناموفق بود.',
+    'connect.error.finalIpUnverified': 'System Proxy فعال شد، اما تغییر IP نهایی تأیید نشد.',
+    'connect.error.proxyReleaseFailed': 'آزادسازی Proxy ویندوز ناموفق بود.',
+    'connect.error.ipCheckFailed': 'بررسی تغییر IP ناموفق بود.',
+    'connect.error.sameIp': 'IP مستقیم و IP عبوری از پروکسی یکسان هستند.',
+    'connect.watchdog.recovering': 'اتصال قطع شد؛ در حال بازیابی خودکار...',
+    'diag.attemptStarted': 'آزمایش اتصال واقعی به سرور آغاز شد.',
+    'servers.loadFailed': 'دریافت سرورها ناموفق بود.',
+    'home.noSubscription': 'هنوز اشتراکی اضافه نشده است. از صفحه «سرورها» یک اشتراک اضافه کن.',
+
+    // ── Confirm dialogs ──────────────────────────────────────────────────────
+    'confirm.switchMethod.title': 'تغییر روش اتصال',
+    'confirm.switchMethod.toSubscription': 'اتصال فعلی قطع می‌شود و از طریق اشتراک شخصی متصل می‌شوی. ادامه می‌دهی؟',
+    'confirm.disconnect': 'اتصال قطع می‌شود. ادامه می‌دهی؟',
+    'confirm.switchServer.title': 'تغییر سرور',
+    'confirm.switchServer.message': 'اتصال فعلی قطع می‌شود و این سرور انتخاب می‌شود:',
+    'confirm.switchServer.ok': 'بله، تغییر بده',
+    'home.topSub.kicker': 'بهترین سرورهای اشتراک',
+    'servers.empty.step1': 'از فرم بالای صفحه یک اشتراک اضافه کن',
+    'servers.empty.step2': 'یا یک لینک سرور را دستی وارد کن',
+    'servers.empty.step3': 'سپس پینگ سرورها را بگیر و وصل شو',
+    'direct.add.kicker': 'دامنه‌های مستقیم',
+    'home.topSub.empty': 'سرور آزمایش‌شده‌ای یافت نشد',
+    'stats.latency': 'پینگ',
+    'dns.connect': 'اتصال DNS',
+
     // ── Buttons ──────────────────────────────────────────────────────────────
     'btn.connect': 'اتصال با سریع‌ترین سرور',
+    'btn.stop': 'توقف',
+    'btn.close': 'بستن',
+    'stats.uploadSpeed': 'سرعت ارسال',
+    'stats.downloadSpeed': 'سرعت دریافت',
     'btn.disconnect': 'قطع اتصال',
     'btn.processing': 'در حال انجام عملیات...',
     'btn.verifyingIp': 'در حال تأیید تغییر IP...',
@@ -78,7 +159,6 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'هسته برنامه',
-    'version': 'نسخه ۲.۲۳.۰',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.clickToDisconnect': 'برای قطع اتصال، کلیک کن',
@@ -87,7 +167,6 @@ export const TR: Record<Lang, Record<string, string>> = {
     'hero.requestingAccess': 'در حال درخواست دسترسی...',
     'hero.relaunchAdmin': 'اجرای مجدد با دسترسی Administrator',
     'hero.disconnectGithub': 'قطع اتصال GitHub',
-    'hero.disconnectFree': 'قطع اتصال سرور رایگان',
     'hero.connectFastest': 'اتصال با سریع‌ترین سرور',
     'hero.proxyReady': 'پروکسی آماده است؛ می‌توانی بررسی IP را دوباره اجرا کنی',
     'hero.configHint': 'کانفیگ بررسی، sing-box اجرا و تغییر IP تأیید می‌شود',
@@ -126,14 +205,6 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.bpb.setup': 'راه‌اندازی BPB Panel',
     'home.bpb.setupHint': 'پیکربندی نشده — برای راه‌اندازی کلیک کن',
     'home.bpb.hint': 'Cloudflare Workers · سریع‌ترین سرور',
-    'home.free.title': 'اتصال با سرور رایگان',
-    'home.free.disconnect': 'قطع اتصال سرور رایگان',
-    'home.free.hint': 'جستجو · آزمون · اتصال خودکار',
-    'home.free.phase.fetching': 'در حال دریافت...',
-    'home.free.phase.testing': 'در حال آزمون...',
-    'home.free.phase.connecting': 'در حال اتصال...',
-    'home.free.phase.reconnecting': 'در حال اتصال مجدد...',
-    'home.free.phase.connect': 'دریافت و اتصال خودکار',
     'home.proxy.title.verified': 'System Proxy و تغییر IP تأیید شد',
     'home.proxy.title.ready': 'پروکسی محلی آماده است',
     'home.proxy.title.running': 'sing-box در حال اجراست',
@@ -203,9 +274,6 @@ export const TR: Record<Lang, Record<string, string>> = {
     'servers.checking': 'در حال بررسی کانفیگ...',
     'servers.checkBtn': 'بررسی با sing-box',
     'servers.changeTitle': 'تغییر سرور',
-    'servers.freePool.kicker': 'مخزن رایگان',
-    'servers.freePool.title': 'سرورهای رایگان ذخیره‌شده',
-    'servers.freePool.connect': 'اتصال',
     'servers.status.checking': 'در حال بررسی کانفیگ',
     'servers.status.ok': 'کانفیگ تأیید شد',
     'servers.status.bad': 'کانفیگ ناسازگار',
@@ -533,7 +601,6 @@ export const TR: Record<Lang, Record<string, string>> = {
     'quality.weak': 'ضعیف',
 
     // ── Hero mode pill ───────────────────────────────────────────────────────
-    'hero.modeFree': 'رایگان',
     'hero.modeCodespace': 'Codespace',
     'hero.modeSubscription': 'اشتراک',
 
@@ -545,7 +612,6 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Reconnect bar ────────────────────────────────────────────────────────
     'reconnect.label': 'اتصال قبلی:',
-    'reconnect.free': 'رایگان',
     'reconnect.subscription': 'اشتراک',
     'reconnect.button': 'اتصال مجدد',
 
@@ -563,7 +629,7 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.empty.title': 'هنوز هیچ اتصالی تنظیم نشده',
     'home.empty.step1': 'لینک اشتراک V2Ray را از صفحه «سرورها» اضافه کن',
     'home.empty.step2': 'یا یک کانفیگ را به‌صورت دستی در «سرورها» اضافه کن',
-    'home.empty.step3': 'یا از «سرور رایگان» در پایین همین صفحه استفاده کن',
+    'home.empty.step3': 'سپس روی «اتصال با سریع‌ترین سرور» بزن',
 
     // ── Guide keyboard shortcut mention ──────────────────────────────────────
     'guide.shortcut.kicker': 'میانبر',
@@ -623,11 +689,6 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.zeus.needsSetup': 'ابتدا پنل Zeus را از منوی «پنل Zeus» راه‌اندازی کن.',
     'home.zeus.connected': 'Zeus متصل است',
     'home.bpb.needsSetup': 'ابتدا پنل BPB را از منوی «اتصال BPB» راه‌اندازی کن.',
-    'home.freeTag': 'رایگان',
-    'free.searchPlaceholder': 'جستجو در نام، آدرس یا پروتکل...',
-    'free.filterAll': 'همه',
-    'free.noMatch': 'سروری با این فیلتر پیدا نشد.',
-    'free.delete': 'حذف از مخزن',
 
     // ── Tools page ────────────────────────────────────────────────────────────
     'nav.tools': 'ابزارها',
@@ -719,8 +780,89 @@ export const TR: Record<Lang, Record<string, string>> = {
     'status.running': 'Running',
     'status.tunConnected': 'Connected via TUN',
 
+    // ── App version / update banner ──────────────────────────────────────────
+    'version.label': 'Version',
+    'update.readyToInstall': 'A new version is ready to install',
+    'update.installRestart': 'Install and restart',
+    'update.released': 'A new version has been released',
+    'update.download': 'Download now',
+    'update.downloading': 'Downloading version',
+    'nav.updateAvailable': 'An update is available',
+
+    // ── Toasts ───────────────────────────────────────────────────────────────
+    'toast.disconnected': 'Disconnected · Windows proxy restored',
+    'speedtest.failed': 'Speed test failed',
+
+    // ── Kill Switch ──────────────────────────────────────────────────────────
+    'killswitch.blocked.title': 'Internet blocked',
+    'killswitch.blocked.desc': 'The VPN dropped unexpectedly and the kill switch blocked all internet to prevent leaks. Reconnect, or restore your internet.',
+    'killswitch.reconnect': 'Reconnect',
+    'killswitch.restore': 'Restore internet',
+    'killswitch.failed': 'The VPN dropped, but the kill switch could not block the network. Run Manfaz VPN as Administrator.',
+    'killswitch.releaseFailed': 'The kill switch block could not be removed. Run Manfaz VPN as Administrator.',
+    'killswitch.saveFailed': 'Could not save the Kill Switch setting.',
+    'settings.killSwitch.title': 'Internet Kill Switch',
+    'settings.killSwitch.desc': 'If the VPN drops unexpectedly (not via Disconnect), all device internet is blocked to prevent leaks. (Requires running as Administrator.)',
+    'settings.killSwitch.needsAdmin': 'The Kill Switch needs Manfaz VPN to run as Administrator.',
+
+    // ── Connection stages / errors ───────────────────────────────────────────
+    'stage.startEngine': 'Starting',
+    'stage.localProxy': 'Local proxy',
+    'stage.verifyIp': 'Verify IP',
+    'connect.step.checkConfig': 'Checking the server configuration...',
+    'connect.step.startProxy': 'Starting the proxy...',
+    'connect.step.verifyIp': 'Verifying the IP change...',
+    'connect.step.stopPrevious': 'Stopping the previous connection...',
+    'connect.step.tun': 'Starting TUN mode...',
+    'connect.step.tunFallback': 'Falling back to the local proxy...',
+    'connect.engine.switchTitle': 'Switch connection engine',
+    'connect.engine.switchQuestion': 'Switch the engine to sing-box for this connection?',
+    'connect.engine.tunNeedsSingBox': 'TUN mode requires the sing-box engine in this build.',
+    'connect.engine.protocolUnsupported': 'This protocol is not supported by Xray in this build.',
+    'connect.error.cancelled': 'Connection cancelled.',
+    'connect.error.noSubscription': 'This server has no subscription attached.',
+    'connect.error.configRejected': 'The engine rejected this configuration.',
+    'connect.error.noRealTraffic': 'This server did not pass any real traffic.',
+    'connect.error.notEstablished': 'No real connection was established.',
+    'connect.error.noValidServer': 'There is no valid server to connect to.',
+    'connect.error.allServersFailed': 'None of the servers established a real connection.',
+    'connect.error.tunNeedsAdmin': 'TUN-only mode is selected, but the app is not running as Administrator.',
+    'connect.error.tunFailed': 'TUN could not be started or verified.',
+    'connect.error.tunNoTraffic': 'The TUN tunnel came up but the exit IP never changed.',
+    'connect.error.tunFallbackFailed': 'Falling back from TUN to the local proxy failed.',
+    'connect.error.fallbackUnverified': 'The fallback connection could not be verified.',
+    'connect.error.systemProxyFailed': 'System Proxy could not be enabled.',
+    'connect.error.finalIpUnverified': 'System Proxy is on, but the final IP change was not verified.',
+    'connect.error.proxyReleaseFailed': 'The Windows proxy could not be released.',
+    'connect.error.ipCheckFailed': 'The IP change check failed.',
+    'connect.error.sameIp': 'The direct IP and the proxied IP are identical.',
+    'connect.watchdog.recovering': 'Connection lost; recovering automatically...',
+    'diag.attemptStarted': 'Started a real connection attempt to the server.',
+    'servers.loadFailed': 'The server list could not be loaded.',
+    'home.noSubscription': 'No subscription added yet. Add one from the Servers page.',
+
+    // ── Confirm dialogs ──────────────────────────────────────────────────────
+    'confirm.switchMethod.title': 'Switch connection method',
+    'confirm.switchMethod.toSubscription': 'The current connection will stop and reconnect through your personal subscription. Continue?',
+    'confirm.disconnect': 'This will disconnect you. Continue?',
+    'confirm.switchServer.title': 'Switch server',
+    'confirm.switchServer.message': 'The current connection will stop and this server will be selected:',
+    'confirm.switchServer.ok': 'Yes, switch',
+    'home.topSub.kicker': 'Best subscription servers',
+    'servers.empty.step1': 'Add a subscription with the form at the top of this page',
+    'servers.empty.step2': 'Or paste a single server link manually',
+    'servers.empty.step3': 'Then test the latency and connect',
+    'direct.add.kicker': 'Direct domains',
+    'home.topSub.empty': 'No tested server found',
+    'stats.latency': 'Latency',
+    'dns.connect': 'Connect DNS',
+
     // ── Buttons ───────────────────────────────────────────────────────────────
     'btn.connect': 'Connect to fastest server',
+    'btn.stop': 'Stop',
+    'btn.close': 'Close',
+    'stats.uploadSpeed': 'Upload speed',
+    'stats.downloadSpeed': 'Download speed',
     'btn.disconnect': 'Disconnect',
     'btn.processing': 'Processing...',
     'btn.verifyingIp': 'Verifying IP change...',
@@ -748,7 +890,6 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Misc ──────────────────────────────────────────────────────────────────
     'engineCore': 'Engine Core',
-    'version': 'Version 2.23.0',
 
     // ── Hero Card ─────────────────────────────────────────────────────────────
     'hero.clickToDisconnect': 'Click to disconnect',
@@ -757,7 +898,6 @@ export const TR: Record<Lang, Record<string, string>> = {
     'hero.requestingAccess': 'Requesting access...',
     'hero.relaunchAdmin': 'Relaunch as Administrator',
     'hero.disconnectGithub': 'Disconnect GitHub',
-    'hero.disconnectFree': 'Disconnect free server',
     'hero.connectFastest': 'Connect to fastest server',
     'hero.proxyReady': 'Proxy is ready — you can re-run the IP check',
     'hero.configHint': 'Config verified, sing-box started, and IP change confirmed',
@@ -796,14 +936,6 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.bpb.setup': 'Set up BPB Panel',
     'home.bpb.setupHint': 'Not configured — click to set up',
     'home.bpb.hint': 'Cloudflare Workers · Fastest server',
-    'home.free.title': 'Connect with free server',
-    'home.free.disconnect': 'Disconnect free server',
-    'home.free.hint': 'Search · Test · Auto-connect',
-    'home.free.phase.fetching': 'Fetching...',
-    'home.free.phase.testing': 'Testing...',
-    'home.free.phase.connecting': 'Connecting...',
-    'home.free.phase.reconnecting': 'Reconnecting...',
-    'home.free.phase.connect': 'Fetch and auto-connect',
     'home.proxy.title.verified': 'System Proxy and IP change confirmed',
     'home.proxy.title.ready': 'Local proxy is ready',
     'home.proxy.title.running': 'sing-box is running',
@@ -873,9 +1005,6 @@ export const TR: Record<Lang, Record<string, string>> = {
     'servers.checking': 'Checking config...',
     'servers.checkBtn': 'Check with sing-box',
     'servers.changeTitle': 'Switch server',
-    'servers.freePool.kicker': 'Free pool',
-    'servers.freePool.title': 'Cached free servers',
-    'servers.freePool.connect': 'Connect',
     'servers.status.checking': 'Checking config',
     'servers.status.ok': 'Config verified',
     'servers.status.bad': 'Incompatible config',
@@ -1244,11 +1373,6 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.zeus.needsSetup': 'Set up the Zeus panel first from the “Zeus Panel” menu.',
     'home.zeus.connected': 'Zeus connected',
     'home.bpb.needsSetup': 'Set up the BPB panel first from the “BPB” menu.',
-    'home.freeTag': 'Free',
-    'free.searchPlaceholder': 'Search by name, address or protocol...',
-    'free.filterAll': 'All',
-    'free.noMatch': 'No servers match this filter.',
-    'free.delete': 'Remove from pool',
 
     // ── History date groups ──────────────────────────────────────────────────
     'history.today': 'Today',
@@ -1262,7 +1386,6 @@ export const TR: Record<Lang, Record<string, string>> = {
     'quality.weak': 'Weak',
 
     // ── Hero mode pill ───────────────────────────────────────────────────────
-    'hero.modeFree': 'Free',
     'hero.modeCodespace': 'Codespace',
     'hero.modeSubscription': 'Subscription',
 
@@ -1274,7 +1397,6 @@ export const TR: Record<Lang, Record<string, string>> = {
 
     // ── Reconnect bar ────────────────────────────────────────────────────────
     'reconnect.label': 'Last connection:',
-    'reconnect.free': 'Free',
     'reconnect.subscription': 'Subscription',
     'reconnect.button': 'Reconnect',
 
@@ -1292,7 +1414,7 @@ export const TR: Record<Lang, Record<string, string>> = {
     'home.empty.title': 'No connection configured yet',
     'home.empty.step1': 'Add a V2Ray subscription link from the "Servers" page',
     'home.empty.step2': 'Or add a config manually on the "Servers" page',
-    'home.empty.step3': 'Or use "Free Server" at the bottom of this page',
+    'home.empty.step3': 'Then press "Connect to fastest server"',
 
     // ── Guide keyboard shortcut mention ──────────────────────────────────────
     'guide.shortcut.kicker': 'Shortcut',

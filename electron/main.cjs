@@ -130,18 +130,6 @@ const {
 const connectionEngines = require('./connection-engine-manager.cjs')
 
 const {
-  addConfigs: addFreeConfigs,
-  setTestResult: setFreeTestResult,
-  pruneDead: pruneFreeDead,
-  removeServer: removeFreeServer,
-  getChannelId: getFreeChannelId,
-  setChannelId: setFreeChannelId,
-  getPool: getFreePool,
-  getAllPool: getAllFreePool,
-  getPoolMeta: getFreePoolMeta,
-} = require('./free-config-store.cjs')
-
-const {
   verifyIpChange,
   getCurrentIpSnapshot,
 } = require('./ip-verification-service.cjs')
@@ -199,7 +187,7 @@ let mainWindow = null
 let bpbPanelWindow = null
 let appTray = null
 
-// Tracks the last successful subscription/free connect call so we can rebuild
+// Tracks the last successful subscription connect call so we can rebuild
 // the config when the bypass list changes while connected.
 let activeConnectionParams = null
 let isQuitting = false
@@ -407,85 +395,8 @@ function setupTray() {
   })
 }
 
-// ── Free Config Engine (Telegram channels → geoip → test → connect) ─────────
-//
-// Free configs come exclusively from two curated Telegram channels. Crawling
-// happens through the ACTIVE tunnel (Telegram is blocked in Iran), incrementally
-// per-channel via the stored newest-post-id cursor. Configs are stored with a
-// random 6-digit id + the country flag of the server IP (offline GeoIP); their
-// name is never shown. Connecting to a free config is identical to a
-// subscription connect. The working-test connects to each config one-by-one and
-// deletes the ones that pass no real traffic.
-
-const TELEGRAM_CHANNELS = ['best_internet_iran', 'Spotify_Porteghali']
-const TELEGRAM_MAX_POSTS = 200
-const CRAWL_MIN_INTERVAL_MS = 3 * 60 * 1000
-const TEST_PORT = 3080
-const TEST_PER_CONFIG_TIMEOUT = 5000
-
-let crawlInFlight = false
-let lastCrawlAt = 0
-let testInFlight = false
-let testAbort = false
-let telegramCrawlTimer = null
-let freeBackgroundTimer = null
-
 // Last bandwidth sample, used to convert cumulative totals into live speed.
 let lastTrafficSample = null
-
-let freeConfigState = {
-  phase: 'idle',
-  nodeId: null,
-  nodeName: null,
-  latencyMs: null,
-  error: null,
-  userDisconnected: false,
-  poolCount: 0,
-  testing: false,
-  testDone: 0,
-  testTotal: 0,
-}
-
-function sendFreeProgress(text, phase) {
-  if (phase) freeConfigState.phase = phase
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('free:progress', { message: text, phase: freeConfigState.phase, at: new Date().toISOString() })
-  }
-}
-
-async function sendFreePoolStatus() {
-  const meta = await getFreePoolMeta().catch(() => null)
-  if (meta) freeConfigState.poolCount = meta.total
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('free:pool-status', {
-      total: meta?.total ?? 0,
-      working: meta?.working ?? 0,
-      untested: meta?.untested ?? 0,
-      testing: freeConfigState.testing,
-      testDone: freeConfigState.testDone,
-      testTotal: freeConfigState.testTotal,
-      lastRefreshedAt: meta?.lastRefreshedAt ?? null,
-    })
-  }
-}
-
-function isAnyConnectionActive() {
-  try { return connectionEngines.getSelectedStatus().running } catch { return false }
-}
-
-async function tunneledFetch(url) {
-  const { net } = require('electron')
-  const resp = await net.fetch(url, {
-    signal: AbortSignal.timeout(15000),
-    headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en' },
-  })
-  return { ok: resp.ok, status: resp.status, text: () => resp.text() }
-}
-
-function parseAllProtocols(content) {
-  const { parseSubscriptionNodeRecords } = require('./subscription-parser.cjs')
-  return parseSubscriptionNodeRecords(content)
-}
 
 // Lift an active kill-switch block once a fresh connection is up.
 async function liftKillSwitchOnConnect() {
@@ -549,417 +460,54 @@ async function prepareKillSwitchReconnect() {
   }
 }
 
-/**
- * Crawl both Telegram channels for NEW configs (since the stored post-id cursor),
- * resolve each server's country flag offline, and add them to the pool.
- * Runs only while a tunnel is up. Throttled unless force=true.
- */
-async function crawlFreeConfigs({ force = false, deep = false } = {}) {
-  if (crawlInFlight) return { added: 0, skipped: 'busy' }
-  if (!force && Date.now() - lastCrawlAt < CRAWL_MIN_INTERVAL_MS) return { added: 0, skipped: 'throttled' }
-  if (!isAnyConnectionActive()) return { added: 0, skipped: 'offline' }
-
-  crawlInFlight = true
-  try {
-    const { crawlChannel } = require('./telegram-source-service.cjs')
-    const geoip = require('./geoip-service.cjs')
-    sendFreeProgress(deep
-      ? 'بررسی کامل ۲۰۰ پست آخر هر دو کانال تلگرام...'
-      : 'در حال جستجوی کانفیگ‌های جدید در تلگرام...', 'fetching')
-
-    const collected = []
-    for (const channel of TELEGRAM_CHANNELS) {
-      // Deep crawl ignores the newest-post-id cursor: re-scan ALL recent posts
-      // even if already seen (dedup by URI still prevents duplicates on import).
-      const sinceId = deep ? 0 : await getFreeChannelId(channel).catch(() => 0)
-      let res
-      try {
-        res = await crawlChannel({ channel, sinceId, maxPosts: TELEGRAM_MAX_POSTS, fetchImpl: tunneledFetch })
-      } catch { continue }
-      const records = parseAllProtocols(res.uris.join('\n'))
-      for (const r of records) {
-        if (!r.node.valid || !r.node.host || !r.node.port) continue
-        collected.push(r)
-      }
-      if (res.newestId) await setFreeChannelId(channel, res.newestId).catch(() => {})
-    }
-
-    // Resolve country/flag (offline geoip; domains resolve through the tunnel).
-    const seen = new Set()
-    const entries = []
-    for (const r of collected) {
-      if (seen.has(r.uri)) continue
-      seen.add(r.uri)
-      const country = await geoip.countryForHost(r.node.host).catch(() => null)
-      entries.push({
-        uri: r.uri,
-        host: r.node.host,
-        port: r.node.port,
-        protocol: r.node.protocol,
-        security: r.node.security ?? null,
-        country,
-        flag: geoip.flagForCountry(country),
-        source: 'telegram',
-      })
-    }
-
-    const added = entries.length ? await addFreeConfigs(entries) : 0
-    lastCrawlAt = Date.now()
-    await sendFreePoolStatus()
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('free:pool-updated', { added })
-    }
-    if (added > 0) console.log(`[Free] Added ${added} new configs from Telegram`)
-    return { added, skipped: null }
-  } catch (err) {
-    console.error('[Free] crawl failed:', err?.message ?? err)
-    return { added: 0, skipped: 'error' }
-  } finally {
-    crawlInFlight = false
-  }
-}
-
-/** Probe whether the local proxy on `port` actually relays real traffic. */
-function probeRelay(port, timeoutMs = TEST_PER_CONFIG_TIMEOUT) {
-  const TEST_HOST = 'speed.cloudflare.com'
-  return new Promise((resolve) => {
-    const netmod = require('node:net')
-    const tls = require('node:tls')
-    let done = false
-    let tlsSocket = null
-    const t0 = Date.now()
-    const finish = (ok) => {
-      if (done) return
-      done = true
-      try { tlsSocket?.destroy() } catch {}
-      try { socket.destroy() } catch {}
-      resolve({ ok, ms: ok ? Date.now() - t0 : null })
-    }
-    const socket = new netmod.Socket()
-    socket.setTimeout(timeoutMs)
-    socket.on('timeout', () => finish(false))
-    socket.on('error', () => finish(false))
-    socket.connect(port, '127.0.0.1', () => {
-      socket.write(`CONNECT ${TEST_HOST}:443 HTTP/1.1\r\nHost: ${TEST_HOST}:443\r\n\r\n`)
-    })
-    let buf = ''
-    let tunnelReady = false
-    socket.on('data', (chunk) => {
-      if (tunnelReady) return
-      buf += chunk.toString('ascii', 0, Math.min(chunk.length, 512))
-      if (!buf.includes('\r\n\r\n')) return
-      if (!(buf.split('\r\n')[0] || '').includes('200')) { finish(false); return }
-      tunnelReady = true
-      socket.removeAllListeners('data')
-      tlsSocket = tls.connect({ socket, servername: TEST_HOST, rejectUnauthorized: false }, () => {
-        tlsSocket.write(`GET /__down?bytes=1024 HTTP/1.1\r\nHost: ${TEST_HOST}\r\nConnection: close\r\n\r\n`)
-      })
-      tlsSocket.setTimeout(timeoutMs)
-      tlsSocket.on('timeout', () => finish(false))
-      tlsSocket.on('error', () => finish(false))
-      let rbuf = ''
-      tlsSocket.on('data', (d) => {
-        rbuf += d.toString('ascii', 0, Math.min(d.length, 512))
-        const line = rbuf.split('\r\n')[0] || ''
-        if (rbuf.includes('\r\n')) finish(line.includes('200') || line.includes('204'))
-      })
-    })
-  })
-}
-
-/** Build a throwaway test config for a uri and spawn a sing-box on TEST_PORT. */
-async function spawnTestEngine(uri) {
-  const { createAndCheckConfig } = require('./sing-box-config-service.cjs')
-  const enginePath = getEnginePath()
-  const userDataPath = app.getPath('userData')
-  const res = await createAndCheckConfig({
-    subscriptionUrl: 'https://t.me',
-    nodeId: 'test',
-    nodeUri: uri,
-    enginePath,
-    userDataPath,
-    directDomains: [],
-    rescueOptions: null,
-    runtimeDirectoryName: 'test-runtime',
-    configFileName: 'test.json',
-    localPort: TEST_PORT,
-    setSystemProxy: false,
-    // Isolated control port so test engines never clash with the main
-    // connection's clash_api on 9090 (which would block real connects).
-    clashApiPort: 9099,
-  }).catch(() => ({ success: false }))
-  if (!res.success) return null
-  const { spawn } = require('node:child_process')
-  const child = spawn(enginePath, ['run', '-c', res.configPath], { windowsHide: true, stdio: 'ignore' })
-  return child
-}
-
-/**
- * Test every config one-by-one: connect, check real traffic, mark working/dead.
- * Deletes configs that relay nothing. Must run while disconnected.
- */
-async function testAllFreeConfigs() {
-  if (testInFlight) return { tested: 0, removed: 0, skipped: 'busy' }
-  testInFlight = true
-  testAbort = false
-  freeConfigState.testing = true
-  try {
-    const all = await getAllFreePool().catch(() => [])
-    freeConfigState.testTotal = all.length
-    freeConfigState.testDone = 0
-    await sendFreePoolStatus()
-    for (const cfg of all) {
-      // Stop cleanly if the user chose to connect (testing and connecting are
-      // mutually exclusive so a test engine can never disrupt a real connect).
-      if (testAbort) break
-      freeConfigState.testDone++
-      sendFreeProgress(`آزمایش کانفیگ‌ها: ${freeConfigState.testDone}/${freeConfigState.testTotal}`, 'testing')
-      let child = null
-      try {
-        child = await spawnTestEngine(cfg.uri)
-        if (!child) { await setFreeTestResult(cfg.id, false, null).catch(() => {}); continue }
-        await new Promise((r) => setTimeout(r, 1200))
-        const { ok, ms } = await probeRelay(TEST_PORT)
-        await setFreeTestResult(cfg.id, ok, ms).catch(() => {})
-      } catch {
-        await setFreeTestResult(cfg.id, false, null).catch(() => {})
-      } finally {
-        try { child?.kill() } catch {}
-        await new Promise((r) => setTimeout(r, 150))
-      }
-      if (freeConfigState.testDone % 10 === 0) await sendFreePoolStatus()
-    }
-    if (testAbort) {
-      await sendFreePoolStatus()
-      sendFreeProgress('آزمایش برای برقراری اتصال متوقف شد.', 'idle')
-      return { tested: freeConfigState.testDone, removed: 0, skipped: 'aborted' }
-    }
-    const removed = await pruneFreeDead().catch(() => 0)
-    await sendFreePoolStatus()
-    sendFreeProgress(`آزمایش کامل شد. ${removed} کانفیگ بی‌کار حذف شد.`, 'idle')
-    return { tested: all.length, removed, skipped: null }
-  } finally {
-    testInFlight = false
-    testAbort = false
-    freeConfigState.testing = false
-    await sendFreePoolStatus()
-  }
-}
-
-/**
- * Stop an in-flight free-config test and wait for the loop to unwind. Called
- * before any connect so testing and connecting never overlap.
- */
-async function stopFreeTesting() {
-  if (!testInFlight) return { stopped: true, wasTesting: false }
-  testAbort = true
-  const start = Date.now()
-  while (testInFlight && Date.now() - start < 5000) {
-    await new Promise((r) => setTimeout(r, 100))
-  }
-  return { stopped: !testInFlight, wasTesting: true }
-}
-
-/**
- * Re-measure latency for ONLY the configs that already passed the working test
- * and are still in the pool (working === true). Does not crawl or delete —
- * just refreshes each surviving config's ping.
- */
-async function refreshWorkingPings() {
-  if (testInFlight) return { tested: 0, skipped: 'busy' }
-  testInFlight = true
-  testAbort = false
-  freeConfigState.testing = true
-  try {
-    const all = await getAllFreePool().catch(() => [])
-    const working = all.filter((c) => c.working === true)
-    freeConfigState.testTotal = working.length
-    freeConfigState.testDone = 0
-    await sendFreePoolStatus()
-    if (working.length === 0) {
-      sendFreeProgress('کانفیگ کارآمدی برای بروزرسانی پینگ وجود ندارد.', 'idle')
-      return { tested: 0, skipped: null }
-    }
-    for (const cfg of working) {
-      if (testAbort) break
-      freeConfigState.testDone++
-      sendFreeProgress(`بروزرسانی پینگ: ${freeConfigState.testDone}/${working.length}`, 'testing')
-      let child = null
-      try {
-        child = await spawnTestEngine(cfg.uri)
-        if (!child) continue // keep it as-is; couldn't re-measure this round
-        await new Promise((r) => setTimeout(r, 1200))
-        const { ok, ms } = await probeRelay(TEST_PORT)
-        await setFreeTestResult(cfg.id, ok, ms).catch(() => {})
-      } catch {
-        // Leave the config untouched on a transient error.
-      } finally {
-        try { child?.kill() } catch {}
-        await new Promise((r) => setTimeout(r, 150))
-      }
-      if (freeConfigState.testDone % 5 === 0) await sendFreePoolStatus()
-    }
-    await sendFreePoolStatus()
-    sendFreeProgress(testAbort ? 'بروزرسانی پینگ متوقف شد.' : 'بروزرسانی پینگ کامل شد.', 'idle')
-    return { tested: freeConfigState.testDone, skipped: null }
-  } finally {
-    testInFlight = false
-    testAbort = false
-    freeConfigState.testing = false
-    await sendFreePoolStatus()
-  }
-}
-
-/**
- * Connect to a free config EXACTLY like a subscription: build the normal runtime
- * config and start the engine. No separate free-runtime, no extra gate.
- */
-async function connectFreeConfig({ nodeId, nodeUri, directDomains = [], rescueOptions = null, enginePreference = 'sing-box' }) {
-  const { createAndCheckConfig } = require('./sing-box-config-service.cjs')
-  // Never connect while a test is running — stop it first so a leftover test
-  // engine can't disrupt the real connection.
-  await stopFreeTesting()
-  freeConfigState.userDisconnected = false
-  const enginePath = getEnginePath()
-  const userDataPath = app.getPath('userData')
-  const killSwitchRelease = await prepareKillSwitchReconnect()
-  if (!killSwitchRelease.success) {
-    return {
-      success: false,
-      error: `Kill Switch مانع اتصال مجدد شد: ${killSwitchRelease.error ?? 'برنامه را با دسترسی Administrator اجرا کنید.'}`,
-    }
-  }
-
-  // Resolve the uri from the pool if only an id was given.
-  let uri = nodeUri
-  if (!uri && nodeId) {
-    const all = await getAllFreePool().catch(() => [])
-    uri = all.find((s) => s.id === nodeId)?.uri
-  }
-  if (!uri) return { success: false, error: 'کانفیگ رایگان پیدا نشد.' }
-
-  const requestedEngine = enginePreference === 'xray' ? 'xray' : 'sing-box'
-  const compatibility = getXrayCompatibility(uri)
-  if (requestedEngine === 'xray' && !compatibility.compatible) {
-    return { success: false, requiresEngine: 'sing-box', protocol: compatibility.protocol, error: compatibility.reason }
-  }
-  connectionEngines.setSelectedEngine(requestedEngine)
-
-  if (connectionEngines.getSelectedStatus().running) {
-    expectedEngineStop = true
-    try { await connectionEngines.stopSelected({ userDataPath }) } catch {}
-  }
-
-  const [upstreamProxy, utlsSettings, scannedCleanIp, cloudflareBacked] = await Promise.all([
-    getUpstreamProxy(userDataPath).catch(() => null),
-    getUTlsSettings(userDataPath).catch(() => null),
-    resolveCfCleanIp(userDataPath),
-    isCloudflareBackedUri(uri),
-  ])
-  const cleanIp = cloudflareBacked ? scannedCleanIp : null
-
-  async function build(cfCleanIp) {
-    const params = {
-      subscriptionUrl: 'https://t.me',
-      nodeId: nodeId ?? 'free',
-      nodeUri: uri,
-      enginePath,
-      userDataPath,
-      directDomains: Array.isArray(directDomains) ? directDomains : [],
-      rescueOptions,
-      localPort: 2080,
-      setSystemProxy: true,
-      proxyDoH: proxyDoHEnabled,
-      vpnDns: getPreferredVpnDnsConfig(requestedEngine),
-      upstreamProxy: upstreamProxy?.enabled ? upstreamProxy : null,
-      utlsSettings,
-      cfCleanIp,
-    }
-    return (requestedEngine === 'xray'
-      ? createAndCheckXrayConfig({ ...params, enginePath: getXrayPath() })
-      : createAndCheckConfig(params)
-    ).catch((e) => ({ success: false, error: e?.message }))
-  }
-
-  await backupWindowsProxyState(userDataPath).catch(() => {})
-
-  // Try via the clean IP first; if it doesn't relay, fall back to the server as-is.
-  for (const cfCleanIp of (cleanIp ? [cleanIp, null] : [null])) {
-    const configResult = await build(cfCleanIp)
-    if (!configResult.success) continue
-    const started = await connectionEngines.startSelected({
-      singBoxPath: enginePath, xrayPath: getXrayPath(), userDataPath,
-    })
-    if (!started.success) continue
-    if (requestedEngine === 'xray') {
-      const activated = await connectionEngines.activateSelectedSystemProxy({
-        singBoxPath: enginePath, xrayPath: getXrayPath(), userDataPath,
-      })
-      if (!activated.success) continue
-    }
-    if (cfCleanIp) {
-      // Verify the clean-IP tunnel actually passes traffic; else retry as-is.
-      const relay = await probeRelay(2080).catch(() => ({ ok: false }))
-      if (!relay.ok) { expectedEngineStop = true; await connectionEngines.stopSelected({ userDataPath }).catch(() => {}); continue }
-    }
-    freeConfigState.phase = 'connected'
-    freeConfigState.nodeId = nodeId ?? null
-    expectedEngineStop = false
-    await liftKillSwitchOnConnect()
-    return { success: true, nodeId: nodeId ?? null, error: null }
-  }
-  return { success: false, error: 'اتصال به کانفیگ رایگان ناموفق بود.' }
-}
-
-// Automation: crawl for new configs shortly after any connection comes up;
-// run the connectivity test automatically when disconnected (and on launch).
-function startFreeAutomation() {
-  freeBackgroundTimer = setInterval(() => {
-    if (isAnyConnectionActive()) crawlFreeConfigs().catch(() => {})
-  }, 60 * 1000)
-}
-
-// Kept for call-site compatibility with app startup.
-function startFreeBackgroundRefresh() { startFreeAutomation() }
-function startTelegramCrawler() { /* folded into startFreeAutomation */ }
-
-// On disconnect, automatically run the free-config connectivity test (spec #9):
-// once the tunnel is down, quietly test any untested configs in the background.
 // True when the engine is being stopped on purpose (Disconnect / switching
 // servers) — used so the kill switch only fires on genuine drops.
 let expectedEngineStop = false
 
-connectionEngines.setProcessExitCallback(({ code } = {}) => {
+connectionEngines.setProcessExitCallback(({ code, signal } = {}) => {
   const wasExpected = expectedEngineStop
   expectedEngineStop = false
-  freeConfigState.phase = 'idle'
+
+  const ks = require('./kill-switch.cjs')
+
   if (wasExpected) {
-    require('./kill-switch.cjs').setKillSwitchArmed(false)
+    ks.setKillSwitchArmed(false)
+    return
   }
 
   // Kill switch: an UNEXPECTED drop (not the Disconnect button) blocks all
-  // internet until the user reconnects or turns the feature off.
-  if (!wasExpected && code !== 0) {
-    const { getKillSwitchEnabled, isKillSwitchArmed, activateKillSwitch } = require('./kill-switch.cjs')
-    if (isKillSwitchArmed()) {
-      getKillSwitchEnabled(app.getPath('userData')).then(async (enabled) => {
-        if (!enabled) return
-        const res = await activateKillSwitch()
-        if (res.success && mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('killswitch:activated', { firewall: res.success })
-        } else if (!res.success && !res.skipped) {
-          console.error('[KillSwitch] Activation failed:', res.error)
-        }
-      }).catch(() => {})
-    }
-  }
+  // internet until the user reconnects or turns the feature off. ANY unplanned
+  // exit counts — a clean `code === 0` exit that nobody asked for still leaves
+  // the machine unprotected, which is exactly what the switch guards against.
+  if (!ks.isKillSwitchArmed()) return
 
-  setTimeout(() => {
-    if (isAnyConnectionActive() || testInFlight) return
-    getFreePoolMeta()
-      .then((meta) => { if (meta && meta.untested > 0) return testAllFreeConfigs() })
-      .catch(() => {})
-  }, 2500)
+  // Disarm immediately: the tunnel is gone, so the next exit event (a restart
+  // attempt failing, for instance) must not re-trigger a second activation.
+  ks.setKillSwitchArmed(false)
+
+  console.warn(
+    '[KillSwitch] Unexpected engine exit',
+    `code=${code ?? 'null'}`,
+    `signal=${signal ?? 'null'}`,
+  )
+
+  ks.getKillSwitchEnabled(app.getPath('userData'))
+    .then(async (enabled) => {
+      if (!enabled) return
+      const res = await ks.activateKillSwitch({ force: true })
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      if (res.success) {
+        mainWindow.webContents.send('killswitch:activated', { firewall: true })
+      } else {
+        console.error('[KillSwitch] Activation failed:', res.error)
+        mainWindow.webContents.send('killswitch:failed', {
+          error: res.error ?? 'Kill Switch could not block the network.',
+        })
+      }
+    })
+    .catch((error) => {
+      console.error('[KillSwitch] Activation error:', error?.message ?? error)
+    })
 })
 
 function getProductionLogPath() {
@@ -1468,7 +1016,7 @@ function registerIpcHandlers() {
     async (_event, domains) => {
       setDirectDomains(Array.isArray(domains) ? domains : [])
 
-      // If a subscription/free proxy is currently running, hot-rebuild the config
+      // If a subscription proxy is currently running, hot-rebuild the config
       // so bypass list changes take effect without a full reconnect.
       const procStatus = connectionEngines.getSelectedStatus()
       if (procStatus.running && activeConnectionParams) {
@@ -1480,9 +1028,14 @@ function registerIpcHandlers() {
           if (newConfigResult.success) {
             // Restart sing-box with the new config
             const userDataPath = app.getPath('userData')
+            const ks = require('./kill-switch.cjs')
+            // The renderer only re-arms on a connected/disconnected transition,
+            // and a hot reload is neither — so restore the armed state here or
+            // the switch silently stays down for the rest of the session.
+            const wasArmed = ks.isKillSwitchArmed()
             await backupWindowsProxyState(userDataPath).catch(() => {})
             expectedEngineStop = true
-            require('./kill-switch.cjs').setKillSwitchArmed(false)
+            ks.setKillSwitchArmed(false)
             await connectionEngines.stopSelected({ userDataPath }).catch(() => {})
             const restarted = await connectionEngines.startSelected({
               singBoxPath: getEnginePath(), xrayPath: getXrayPath(), userDataPath,
@@ -1490,6 +1043,7 @@ function registerIpcHandlers() {
             expectedEngineStop = false
             if (restarted.success) {
               activeConnectionParams = { ...activeConnectionParams, directDomains: newDomains }
+              if (wasArmed) ks.setKillSwitchArmed(true)
             }
             if (restarted.success && mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('bypass:reloaded', { domainCount: newDomains.length })
@@ -1618,7 +1172,6 @@ function registerIpcHandlers() {
     'engine:start-local-proxy',
     async () => {
       try {
-        await stopFreeTesting()
         const killSwitchRelease = await prepareKillSwitchReconnect()
         if (!killSwitchRelease.success) {
           return {
@@ -1783,6 +1336,11 @@ function registerIpcHandlers() {
         return createProcessErrorResult(
           error,
         )
+      } finally {
+        // The exit callback clears this, but it never fires when nothing was
+        // running. Left set, the NEXT genuine drop would look intentional and
+        // the kill switch would stay down.
+        expectedEngineStop = false
       }
     },
   )
@@ -1792,6 +1350,8 @@ function registerIpcHandlers() {
     async () => {
       activeConnectionParams = null
       expectedEngineStop = true // Disconnect button / server switch — not a drop.
+      // A deliberate stop also disarms the switch: the user asked to be offline.
+      require('./kill-switch.cjs').setKillSwitchArmed(false)
       try {
         const result = await connectionEngines.stopSelected({
           userDataPath: app.getPath('userData'),
@@ -1814,6 +1374,8 @@ function registerIpcHandlers() {
         return createProcessErrorResult(
           error,
         )
+      } finally {
+        expectedEngineStop = false
       }
     },
   )
@@ -2440,6 +2002,7 @@ function registerIpcHandlers() {
         }
       }
     },
+  )
 
   ipcMain.handle(
     'servers:check-tun-config',
@@ -2569,94 +2132,6 @@ function registerIpcHandlers() {
       }
     },
   )
-
-  )
-
-  // ── GitHub Codespace handlers ────────────────────────────────────────────
-
-            // ── Free Config handlers ──────────────────────────────────────────────────
-
-  ipcMain.handle('free:get-pool', async () => {
-    try {
-      const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
-      return { success: true, servers, meta, error: null }
-    } catch (err) {
-      return { success: false, servers: [], meta: null, error: err?.message ?? 'خواندن مخزن کانفیگ‌های رایگان ناموفق بود.' }
-    }
-  })
-
-  ipcMain.handle('free:get-status', () => {
-    return { ...freeConfigState }
-  })
-
-  // Crawl the two Telegram channels for new configs (through the active tunnel).
-  ipcMain.handle('free:crawl', async () => {
-    try {
-      const result = await crawlFreeConfigs({ force: true })
-      const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
-      return { success: true, added: result.added, skipped: result.skipped, servers, meta, error: null }
-    } catch (err) {
-      return { success: false, added: 0, servers: [], meta: null, error: err?.message ?? 'جستجوی کانفیگ‌ها ناموفق بود.' }
-    }
-  })
-
-  // Run the one-by-one working test (caller must have disconnected first).
-  ipcMain.handle('free:test-start', async () => {
-    try {
-      const result = await testAllFreeConfigs()
-      const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
-      return { success: true, ...result, servers, meta, error: null }
-    } catch (err) {
-      return { success: false, servers: [], meta: null, error: err?.message ?? 'آزمایش کانفیگ‌ها ناموفق بود.' }
-    }
-  })
-
-  // Stop an in-flight free-config test so a connection can be established.
-  ipcMain.handle('free:stop-testing', async () => {
-    return stopFreeTesting()
-  })
-
-  // Force a DEEP crawl: ignore throttle + cursor, re-scan the last 200 posts of
-  // both channels (even already-seen) and import any new configs. One-shot.
-  ipcMain.handle('free:crawl-deep', async () => {
-    try {
-      const result = await crawlFreeConfigs({ force: true, deep: true })
-      const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
-      return { success: true, added: result.added, skipped: result.skipped, servers, meta, error: null }
-    } catch (err) {
-      return { success: false, added: 0, servers: [], meta: null, error: err?.message ?? 'بررسی کامل کانال‌ها ناموفق بود.' }
-    }
-  })
-
-  // Re-measure ping for the free configs that already passed the working test.
-  ipcMain.handle('free:refresh-pings', async () => {
-    try {
-      const result = await refreshWorkingPings()
-      const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
-      return { success: true, ...result, servers, meta, error: null }
-    } catch (err) {
-      return { success: false, servers: [], meta: null, error: err?.message ?? 'بروزرسانی پینگ ناموفق بود.' }
-    }
-  })
-
-  // Connect to a free config — identical path to a subscription connect (spec #8).
-  ipcMain.handle('free:connect-specific-node', async (_event, input) => {
-    const { nodeId, nodeUri, directDomains, rescueOptions, enginePreference } = input ?? {}
-    return connectFreeConfig({ nodeId, nodeUri, directDomains, rescueOptions, enginePreference })
-  })
-
-  ipcMain.handle('free:remove-node', async (_event, nodeId) => {
-    try {
-      if (!nodeId) return { success: false, servers: [], meta: null, error: 'شناسه کانفیگ نامعتبر است.' }
-      await removeFreeServer(nodeId)
-      const [servers, meta] = await Promise.all([getFreePool(), getFreePoolMeta()])
-      return { success: true, servers, meta, error: null }
-    } catch (err) {
-      return { success: false, servers: [], meta: null, error: err?.message ?? 'حذف کانفیگ ناموفق بود.' }
-    }
-  })
-
-  // ── Geo-block test ──────────────────────────────────────────────────────────
 
   // ── Speed test ───────────────────────────────────────────────────────────
 
@@ -3107,23 +2582,6 @@ function registerIpcHandlers() {
     }
   })
 
-  ipcMain.handle('free:disconnect', async () => {
-    freeConfigState.userDisconnected = true
-    freeConfigState.phase = 'idle'
-    freeConfigState.nodeId = null
-    freeConfigState.nodeName = null
-    freeConfigState.latencyMs = null
-    freeConfigState.error = null
-    expectedEngineStop = true
-    try {
-      await connectionEngines.stopSelected({ userDataPath: app.getPath('userData') })
-      setVirtualLocationConnected(false)
-      return { success: true, error: null }
-    } catch (err) {
-      return { success: false, error: err?.message ?? 'قطع اتصال سرور رایگان ناموفق بود.' }
-    }
-  })
-
   // ── Split tunneling (per-app bypass) ────────────────────────────────────────
   ipcMain.handle('apps:list', async () => {
     const { getApps } = require('./split-tunnel-store.cjs')
@@ -3162,22 +2620,43 @@ function registerIpcHandlers() {
   // ── Kill switch ─────────────────────────────────────────────────────────────
   ipcMain.handle('killswitch:get', async () => {
     const ks = require('./kill-switch.cjs')
+    const privilege = await getWindowsPrivilegeStatus().catch(() => null)
     return {
       enabled: await ks.getKillSwitchEnabled(app.getPath('userData')).catch(() => false),
       active: await ks.refreshKillSwitchActive().catch(() => ks.isKillSwitchActive()),
+      // The firewall rule needs elevation. Report it so the switch can be shown
+      // as unavailable instead of silently failing at the moment it matters.
+      available: privilege?.supported === true && privilege?.isAdministrator === true,
     }
   })
 
   ipcMain.handle('killswitch:set', async (_event, enabled) => {
     const ks = require('./kill-switch.cjs')
-    return ks.setKillSwitchEnabled(app.getPath('userData'), Boolean(enabled)).catch((e) => ({ enabled: false, error: e?.message }))
+    const userDataPath = app.getPath('userData')
+
+    if (enabled) {
+      const privilege = await getWindowsPrivilegeStatus().catch(() => null)
+      if (!privilege?.supported || !privilege.isAdministrator) {
+        // Localized by the renderer — the main process has no language context.
+        return { enabled: false, reason: 'needs-admin', error: null }
+      }
+    }
+
+    return ks
+      .setKillSwitchEnabled(userDataPath, Boolean(enabled))
+      .catch((e) => ({ enabled: !enabled, error: e?.message ?? 'Kill Switch setting could not be saved.' }))
   })
 
   // User chose to restore internet after the kill switch fired.
   ipcMain.handle('killswitch:deactivate', async () => {
     const ks = require('./kill-switch.cjs')
-    const res = await ks.deactivateKillSwitch().catch((e) => ({ success: false, error: e?.message }))
-    return res
+    const res = await ks
+      .deactivateKillSwitch()
+      .catch((e) => ({ success: false, error: e?.message ?? 'Kill Switch could not be released.' }))
+    if (res.success && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('killswitch:deactivated', {})
+    }
+    return { ...res, active: ks.isKillSwitchActive() }
   })
 
   // ── Network repair ──────────────────────────────────────────────────────────
@@ -3189,8 +2668,11 @@ function registerIpcHandlers() {
     try {
       // Stop our own engine first so we don't fight it.
       expectedEngineStop = true
+      require('./kill-switch.cjs').setKillSwitchArmed(false)
       await connectionEngines.stopEveryEngine(app.getPath('userData')).catch(() => {})
-    } catch {}
+    } catch {} finally {
+      expectedEngineStop = false
+    }
     try {
       const { forceDisableLocalManualProxy } = require('./windows-proxy-state.cjs')
       await forceDisableLocalManualProxy()
@@ -4089,15 +3571,6 @@ app.whenReady().then(async () => {
     setupAutoUpdater()
   })
 
-  // Initialize pool metadata from disk, then start background refresh
-  getFreePoolMeta().then((meta) => {
-    freeConfigState.poolCount = meta.total
-    freeConfigState.poolDisplaying = meta.displaying
-    freeConfigState.poolLastRefreshedAt = meta.lastRefreshedAt
-  }).catch(() => {})
-  startFreeBackgroundRefresh()
-  startTelegramCrawler()
-
   // Auto CF IP scan in background (non-blocking)
   getCfAutoScanSettings(app.getPath('userData')).then(async (settings) => {
     if (!settings.enabled) return
@@ -4146,9 +3619,7 @@ app.on(
     expectedEngineStop = true
     void require('./kill-switch.cjs').deactivateKillSwitch().catch(() => {})
 
-    if (freeBackgroundTimer) { clearInterval(freeBackgroundTimer); freeBackgroundTimer = null }
     if (cfScanIntervalTimer) { clearInterval(cfScanIntervalTimer); cfScanIntervalTimer = null }
-    if (telegramCrawlTimer) { clearInterval(telegramCrawlTimer); telegramCrawlTimer = null }
 
     void Promise.allSettled([
       connectionEngines.disposeAll({
