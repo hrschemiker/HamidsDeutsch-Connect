@@ -8,6 +8,7 @@ const {
   nativeImage,
   dialog,
   net,
+  Notification,
 } = require('electron')
 
 const { autoUpdater } = require('electron-updater')
@@ -351,6 +352,85 @@ async function saveCloseToTraySetting(value) {
   await saveAppSettings()
 }
 
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+// Release the firewall block from outside the window. The whole point of the
+// kill switch is that the machine is offline when it fires, so the way back
+// online cannot depend on finding the app first.
+async function restoreInternetFromTray() {
+  const ks = require('./kill-switch.cjs')
+  const result = await ks
+    .deactivateKillSwitch()
+    .catch((error) => ({ success: false, error: error?.message ?? null }))
+
+  if (result.success) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('killswitch:deactivated', {})
+    }
+    notify('اینترنت بازگردانی شد', 'Kill Switch غیرفعال شد. اتصال شما دیگر از VPN عبور نمی‌کند.')
+  } else {
+    notify(
+      'بازگرداندن اینترنت ناموفق بود',
+      'برنامه را با دسترسی Administrator اجرا کن و دوباره تلاش کن.',
+    )
+    showMainWindow()
+  }
+
+  refreshTrayMenu()
+  return result
+}
+
+function notify(title, body) {
+  try {
+    if (!Notification.isSupported()) return
+    new Notification({ title, body }).show()
+  } catch {
+    // Notifications are a convenience; never let them break a recovery path.
+  }
+}
+
+function refreshTrayMenu() {
+  if (!appTray) return
+  const ks = require('./kill-switch.cjs')
+  const blocked = ks.isKillSwitchActive()
+
+  appTray.setToolTip(
+    blocked ? 'Manfaz VPN — اینترنت توسط Kill Switch مسدود است' : 'Manfaz VPN',
+  )
+
+  const template = [
+    { label: 'نمایش برنامه', click: showMainWindow },
+  ]
+
+  if (blocked) {
+    template.push(
+      { type: 'separator' },
+      {
+        label: 'بازگرداندن اینترنت (غیرفعال‌کردن Kill Switch)',
+        click: () => { void restoreInternetFromTray() },
+      },
+    )
+  }
+
+  template.push(
+    { type: 'separator' },
+    {
+      label: 'خروج',
+      click: () => {
+        isQuitting = true
+        app.quit()
+      },
+    },
+  )
+
+  appTray.setContextMenu(Menu.buildFromTemplate(template))
+}
+
 function setupTray() {
   if (appTray) return
   const iconPath = app.isPackaged
@@ -362,34 +442,13 @@ function setupTray() {
   } catch {
     appTray = new Tray(nativeImage.createEmpty())
   }
-  appTray.setToolTip('Manfaz VPN')
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'نمایش برنامه',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show()
-          mainWindow.focus()
-        }
-      },
-    },
-    { type: 'separator' },
-    {
-      label: 'خروج',
-      click: () => {
-        isQuitting = true
-        app.quit()
-      },
-    },
-  ])
-  appTray.setContextMenu(contextMenu)
+  refreshTrayMenu()
   appTray.on('click', () => {
     if (mainWindow) {
       if (mainWindow.isVisible()) {
         mainWindow.focus()
       } else {
-        mainWindow.show()
-        mainWindow.focus()
+        showMainWindow()
       }
     }
   })
@@ -495,11 +554,25 @@ connectionEngines.setProcessExitCallback(({ code, signal } = {}) => {
     .then(async (enabled) => {
       if (!enabled) return
       const res = await ks.activateKillSwitch({ force: true })
+      refreshTrayMenu()
+
+      if (res.success) {
+        // The machine is offline now, so make the way back out impossible to
+        // miss: raise the window, and leave a notification and a tray entry for
+        // when it is not on screen.
+        notify(
+          'اینترنت مسدود شد',
+          'اتصال VPN ناگهانی قطع شد. برای بازگرداندن اینترنت، روی آیکن Manfaz در نوار وظیفه راست‌کلیک کن.',
+        )
+        showMainWindow()
+      } else {
+        console.error('[KillSwitch] Activation failed:', res.error)
+      }
+
       if (!mainWindow || mainWindow.isDestroyed()) return
       if (res.success) {
         mainWindow.webContents.send('killswitch:activated', { firewall: true })
       } else {
-        console.error('[KillSwitch] Activation failed:', res.error)
         mainWindow.webContents.send('killswitch:failed', {
           error: res.error ?? 'Kill Switch could not block the network.',
         })
@@ -2066,14 +2139,18 @@ function registerIpcHandlers() {
         }
 
         const { getApps } = require('./split-tunnel-store.cjs')
-        const [directApps, upstreamProxy, utlsSettings] = await Promise.all([
-          getApps(app.getPath('userData')).catch(() => []),
-          getUpstreamProxy(app.getPath('userData')).catch(() => null),
-          getUTlsSettings(app.getPath('userData')).catch(() => null),
-        ])
+        const [directApps, upstreamProxy, utlsSettings, scannedCleanIp, cloudflareBacked] =
+          await Promise.all([
+            getApps(app.getPath('userData')).catch(() => []),
+            getUpstreamProxy(app.getPath('userData')).catch(() => null),
+            getUTlsSettings(app.getPath('userData')).catch(() => null),
+            resolveCfCleanIp(app.getPath('userData')),
+            isCloudflareBackedUri(nodeUri),
+          ])
 
         const result =
           await createAndCheckTunConfig({
+            cfCleanIp: cloudflareBacked ? scannedCleanIp : null,
             subscriptionUrl,
             nodeId,
             nodeUri,
@@ -2656,6 +2733,7 @@ function registerIpcHandlers() {
     if (res.success && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('killswitch:deactivated', {})
     }
+    refreshTrayMenu()
     return { ...res, active: ks.isKillSwitchActive() }
   })
 

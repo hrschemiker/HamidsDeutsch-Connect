@@ -313,6 +313,8 @@ function App() {
 
   const connectionWatchdogBusyRef = useRef(false)
   const automaticConnectionBusyRef = useRef(false)
+  // Consecutive failed health probes; reset by any successful check.
+  const healthFailuresRef = useRef(0)
 
 
   const [pendingConfirmation, setPendingConfirmation] = useState<{
@@ -344,6 +346,16 @@ function App() {
   // Subscription server connection progress (shown inline in servers list)
   const [subConnectingNodeId, setSubConnectingNodeId] = useState<string | null>(null)
   const [subConnectingStep, setSubConnectingStep] = useState<string | null>(null)
+  // Live progress for the whole connection attempt. `engineProcess.busy` only
+  // covers the start/stop calls, so it went quiet during the config check and
+  // the IP probe and the screen looked frozen for ten seconds at a time.
+  const [connectProgress, setConnectProgress] = useState<{
+    step: number
+    total: number
+    label: string | null
+    serverName: string | null
+    attempt: number
+  } | null>(null)
 
   // WARP connection state
   // Home-screen connect/stop tracking for BPB (separate process) and Zeus.
@@ -861,6 +873,31 @@ function App() {
     return null
   }
 
+  // Ordered so the UI can show "step N of M" without the caller counting.
+  const CONNECT_STEPS = [
+    'connect.step.checkConfig',
+    'connect.step.startProxy',
+    'connect.step.verifyIp',
+    'connect.step.systemProxy',
+  ] as const
+
+  function reportStep(
+    key: string,
+    node: SafeServerNode,
+    onStep?: (step: string) => void,
+  ) {
+    const label = t(key)
+    onStep?.(label)
+    const index = CONNECT_STEPS.indexOf(key as (typeof CONNECT_STEPS)[number])
+    setConnectProgress((current) => ({
+      step: index >= 0 ? index + 1 : (current?.step ?? 1),
+      total: CONNECT_STEPS.length,
+      label,
+      serverName: node.name,
+      attempt: current?.attempt ?? 1,
+    }))
+  }
+
   async function attemptServerConnection(
     node: SafeServerNode,
     onStep?: (step: string) => void,
@@ -881,7 +918,7 @@ function App() {
     setTunBaselineIp(null)
     setTunCurrentIp(null)
 
-    onStep?.(t('connect.step.checkConfig'))
+    reportStep('connect.step.checkConfig', node, onStep)
     let requestedEngine = connectionSettings.settings.engine
     const xrayProtocols = new Set(['vless', 'vmess', 'trojan', 'ss', 'shadowsocks'])
     const needsSingBox = requestedEngine === 'xray' && !xrayProtocols.has(node.protocol.toLowerCase())
@@ -929,7 +966,7 @@ function App() {
       }
     }
 
-    onStep?.(t('connect.step.startProxy'))
+    reportStep('connect.step.startProxy', node, onStep)
     const startResult = await engineProcess.start()
 
     if (!startResult.success) {
@@ -940,14 +977,11 @@ function App() {
       }
     }
 
-    onStep?.(t('connect.step.verifyIp'))
+    reportStep('connect.step.verifyIp', node, onStep)
     let localVerification =
       await ipVerification.verify()
 
-    if (
-      !localVerification.success ||
-      !localVerification.changed
-    ) {
+    if (!localVerification.success) {
       // Auto DPI bypass retry: only when we confirmed IPs are the same (not when check services are blocked)
       const ipCheckFailed = !localVerification.directIp
       if (
@@ -980,10 +1014,7 @@ function App() {
         }
       }
 
-      if (
-        !localVerification.success ||
-        !localVerification.changed
-      ) {
+      if (!localVerification.success) {
         await engineProcess.stop()
         ipVerification.reset()
 
@@ -1030,7 +1061,7 @@ function App() {
       wantsTun &&
       canUseTun
     ) {
-      onStep?.(t('connect.step.tun'))
+      reportStep('connect.step.tun', node, onStep)
       const tunCheck =
         await window.hamidsDeutsch
           .servers
@@ -1107,7 +1138,7 @@ function App() {
         }
       }
 
-      onStep?.(t('connect.step.tunFallback'))
+      reportStep('connect.step.tunFallback', node, onStep)
 
       const restartLocal =
         await engineProcess.start()
@@ -1125,10 +1156,7 @@ function App() {
       const fallbackVerification =
         await ipVerification.verify()
 
-      if (
-        !fallbackVerification.success ||
-        !fallbackVerification.changed
-      ) {
+      if (!fallbackVerification.success) {
         await engineProcess.stop()
         ipVerification.reset()
 
@@ -1142,6 +1170,7 @@ function App() {
       }
     }
 
+    reportStep('connect.step.systemProxy', node, onStep)
     const systemProxyResult =
       await engineProcess.enableSystemProxy()
 
@@ -1163,10 +1192,7 @@ function App() {
     const finalVerification =
       await ipVerification.verify()
 
-    if (
-      !finalVerification.success ||
-      !finalVerification.changed
-    ) {
+    if (!finalVerification.success) {
       await engineProcess.disableSystemProxy(false)
       ipVerification.reset()
 
@@ -1279,6 +1305,13 @@ function App() {
     setConnectionActionError(null)
     setSubConnectingNodeId(node.id)
     setSubConnectingStep(t('connect.step.stopPrevious'))
+    setConnectProgress({
+      step: 0,
+      total: 4,
+      label: t('connect.step.stopPrevious'),
+      serverName: node.name,
+      attempt: 1,
+    })
     setLastConnectionType('subscription')
 
     if (engineProcess.status.running) {
@@ -1299,6 +1332,7 @@ function App() {
 
     setSubConnectingNodeId(null)
     setSubConnectingStep(null)
+    setConnectProgress(null)
 
     if (!result.success) {
       setConnectionActionError(
@@ -1321,6 +1355,13 @@ function App() {
     setAutomaticConnectionRunning(true)
     setConnectionActionError(null)
     setConnectionWatchdogMessage(null)
+    setConnectProgress({
+      step: 0,
+      total: 4,
+      label: t('connect.step.findingServer'),
+      serverName: null,
+      attempt: 1,
+    })
     ipVerification.reset()
 
     try {
@@ -1428,12 +1469,24 @@ function App() {
       let lastError =
         t('connect.error.allServersFailed')
 
+      let attemptIndex = 0
       for (const node of orderedCandidates) {
+        attemptIndex += 1
+        const currentAttempt = attemptIndex
         recordAttempt(node)
 
         const result =
           await attemptServerConnection(
             node,
+            (step) => {
+              setConnectProgress((current) => ({
+                step: current?.step ?? 1,
+                total: current?.total ?? 4,
+                label: step,
+                serverName: node.name,
+                attempt: currentAttempt,
+              }))
+            },
           )
 
         recordResult(
@@ -1464,6 +1517,7 @@ function App() {
       setAutomaticConnectionRunning(
         false,
       )
+      setConnectProgress(null)
     }
   }
 
@@ -1551,7 +1605,9 @@ function App() {
       return
     }
 
-    if (!verificationResult.changed) {
+    // Only a genuinely identical address is worth reporting. When the direct
+    // probe never answered there is nothing to compare against.
+    if (!verificationResult.changed && verificationResult.directIp) {
       setConnectionActionError(
         t('connect.error.sameIp'),
       )
@@ -1594,6 +1650,11 @@ function App() {
 
     let disposed = false
 
+    // A probe that fails once means almost nothing: the address-echo services
+    // are frequently unreachable for a few seconds at a time. Only a run of
+    // consecutive failures justifies tearing a working tunnel down.
+    const FAILURES_BEFORE_RECOVERY = 3
+
     async function checkHealth() {
       if (
         disposed ||
@@ -1607,6 +1668,25 @@ function App() {
 
       connectionWatchdogBusyRef.current = true
 
+      // `hard` marks the failures we can be certain about (the engine is gone,
+      // the system proxy was switched off underneath us). Those recover at once.
+      async function fail(hard: boolean) {
+        healthFailuresRef.current = hard
+          ? FAILURES_BEFORE_RECOVERY
+          : healthFailuresRef.current + 1
+
+        if (healthFailuresRef.current < FAILURES_BEFORE_RECOVERY) {
+          connectionWatchdogBusyRef.current = false
+          return
+        }
+
+        healthFailuresRef.current = 0
+        connectionWatchdogBusyRef.current = false
+        await recoverConnection(
+          selectedServer.selectedServer?.id ?? null,
+        )
+      }
+
       try {
         const currentStatus =
           await engineProcess.refreshStatus()
@@ -1615,12 +1695,7 @@ function App() {
           !currentStatus?.running ||
           !currentStatus.ready
         ) {
-          connectionWatchdogBusyRef.current = false
-
-          await recoverConnection(
-            selectedServer.selectedServer?.id ?? null,
-          )
-
+          await fail(true)
           return
         }
 
@@ -1632,18 +1707,15 @@ function App() {
               .network
               .getCurrentIp()
 
-          if (
-            !currentIp.success ||
-            !currentIp.ip ||
-            !tunBaselineIp ||
-            currentIp.ip === tunBaselineIp
-          ) {
-            connectionWatchdogBusyRef.current = false
+          // No answer at all is a soft failure: the probe itself may be blocked.
+          // An answer that matches the pre-tunnel address is a real leak.
+          if (!currentIp.success || !currentIp.ip) {
+            await fail(false)
+            return
+          }
 
-            await recoverConnection(
-              selectedServer.selectedServer?.id ?? null,
-            )
-
+          if (tunBaselineIp && currentIp.ip === tunBaselineIp) {
+            await fail(true)
             return
           }
 
@@ -1655,32 +1727,22 @@ function App() {
           if (
             !currentStatus.systemProxyEnabled
           ) {
-            connectionWatchdogBusyRef.current = false
-
-            await recoverConnection(
-              selectedServer.selectedServer?.id ?? null,
-            )
-
+            await fail(true)
             return
           }
 
           const health =
             await ipVerification.verify()
 
-          if (
-            !health.success ||
-            !health.changed
-          ) {
-            connectionWatchdogBusyRef.current = false
-
-            await recoverConnection(
-              selectedServer.selectedServer?.id ?? null,
-            )
-
+          // `success` is already true when the tunnel carried traffic but the
+          // direct probe was unreachable, so this only trips on a real problem.
+          if (!health.success) {
+            await fail(false)
             return
           }
         }
 
+        healthFailuresRef.current = 0
         setConnectionWatchdogMessage(null)
       } finally {
         connectionWatchdogBusyRef.current = false
@@ -1930,6 +1992,7 @@ function App() {
               onOpenDirectSites={() => setActivePage('direct-sites')}
               onOpenRescue={() => setActivePage('settings')}
               onOpenSettings={() => setActivePage('settings')}
+              connectProgress={connectProgress}
               speedTest={speedTestResult}
               showReconnectBar={showReconnectBar}
               onQuickReconnect={() => void quickReconnect()}
@@ -2296,10 +2359,12 @@ function App() {
               <button className="primary-button" type="button" disabled={killSwitchReleasing} onClick={() => void releaseKillSwitch(true)}>
                 {killSwitchReleasing ? t('btn.processing') : t('killswitch.reconnect')}
               </button>
-              <button className="text-button" type="button" disabled={killSwitchReleasing} onClick={() => void releaseKillSwitch(false)}>
-                {t('killswitch.restore')}
+              <button className="killswitch-restore-btn" type="button" disabled={killSwitchReleasing} onClick={() => void releaseKillSwitch(false)}>
+                <strong>{t('killswitch.restore')}</strong>
+                <small>{t('killswitch.restore.hint')}</small>
               </button>
             </div>
+            <p className="killswitch-tray-hint">{t('killswitch.trayHint')}</p>
           </div>
         </div>
       )}
@@ -2407,6 +2472,13 @@ type HomePageProps = {
   onOpenSettings: () => void
   topSubServers: Array<{ id: string; name: string; protocol: string; latencyMs: number | null }>
   onConnectSubServer: (id: string) => void
+  connectProgress: {
+    step: number
+    total: number
+    label: string | null
+    serverName: string | null
+    attempt: number
+  } | null
   speedTest: { mbps: number | null; running: boolean; error: string | null } | null
   showReconnectBar: boolean
   onQuickReconnect: () => void
@@ -2455,6 +2527,7 @@ function HomePage({
   onOpenServers,
   onOpenDirectSites: _onOpenDirectSites,
   onOpenRescue: _onOpenRescue,
+  connectProgress,
   speedTest,
   showReconnectBar,
   onQuickReconnect,
@@ -2544,12 +2617,21 @@ function HomePage({
   const activeMethod: 'subscription' | 'dns' | null =
     processStatus.running ? 'subscription' : dnsActive ? 'dns' : null
 
-  const isConnecting = processBusy && !heroConnected
+  const isConnecting = (processBusy || connectProgress !== null) && !heroConnected
   const orbitClass = [
     'connection-orbit',
     heroConnected ? 'connection-orbit-online' :
       isConnecting ? 'connection-orbit-connecting' : '',
   ].filter(Boolean).join(' ')
+
+  // A ticking number is the cheapest proof that the app is still working on it.
+  const [connectElapsed, setConnectElapsed] = useState(0)
+  useEffect(() => {
+    if (!connectProgress) { setConnectElapsed(0); return }
+    setConnectElapsed(0)
+    const id = window.setInterval(() => setConnectElapsed((value) => value + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [connectProgress !== null]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [adminBannerDismissed, setAdminBannerDismissed] = useState(false)
 
@@ -2700,7 +2782,49 @@ function HomePage({
 
           </div>
 
-          {showStages && (
+          {connectProgress && !heroConnected && (
+            <div
+              className="connect-progress"
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <div className="connect-progress-head">
+                <span className="connect-progress-spinner" aria-hidden="true" />
+                <span className="connect-progress-label">
+                  {connectProgress.label ?? t('status.connecting')}
+                </span>
+                <span className="connect-progress-count" dir="ltr">
+                  {Math.max(1, connectProgress.step)}/{connectProgress.total}
+                </span>
+              </div>
+
+              <div className="connect-progress-track">
+                <span
+                  className="connect-progress-fill"
+                  style={{
+                    width: `${Math.round(
+                      (Math.max(0, connectProgress.step) / connectProgress.total) * 100,
+                    )}%`,
+                  }}
+                />
+              </div>
+
+              <div className="connect-progress-meta">
+                {connectProgress.serverName && (
+                  <span className="connect-progress-server">{connectProgress.serverName}</span>
+                )}
+                {connectProgress.attempt > 1 && (
+                  <span className="connect-progress-attempt">
+                    {t('connect.attempt')} {connectProgress.attempt}
+                  </span>
+                )}
+                <span className="connect-progress-elapsed" dir="ltr">{connectElapsed}s</span>
+              </div>
+            </div>
+          )}
+
+          {showStages && !connectProgress && (
             <div className="connection-stages">
               {subStages.map((stage, i) => (
                 <div

@@ -5717,3 +5717,169 @@ textarea:hover {
 .toast-error .toast-icon {
   color: var(--red);
 }
+
+
+/* ── Kill Switch: the way back online must read as a real choice ─────────── */
+
+.killswitch-restore-btn {
+  display: grid;
+  width: 100%;
+  gap: 3px;
+  padding: 11px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--surface-soft);
+  color: var(--text);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.killswitch-restore-btn:hover:not(:disabled) {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+}
+
+.killswitch-restore-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.killswitch-restore-btn strong {
+  font-size: 13px;
+}
+
+.killswitch-restore-btn small {
+  color: var(--text-soft);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.killswitch-tray-hint {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.7;
+}
+
+
+/* ── Connection progress: proof that an attempt is actually running ──────── */
+
+.connect-progress {
+  display: grid;
+  gap: 9px;
+  width: 100%;
+  max-width: 420px;
+  margin: 14px auto 0;
+  padding: 13px 15px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.connect-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.connect-progress-spinner {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 900ms linear infinite;
+}
+
+.connect-progress-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connect-progress-count {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.connect-progress-track {
+  position: relative;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  overflow: hidden;
+}
+
+.connect-progress-fill {
+  display: block;
+  height: 100%;
+  min-width: 8%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--gold), var(--teal));
+  transition: width 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* A moving sheen so the bar reads as "working", not "stalled at 25%". */
+.connect-progress-track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.22),
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: connectSheen 1.6s ease-in-out infinite;
+}
+
+@keyframes connectSheen {
+  to { transform: translateX(100%); }
+}
+
+.connect-progress-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.connect-progress-server {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connect-progress-attempt {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.connect-progress-elapsed {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connect-progress-track::after,
+  .connect-progress-spinner {
+    animation: none;
+  }
+}

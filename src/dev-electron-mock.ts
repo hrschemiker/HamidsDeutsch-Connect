@@ -2,6 +2,8 @@ type ApiValue = Record<string, unknown> | unknown[]
 
 const noop = () => {}
 
+const NOW = new Date().toISOString()
+
 const idleProcess = {
   engineType: 'sing-box',
   running: false,
@@ -41,7 +43,32 @@ function resultFor(path: string): ApiValue {
       service: null,
       error: null,
     },
-    'subscriptions.list': [],
+    // A sample subscription and node so the connection flow, the server list
+    // and the progress panel can be previewed without a real backend.
+    'subscriptions.list': [
+      { id: 'demo', name: 'Demo subscription', host: 'example.com', createdAt: NOW, updatedAt: NOW },
+    ],
+    'subscriptions.loadNodes': {
+      success: true,
+      checkedAt: NOW,
+      nodes: [
+        { id: 'demo::a', subscriptionId: 'demo', subscriptionName: 'Demo subscription', nodeId: 'a',
+          name: 'Frankfurt REALITY', protocol: 'vless', security: 'reality', host: 'de.example.com',
+          port: 443, transport: 'tcp', tls: true, valid: true },
+        { id: 'demo::b', subscriptionId: 'demo', subscriptionName: 'Demo subscription', nodeId: 'b',
+          name: 'Amsterdam WS', protocol: 'vless', security: 'tls', host: 'nl.example.com',
+          port: 443, transport: 'ws', tls: true, valid: true },
+      ],
+      error: null,
+    },
+    'servers.testLatency': {
+      success: true,
+      results: [
+        { id: 'demo::a', reachable: true, latencyMs: 84, error: null },
+        { id: 'demo::b', reachable: true, latencyMs: 132, error: null },
+      ],
+      error: null,
+    },
     'servers.getHiddenNodes': [],
     'killswitch.get': { enabled: false, active: false, available: false },
     'updater.getSettings': {

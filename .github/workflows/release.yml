@@ -53,6 +53,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # A copy under a fixed name so the README can carry a download link that
+      # never has to be edited again:
+      # releases/latest/download/Manfaz-VPN-Setup-x64.exe
+      - name: Add a versionless installer copy
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release/Manfaz-VPN-Setup-*-x64.exe |
+            Where-Object { $_.Name -notmatch 'uninstaller' } |
+            Select-Object -First 1
+          Copy-Item $installer.FullName 'release/Manfaz-VPN-Setup-x64.exe'
+
       - name: Resolve release tag
         id: tag
         shell: pwsh
@@ -77,6 +88,7 @@ jobs:
           body_path: release-notes/${{ steps.tag.outputs.tag }}.md
           draft: false
           files: |
-            release/Manfaz-VPN-Setup-*.exe
-            release/Manfaz-VPN-Setup-*.exe.blockmap
+            release/Manfaz-VPN-Setup-x64.exe
+            release/Manfaz-VPN-Setup-*-x64.exe
+            release/Manfaz-VPN-Setup-*-x64.exe.blockmap
             release/latest.yml

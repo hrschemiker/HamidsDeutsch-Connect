@@ -73,6 +73,7 @@ type IpVerificationResult = {
   service: string
   error: string | null
   directBlocked?: boolean
+  unverifiedChange?: boolean
 }
 
 type CurrentIpResult = {

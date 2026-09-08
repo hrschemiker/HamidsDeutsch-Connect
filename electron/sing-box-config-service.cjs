@@ -98,7 +98,7 @@ async function createAndCheckConfig({
     )
 
   const config = buildConfig(
-    applyCfCleanIp(outbound, cfCleanIp),
+    applyCfCleanIp(outbound, cfCleanIp, true),
     normalizedDirectDomains,
     localPort,
     setSystemProxy,
@@ -165,6 +165,7 @@ async function createAndCheckTunConfig({
   vpnDns = null,
   upstreamProxy = null,
   clashApiPort = 9090,
+  cfCleanIp = null,
 }) {
   validateRequest({
     subscriptionUrl,
@@ -202,12 +203,16 @@ async function createAndCheckTunConfig({
   }
 
   const outbound =
-    applyRescueOptions(
-      applyUtlsSettings(
-        buildOutboundFromUri(resolvedUri),
-        utlsSettings,
+    applyCfCleanIp(
+      applyRescueOptions(
+        applyUtlsSettings(
+          buildOutboundFromUri(resolvedUri),
+          utlsSettings,
+        ),
+        rescueOptions,
       ),
-      rescueOptions,
+      cfCleanIp,
+      true,
     )
 
   const normalizedDirectDomains =
@@ -1601,14 +1606,45 @@ async function createAndCheckWarpConfig({
   }
 }
 
-function applyCfCleanIp(outbound, cfCleanIp) {
+/**
+ * Point the outbound at a scanned clean Cloudflare address while keeping every
+ * name the edge needs to route the request.
+ *
+ * The caller decides whether the host is really behind Cloudflare (it resolves
+ * the name and checks the answers against Cloudflare's ranges). The old
+ * suffix-only re-check here rejected every custom domain, which is how almost
+ * every real configuration is written, so scanned addresses were collected and
+ * then silently discarded. `trusted` lets the caller's verdict stand.
+ */
+function applyCfCleanIp(outbound, cfCleanIp, trusted = false) {
   if (!cfCleanIp || !outbound?.server) return outbound
-  if (!isCloudflareHost(outbound.server)) return outbound
+  if (!trusted && !isCloudflareHost(outbound.server)) return outbound
+
+  const originalHost = outbound.server
+  // Replacing the address with a literal IP strips the name the edge routes on,
+  // so pin it explicitly wherever the protocol carries one.
   const tls = outbound.tls ? { ...outbound.tls } : null
   if (tls && !tls.server_name) {
-    tls.server_name = outbound.server
+    tls.server_name = originalHost
   }
-  return { ...outbound, server: cfCleanIp, ...(tls ? { tls } : {}) }
+
+  let transport = outbound.transport
+  if (transport && (transport.type === 'ws' || transport.type === 'httpupgrade')) {
+    const headers = { ...(transport.headers ?? {}) }
+    const hasHost = Object.keys(headers).some((key) => key.toLowerCase() === 'host')
+    if (!hasHost) headers.Host = originalHost
+    transport = { ...transport, headers }
+  } else if (transport && transport.type === 'http') {
+    const hosts = Array.isArray(transport.host) ? transport.host : []
+    if (hosts.length === 0) transport = { ...transport, host: [originalHost] }
+  }
+
+  return {
+    ...outbound,
+    server: cfCleanIp,
+    ...(tls ? { tls } : {}),
+    ...(transport ? { transport } : {}),
+  }
 }
 
 function applyRescueOptions(

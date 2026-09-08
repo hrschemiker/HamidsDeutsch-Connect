@@ -98,12 +98,19 @@ async function verifyIpChange({
   } catch {}
   directDurationMs = Date.now() - directStartedAt
 
-  const changed = directIp !== null && directIp !== proxyIp
+  const directBlocked = directIp === null
+  const changed = !directBlocked && directIp !== proxyIp
 
-  const success = changed
-  const error = directIp === null
-    ? 'اتصال موتور برقرار شد، اما تغییر IP قابل تأیید نیست؛ اتصال موفق اعلام نشد.'
-    : changed ? null : 'IP خروجی پروکسی با IP مستقیم یکسان است؛ ترافیک از VPN عبور نکرد.'
+  // Reaching a public address-echo service *through* the tunnel is proof that
+  // traffic leaves the machine and comes back. Comparing it against the direct
+  // address is the stronger test, but the direct probe runs over the censored
+  // path and is regularly unreachable — treating that as a failed tunnel used
+  // to tear down connections that were working perfectly.
+  const success = changed || (directBlocked && Boolean(proxyIp))
+
+  const error = changed || !directBlocked
+    ? (changed ? null : 'IP خروجی پروکسی با IP مستقیم یکسان است؛ ترافیک از VPN عبور نکرد.')
+    : null
 
   return {
     success,
@@ -115,7 +122,10 @@ async function verifyIpChange({
     proxyDurationMs,
     service: `${directService} / ${proxyResult.service}`,
     error,
-    directBlocked: directIp === null,
+    directBlocked,
+    // True when the tunnel demonstrably carries traffic but the address change
+    // could not be proven because the direct probe never answered.
+    unverifiedChange: directBlocked && Boolean(proxyIp),
   }
 }
 

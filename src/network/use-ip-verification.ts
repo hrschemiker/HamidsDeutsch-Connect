@@ -14,6 +14,7 @@ export type IpVerificationResult = {
   service: string
   error: string | null
   directBlocked?: boolean
+  unverifiedChange?: boolean
 }
 
 const INITIAL_RESULT: IpVerificationResult = {
@@ -69,6 +70,8 @@ export function useIpVerification() {
             nextResult.directIp,
           proxyIp:
             nextResult.proxyIp,
+          unverifiedChange:
+            nextResult.unverifiedChange === true,
           error:
             nextResult.error,
         }
@@ -92,6 +95,7 @@ export function useIpVerification() {
           changed: false,
           directIp: null,
           proxyIp: null,
+          unverifiedChange: false,
           error: message,
         }
       } finally {
@@ -108,9 +112,10 @@ export function useIpVerification() {
   return {
     result,
     checking,
-    connected:
-      result.success &&
-      result.changed,
+    // `success` already means the tunnel carried real traffic. Requiring
+    // `changed` on top of it left the app stuck on "disconnected" whenever the
+    // direct probe was censored, even with a perfectly healthy tunnel.
+    connected: result.success,
     verify,
     reset,
   }

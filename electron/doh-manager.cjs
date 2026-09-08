@@ -215,7 +215,18 @@ async function initializeDnsManager(userDataPath) {
           return expected.every((address, index) => current[index] === address)
         }))
       ).every(Boolean)
-      standaloneActive = appliedEverywhere
+
+      if (!appliedEverywhere) {
+        // The saved resolver is no longer on every adapter, so the app is about
+        // to report DNS as off. Put the captured baseline back first: leaving
+        // some adapters pointed at a resolver nothing will ever clean up is how
+        // a machine ends up with no working DNS and no visible cause.
+        await restoreDnsMap(originalDnsMap).catch(() => {})
+        originalDnsMap = {}
+        activeConfig = null
+        standaloneActive = false
+        await fs.rm(statePath, { force: true }).catch(() => {})
+      }
     }
   } catch {
     originalDnsMap = {}
