@@ -14,8 +14,8 @@
 ### [⬇ Download the installer for Windows](https://github.com/hrschemiker/ManfazVpn-Windows/releases/latest/download/Manfaz-VPN-Setup-x64.exe)
 
 That link always serves the newest build. Every version is listed on the
-[releases page](https://github.com/hrschemiker/ManfazVpn-Windows/releases/latest),
-where the installer is also published under a name marked «فایل-نصبی».
+[releases page](https://github.com/hrschemiker/ManfazVpn-Windows/releases/latest), where each
+release names the file to download at the top of its notes.
 
 </div>
 

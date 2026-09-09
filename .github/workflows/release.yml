@@ -60,16 +60,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Two extra copies of the same installer, each with a job to do.
-      #
-      # The versionless one backs the download link in the README, which then
+      # One extra copy under a fixed name, so the download link in the README
       # never has to be edited: releases/latest/download/Manfaz-VPN-Setup-x64.exe
       #
-      # The labelled one is what a person scanning the release page should
-      # click. The name electron-builder produces is also the name recorded in
-      # latest.yml, so that file has to stay exactly as it is for in-app
-      # updates to keep working, which is why this is a copy and not a rename.
-      - name: Add versionless and labelled installer copies
+      # Only two installers are published on purpose. GitHub rewrites every
+      # non-ASCII character in a release asset name to a dot, so a Persian
+      # label cannot survive as a filename, and a third identical copy would
+      # add confusion rather than remove it. The release notes name the file to
+      # download instead.
+      - name: Add a versionless installer copy
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -77,10 +76,6 @@ jobs:
             Where-Object { $_.Name -notmatch 'uninstaller' } |
             Select-Object -First 1
           Copy-Item $installer.FullName 'release/Manfaz-VPN-Setup-x64.exe'
-
-          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $labelled = "release/Manfaz-VPN-Setup-$version-x64-" + [char]0x0641 + [char]0x0627 + [char]0x06CC + [char]0x0644 + "-" + [char]0x0646 + [char]0x0635 + [char]0x0628 + [char]0x06CC + ".exe"
-          Copy-Item $installer.FullName $labelled
           Get-ChildItem release/*.exe | ForEach-Object { Write-Host $_.Name }
 
       - name: Resolve release tag
@@ -115,7 +110,6 @@ jobs:
           body_path: release-notes/${{ steps.tag.outputs.tag }}.md
           draft: false
           files: |
-            release/Manfaz-VPN-Setup-*-x64-*.exe
             release/Manfaz-VPN-Setup-x64.exe
             release/Manfaz-VPN-Setup-*-x64.exe
             release/Manfaz-VPN-Setup-*-x64.exe.blockmap
