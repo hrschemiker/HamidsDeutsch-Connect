@@ -114,3 +114,33 @@ jobs:
             release/Manfaz-VPN-Setup-*-x64.exe
             release/Manfaz-VPN-Setup-*-x64.exe.blockmap
             release/latest.yml
+
+      # Re-running a release leaves behind any asset an earlier run uploaded
+      # under a name this run no longer produces. Drop anything that is not
+      # part of the expected set so the page only ever shows the current build.
+      - name: Remove stale release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $keep = @(
+            'latest.yml',
+            'Manfaz-VPN-Setup-x64.exe',
+            "Manfaz-VPN-Setup-$($env:TAG -replace '^v','')-x64.exe",
+            "Manfaz-VPN-Setup-$($env:TAG -replace '^v','')-x64.exe.blockmap"
+          )
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept        = 'application/vnd.github+json'
+            'User-Agent'  = 'manfaz-release'
+          }
+          $base = "https://api.github.com/repos/${{ github.repository }}"
+          $release = Invoke-RestMethod -Headers $headers -Uri "$base/releases/tags/$env:TAG"
+          foreach ($asset in $release.assets) {
+            if ($keep -notcontains $asset.name) {
+              Write-Host "removing stale asset: $($asset.name)"
+              Invoke-RestMethod -Headers $headers -Method Delete -Uri "$base/releases/assets/$($asset.id)"
+            }
+          }
