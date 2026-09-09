@@ -1,16 +1,23 @@
 name: Release
 
 # Builds the Windows installer on a real Windows runner and publishes it as a
-# GitHub release. Triggered by pushing a v* tag, or manually from the Actions
-# tab against any branch.
+# GitHub release.
+#
+# Three ways to start it:
+#   * push a v* tag
+#   * push a release/v* branch, which publishes that version and is useful when
+#     tag pushes are not available
+#   * run it by hand from the Actions tab with a tag name
 on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'release/v*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to publish (e.g. v2.24.0)'
+        description: 'Tag to publish (e.g. v2.25.0)'
         required: true
 
 permissions:
@@ -68,10 +75,17 @@ jobs:
         id: tag
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $tag = if ($env:GITHUB_REF -like 'refs/tags/*') {
             $env:GITHUB_REF -replace '^refs/tags/', ''
+          } elseif ($env:GITHUB_REF -like 'refs/heads/release/*') {
+            $env:GITHUB_REF -replace '^refs/heads/release/', ''
           } else {
             '${{ github.event.inputs.tag }}'
+          }
+          if (-not $tag) { throw 'Could not work out which tag to publish.' }
+          if (-not (Test-Path "release-notes/$tag.md")) {
+            throw "release-notes/$tag.md does not exist."
           }
           "tag=$tag" >> $env:GITHUB_OUTPUT
 
@@ -84,6 +98,7 @@ jobs:
           # the built-in token so the workflow still works.
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           tag_name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: Manfaz VPN ${{ steps.tag.outputs.tag }}
           body_path: release-notes/${{ steps.tag.outputs.tag }}.md
           draft: false
