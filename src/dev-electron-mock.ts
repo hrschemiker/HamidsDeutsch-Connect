@@ -4,6 +4,9 @@ const noop = () => {}
 
 const NOW = new Date().toISOString()
 
+const EMPTY_STATE =
+  typeof window !== 'undefined' && window.location.search.includes('empty')
+
 const idleProcess = {
   engineType: 'sing-box',
   running: false,
@@ -45,7 +48,8 @@ function resultFor(path: string): ApiValue {
     },
     // A sample subscription and node so the connection flow, the server list
     // and the progress panel can be previewed without a real backend.
-    'subscriptions.list': [
+    // Append ?empty to the dev URL to preview the first-run state instead.
+    'subscriptions.list': EMPTY_STATE ? [] : [
       { id: 'demo', name: 'Demo subscription', host: 'example.com', createdAt: NOW, updatedAt: NOW },
     ],
     'subscriptions.loadNodes': {

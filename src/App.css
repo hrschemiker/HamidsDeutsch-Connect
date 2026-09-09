@@ -679,7 +679,9 @@ button {
 
 .quick-statistics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* auto-fit rather than a fixed three, so a four-card row fills the width
+     instead of leaving one card stranded on a line of its own. */
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 12px;
 }
 
@@ -5881,5 +5883,366 @@ textarea:hover {
   .connect-progress-track::after,
   .connect-progress-spinner {
     animation: none;
+  }
+}
+
+/* ── Subscription invite: the first thing a new user should see ──────────── */
+
+.subscription-invite {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, var(--surface-soft) 0%, var(--surface) 100%);
+  overflow: hidden;
+}
+
+/* A soft brand wash anchored to the icon, so the card reads as an invitation
+   rather than another warning banner. */
+.subscription-invite-glow {
+  position: absolute;
+  inset-inline-start: -60px;
+  top: -70px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(242, 192, 85, 0.16), transparent 68%);
+  pointer-events: none;
+}
+
+.subscription-invite-icon {
+  position: relative;
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border: 1px solid rgba(242, 192, 85, 0.4);
+  border-radius: 14px;
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+
+.subscription-invite-copy {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.subscription-invite-copy h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.subscription-invite-copy p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+
+.subscription-invite-action {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--gold);
+  color: #1b1403;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+.subscription-invite-action:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 10px 26px rgba(242, 192, 85, 0.24);
+}
+
+.subscription-invite-action:active {
+  transform: translateY(0);
+}
+
+/* The arrow points the way the language reads. */
+[dir="rtl"] .subscription-invite-action svg {
+  transform: scaleX(-1);
+}
+
+@media (max-width: 760px) {
+  .subscription-invite {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 14px;
+  }
+
+  .subscription-invite-action {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subscription-invite-action {
+    transition: none;
+  }
+}
+
+/* ── Guided setup card ───────────────────────────────────────────────────── */
+
+.guided-card {
+  position: relative;
+  border-color: var(--border-strong);
+  background:
+    linear-gradient(135deg, rgba(45, 212, 191, 0.05), transparent 46%),
+    var(--surface);
+}
+
+.guided-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.guided-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgba(45, 212, 191, 0.36);
+  border-radius: 13px;
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.guided-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.guided-title h3 {
+  margin: 2px 0 0;
+  font-size: 15px;
+}
+
+.guided-badge {
+  flex: 0 0 auto;
+  padding: 4px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.guided-badge-on {
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.guided-desc {
+  margin: 14px 0 0;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.85;
+}
+
+.guided-list {
+  display: grid;
+  gap: 7px;
+  margin: 13px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guided-list li {
+  position: relative;
+  padding-inline-start: 20px;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.guided-list li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 4px;
+  top: 0.62em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--teal);
+}
+
+.guided-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 17px;
+}
+
+.guided-apply {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--teal);
+  color: #04211d;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 160ms ease, transform 160ms ease;
+}
+
+.guided-apply:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+.guided-apply:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.guided-apply .connect-progress-spinner {
+  width: 14px;
+  height: 14px;
+  border-color: rgba(4, 33, 29, 0.32);
+  border-top-color: #04211d;
+}
+
+.guided-warn {
+  color: var(--amber);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.guided-steps {
+  display: grid;
+  gap: 2px;
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  list-style: none;
+}
+
+.guided-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.guided-step + .guided-step {
+  border-top: 1px solid var(--border);
+}
+
+.guided-step-mark {
+  display: grid;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  margin-top: 1px;
+}
+
+.guided-step-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.guided-step-detail {
+  color: var(--amber);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.guided-step-running { color: var(--text); }
+.guided-step-done    { color: var(--green); }
+.guided-step-failed  { color: var(--red); }
+
+/* ── Activity: sessions and the event log share one page ─────────────────── */
+
+.activity-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.activity-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.activity-switch-btn:hover {
+  color: var(--text);
+}
+
+.activity-switch-btn.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+[data-theme="light"] .activity-switch-btn.is-active {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.09);
+}
+
+.activity-switch-count {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-switch-btn.is-active .activity-switch-count {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+
+@media (max-width: 560px) {
+  .activity-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .activity-switch-btn {
+    justify-content: center;
   }
 }

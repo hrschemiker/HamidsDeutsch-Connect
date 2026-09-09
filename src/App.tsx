@@ -102,6 +102,13 @@ function normalizeUpdateState(value: unknown): AppUpdateState {
   }
 }
 
+// Formatting helpers below are plain functions, so they read the language from
+// the document instead of context. App keeps <html lang> in sync.
+function activeLocale(): string {
+  if (typeof document === 'undefined') return 'en-US'
+  return document.documentElement.lang === 'fa' ? 'fa-IR' : 'en-US'
+}
+
 // ── Theme ────────────────────────────────────────────────────────────────────
 
 type Theme = 'dark' | 'light'
@@ -203,8 +210,7 @@ type PageId =
   | 'subscriptions'
   | 'direct-sites'
   | 'rescue'
-  | 'statistics'
-  | 'logs'
+  | 'activity'
   | 'settings'
   | 'tools'
 
@@ -275,8 +281,7 @@ function App() {
     { id: 'home', label: t('nav.home'), icon: 'home' },
     { id: 'servers', label: t('nav.servers'), icon: 'servers' },
     { id: 'direct-sites', label: t('nav.directSites'), icon: 'route' },
-    { id: 'statistics', label: t('nav.statistics'), icon: 'chart' },
-    { id: 'logs', label: t('nav.logs'), icon: 'logs' },
+    { id: 'activity', label: t('nav.activity'), icon: 'chart' },
     { id: 'settings', label: t('nav.settings'), icon: 'settings' },
   ]
 
@@ -286,8 +291,7 @@ function App() {
     subscriptions: t('page.subscriptions'),
     'direct-sites': t('page.directSites'),
     rescue: t('page.rescue'),
-    statistics: t('page.statistics'),
-    logs: t('page.logs'),
+    activity: t('page.activity'),
     settings: t('page.settings'),
     tools: t('page.tools'),
   }
@@ -396,6 +400,41 @@ function App() {
   const [preferredDnsSecondary, setPreferredDnsSecondary] = useState('')
   const [dnsApplyError, setDnsApplyError] = useState<string | null>(null)
   const [proxyDoH, setProxyDoH] = useState(false)
+
+  // Advanced TLS lives in its own store. Mirror it here so the guided setup can
+  // both report and change it without reaching into that component.
+  const [utlsSettings, setUtlsSettings] = useState<UTlsSettings>({
+    globalFingerprint: 'auto',
+    echEnabled: false,
+    fragmentEnabled: false,
+  })
+
+  const utlsHardened =
+    utlsSettings.globalFingerprint !== 'auto' &&
+    utlsSettings.echEnabled &&
+    utlsSettings.fragmentEnabled === true
+
+  useEffect(() => {
+    void window.hamidsDeutsch.tools.getUTlsSettings()
+      .then((r) => { if (r.success) setUtlsSettings(r.settings) })
+      .catch(() => {})
+  }, [])
+
+  // Chrome is the safest fingerprint to blend into: it is the majority of real
+  // TLS traffic. ECH hides the destination name, fragmentation splits the
+  // handshake so a filter cannot match it in one pass.
+  async function hardenTlsSettings(): Promise<boolean> {
+    const next: UTlsSettings = {
+      globalFingerprint: 'chrome',
+      echEnabled: true,
+      fragmentEnabled: true,
+    }
+    const result = await window.hamidsDeutsch.tools
+      .setUTlsSettings(next)
+      .catch(() => ({ success: false }))
+    if (result.success) setUtlsSettings(next)
+    return result.success === true
+  }
   const [smartCloudflareIp, setSmartCloudflareIp] = useState('1.1.1.1')
   const [customDnsProfiles, setCustomDnsProfiles] = useState<DnsProfile[]>(loadCustomDnsProfiles)
   const [selectedDnsProfileId, setSelectedDnsProfileId] = useState(() => {
@@ -1996,6 +2035,7 @@ function App() {
               speedTest={speedTestResult}
               showReconnectBar={showReconnectBar}
               onQuickReconnect={() => void quickReconnect()}
+              hasSubscription={subscriptions.subscriptions.length > 0 || serverNodes.nodes.length > 0}
               dataLoading={serverNodes.loading || subscriptions.loading}
               trafficSpeed={trafficSpeed}
               onNavigateToTools={() => setActivePage('settings')}
@@ -2122,24 +2162,12 @@ function App() {
             />
           )}
 
-          {activePage === 'statistics' && (
-            <StatisticsPage
-              summary={
-                diagnostics.summary
-              }
-              sessions={
-                diagnostics.sessions
-              }
-            />
-          )}
-          {activePage === 'logs' && (
-            <LogsPage
-              events={
-                diagnostics.events
-              }
-              onClear={
-                diagnostics.clear
-              }
+          {activePage === 'activity' && (
+            <ActivityPage
+              summary={diagnostics.summary}
+              sessions={diagnostics.sessions}
+              events={diagnostics.events}
+              onClear={diagnostics.clear}
               onCopyReport={async () => {
                 await navigator.clipboard.writeText(
                   diagnostics.exportReport(),
@@ -2278,6 +2306,8 @@ function App() {
                 setProxyDoH(v)
                 await window.hamidsDeutsch.doh.setProxyDoH(v)
               }}
+              utlsHardened={utlsHardened}
+              onHardenTls={hardenTlsSettings}
             />
             {/* Merged: Rescue Center + Tools now live under the Settings tab */}
             <RescuePage
@@ -2482,6 +2512,7 @@ type HomePageProps = {
   speedTest: { mbps: number | null; running: boolean; error: string | null } | null
   showReconnectBar: boolean
   onQuickReconnect: () => void
+  hasSubscription: boolean
   dataLoading: boolean
   trafficSpeed: { upSpeed: number; downSpeed: number } | null
   onShowQr: (compositeId: string) => void
@@ -2531,6 +2562,7 @@ function HomePage({
   speedTest,
   showReconnectBar,
   onQuickReconnect,
+  hasSubscription,
   dataLoading,
   topSubServers,
   onConnectSubServer,
@@ -2773,9 +2805,16 @@ function HomePage({
               <span className="method-btn-label">
                 <strong>{isSubConnecting ? `■ ${t('btn.stop')}` : activeMethod === 'subscription' ? t('btn.disconnect') : t('hero.connectFastest')}</strong>
                 <small>
+                  {/* Name the server this actually concerns. While an attempt
+                      is running that is the node being dialled, and at rest it
+                      is the one the user picked, not whichever happens to be
+                      fastest right now. */}
                   {activeMethod === 'subscription' && isConnected
                     ? (processStatus.connectionMode === 'tun' ? `TUN · ${tunCurrentIp ?? '—'}` : `IP ${ipVerificationResult.proxyIp ?? '—'}`)
-                    : fastestServer ? fastestServer.name : t('home.fastest.unknown')}
+                    : connectProgress?.serverName
+                      ?? selectedServer?.name
+                      ?? fastestServer?.name
+                      ?? t('home.fastest.unknown')}
                 </small>
               </span>
             </button>
@@ -2934,7 +2973,34 @@ function HomePage({
       </section>
       )}
 
-      {!heroConnected && !fastestServer && !selectedServer && !latencyTesting && !dataLoading && (
+      {/* Nothing to connect to yet. Rather than a list of instructions the user
+          has to carry to another tab, hand them the action itself. */}
+      {!hasSubscription && !dataLoading && (
+        <section className="subscription-invite">
+          <div className="subscription-invite-glow" aria-hidden="true" />
+
+          <div className="subscription-invite-icon">
+            <BrandIcon name="globe" size={26} />
+          </div>
+
+          <div className="subscription-invite-copy">
+            <span className="panel-kicker">{t('home.invite.kicker')}</span>
+            <h3>{t('home.invite.title')}</h3>
+            <p>{t('home.invite.desc')}</p>
+          </div>
+
+          <button
+            className="subscription-invite-action"
+            type="button"
+            onClick={onOpenServers}
+          >
+            <span>{t('home.invite.action')}</span>
+            <BrandIcon name="servers" size={16} />
+          </button>
+        </section>
+      )}
+
+      {hasSubscription && !heroConnected && !fastestServer && !selectedServer && !latencyTesting && !dataLoading && (
         <div className="home-empty-state">
           <div className="home-empty-icon"><BrandIcon name="pulse" size={30} /></div>
           <p className="home-empty-title">{t('home.empty.title')}</p>
@@ -4825,7 +4891,7 @@ function formatInspectionDate(
 ) {
   try {
     return new Intl.DateTimeFormat(
-      'fa-IR',
+      activeLocale(),
       {
         hour: '2-digit',
         minute: '2-digit',
@@ -5606,9 +5672,12 @@ function RescuePage({
   )
 }
 
-function StatisticsPage({
+function ActivityPage({
   summary,
   sessions,
+  events,
+  onClear,
+  onCopyReport,
 }: {
   summary: {
     successfulSessions: number
@@ -5616,6 +5685,115 @@ function StatisticsPage({
     totalDurationMs: number
     tunSessions: number
   }
+  sessions: React.ComponentProps<typeof StatisticsPage>['sessions']
+  events: React.ComponentProps<typeof LogsPage>['events']
+  onClear: () => void
+  onCopyReport: () => Promise<void>
+}) {
+  const t = useT()
+  const { lang } = useContext(LangCtx)
+  const numberLocale = lang === 'fa' ? 'fa-IR' : 'en-US'
+
+  // Sessions and the event log answer different questions about the same
+  // history, so they share one page and one set of totals rather than sitting
+  // in two tabs that each tell half the story.
+  const [view, setView] = useState<'sessions' | 'log'>('sessions')
+
+  const views = [
+    { id: 'sessions' as const, label: t('activity.view.sessions'), count: sessions.length },
+    { id: 'log' as const, label: t('activity.view.log'), count: events.length },
+  ]
+
+  return (
+    <div className="page-stack">
+        <section className="quick-statistics">
+          <article className="statistic-card">
+            <span className="statistic-icon" aria-hidden="true">
+              ✓
+            </span>
+            <div>
+              <span className="statistic-label">
+                {t('stats2.success')}
+              </span>
+              <strong>
+                {summary.successfulSessions.toLocaleString(numberLocale)}
+              </strong>
+            </div>
+          </article>
+
+          <article className="statistic-card">
+            <span className="statistic-icon" aria-hidden="true">
+              !
+            </span>
+            <div>
+              <span className="statistic-label">
+                {t('stats2.failed')}
+              </span>
+              <strong>
+                {summary.failedAttempts.toLocaleString(numberLocale)}
+              </strong>
+            </div>
+          </article>
+
+          <article className="statistic-card">
+            <span className="statistic-icon" aria-hidden="true">
+              ◷
+            </span>
+            <div>
+              <span className="statistic-label">
+                {t('stats2.totalTime')}
+              </span>
+              <strong>
+                {formatDuration(
+                  summary.totalDurationMs,
+                )}
+              </strong>
+            </div>
+          </article>
+
+          <article className="statistic-card">
+            <span className="statistic-icon" aria-hidden="true">
+              T
+            </span>
+            <div>
+              <span className="statistic-label">
+                {t('stats2.tunSessions')}
+              </span>
+              <strong>
+                {summary.tunSessions.toLocaleString(numberLocale)}
+              </strong>
+            </div>
+          </article>
+        </section>
+
+      <div className="activity-switch" role="tablist" aria-label={t('page.activity')}>
+        {views.map((item) => (
+          <button
+            key={item.id}
+            role="tab"
+            type="button"
+            aria-selected={view === item.id}
+            className={`activity-switch-btn${view === item.id ? ' is-active' : ''}`}
+            onClick={() => setView(item.id)}
+          >
+            <span>{item.label}</span>
+            <span className="activity-switch-count">
+              {item.count.toLocaleString(numberLocale)}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {view === 'sessions'
+        ? <StatisticsPage sessions={sessions} />
+        : <LogsPage events={events} onClear={onClear} onCopyReport={onCopyReport} />}
+    </div>
+  )
+}
+
+function StatisticsPage({
+  sessions,
+}: {
   sessions: Array<{
     id: string
     startedAt: string
@@ -5635,76 +5813,13 @@ function StatisticsPage({
   }>
 }) {
   const t = useT()
+  const { lang } = useContext(LangCtx)
+  const numberLocale = lang === 'fa' ? 'fa-IR' : 'en-US'
   const recentSessions =
     sessions.slice(0, 10)
 
   return (
     <div className="page-stack">
-      <section className="quick-statistics">
-        <article className="statistic-card">
-          <span className="statistic-icon" aria-hidden="true">
-            ✓
-          </span>
-          <div>
-            <span className="statistic-label">
-              {t('stats2.success')}
-            </span>
-            <strong>
-              {summary.successfulSessions.toLocaleString(
-                'fa-IR',
-              )}
-            </strong>
-          </div>
-        </article>
-
-        <article className="statistic-card">
-          <span className="statistic-icon" aria-hidden="true">
-            !
-          </span>
-          <div>
-            <span className="statistic-label">
-              {t('stats2.failed')}
-            </span>
-            <strong>
-              {summary.failedAttempts.toLocaleString(
-                'fa-IR',
-              )}
-            </strong>
-          </div>
-        </article>
-
-        <article className="statistic-card">
-          <span className="statistic-icon" aria-hidden="true">
-            ◷
-          </span>
-          <div>
-            <span className="statistic-label">
-              {t('stats2.totalTime')}
-            </span>
-            <strong>
-              {formatDuration(
-                summary.totalDurationMs,
-              )}
-            </strong>
-          </div>
-        </article>
-
-        <article className="statistic-card">
-          <span className="statistic-icon" aria-hidden="true">
-            T
-          </span>
-          <div>
-            <span className="statistic-label">
-              {t('stats2.tunSessions')}
-            </span>
-            <strong>
-              {summary.tunSessions.toLocaleString(
-                'fa-IR',
-              )}
-            </strong>
-          </div>
-        </article>
-      </section>
 
       <section className="panel-card">
         <div className="panel-heading">
@@ -5718,9 +5833,7 @@ function StatisticsPage({
           </div>
 
           <span className="count-badge">
-            {sessions.length.toLocaleString(
-              'fa-IR',
-            )} {t('stats2.sessions')}
+            {sessions.length.toLocaleString(numberLocale)} {t('stats2.sessions')}
           </span>
         </div>
 
@@ -5767,9 +5880,7 @@ function StatisticsPage({
                     <span>
                       {session.latencyMs !==
                       null
-                        ? `${session.latencyMs.toLocaleString(
-                            'fa-IR',
-                          )} ms`
+                        ? `${session.latencyMs.toLocaleString(numberLocale)} ms`
                         : t('stats2.noPing')}
                     </span>
                     <span>
@@ -5934,9 +6045,7 @@ function LogsPage({
                     {event.latencyMs !==
                       null && (
                       <span>
-                        {event.latencyMs.toLocaleString(
-                          'fa-IR',
-                        )}{' '}
+                        {event.latencyMs.toLocaleString(activeLocale())}{' '}
                         ms
                       </span>
                     )}
@@ -6007,13 +6116,6 @@ function formatDuration(
         .padStart(2, '0'),
     )
     .join(':')
-    .replace(
-      /\d/g,
-      (digit) =>
-        '۰۱۲۳۴۵۶۷۸۹'[
-          Number(digit)
-        ],
-    )
 }
 
 function formatSessionDuration(
@@ -6044,7 +6146,7 @@ function formatLocalDateTime(
   value: string,
 ) {
   return new Intl.DateTimeFormat(
-    'fa-IR',
+    activeLocale(),
     {
       dateStyle: 'short',
       timeStyle: 'medium',
@@ -6092,6 +6194,8 @@ function SettingsPage({
   onStandaloneDoHChange,
   proxyDoH,
   onProxyDoHToggle,
+  utlsHardened,
+  onHardenTls,
 }: {
   settings: {
     engine: 'xray' | 'sing-box'
@@ -6190,6 +6294,8 @@ function SettingsPage({
   ) => Promise<void>
   proxyDoH: boolean
   onProxyDoHToggle: (v: boolean) => Promise<void>
+  utlsHardened: boolean
+  onHardenTls: () => Promise<boolean>
 }) {
   const t = useT()
   const [
@@ -6389,8 +6495,171 @@ function SettingsPage({
     }
   }, [dnsApplyError, dnsSelection, standaloneDoH])
 
+  // ── Guided setup ───────────────────────────────────────────────────────
+  // One switch that applies the hardened combination most users want but few
+  // assemble by hand. Each step reports its own result: a machine without
+  // Administrator rights cannot arm the Kill Switch, and silently skipping it
+  // would leave the user believing they are protected.
+  const [aiApplying, setAiApplying] = useState(false)
+  // Translation keys, not translated text: a step list captured in one language
+  // must not stay frozen in it when the user switches.
+  const [aiSteps, setAiSteps] = useState<Array<{
+    key: string
+    labelKey: string
+    state: 'pending' | 'running' | 'done' | 'failed'
+    detailKey?: string
+    detail?: string
+  }>>([])
+
+  const aiEnabled =
+    killSwitch &&
+    killSwitchAvailable &&
+    standaloneDoH === 'cloudflare-smart' &&
+    proxyDoH &&
+    utlsHardened
+
+  async function applyGuidedSetup() {
+    setAiApplying(true)
+
+    const steps = [
+      { key: 'dns', labelKey: 'settings.ai.step.dns' },
+      { key: 'doh', labelKey: 'settings.ai.step.doh' },
+      { key: 'tls', labelKey: 'settings.ai.step.tls' },
+      { key: 'kill', labelKey: 'settings.ai.step.killSwitch' },
+    ]
+    setAiSteps(steps.map((step) => ({ ...step, state: 'pending' as const })))
+
+    const mark = (
+      key: string,
+      state: 'running' | 'done' | 'failed',
+      detail?: { key?: string; text?: string },
+    ) => {
+      setAiSteps((current) =>
+        current.map((step) => (step.key === key
+          ? { ...step, state, detailKey: detail?.key, detail: detail?.text }
+          : step)),
+      )
+    }
+
+    try {
+      mark('dns', 'running')
+      try {
+        setDnsSelection('cloudflare-smart')
+        await onStandaloneDoHChange('cloudflare-smart')
+        mark('dns', 'done')
+      } catch (error) {
+        mark('dns', 'failed', { text: error instanceof Error ? error.message : undefined })
+      }
+
+      mark('doh', 'running')
+      try {
+        await onProxyDoHToggle(true)
+        mark('doh', 'done')
+      } catch (error) {
+        mark('doh', 'failed', { text: error instanceof Error ? error.message : undefined })
+      }
+
+      mark('tls', 'running')
+      try {
+        const applied = await onHardenTls()
+        if (applied) {
+          mark('tls', 'done')
+        } else {
+          mark('tls', 'failed', { key: 'settings.ai.step.tlsFailed' })
+        }
+      } catch (error) {
+        mark('tls', 'failed', { text: error instanceof Error ? error.message : undefined })
+      }
+
+      mark('kill', 'running')
+      if (!killSwitchAvailable) {
+        mark('kill', 'failed', { key: 'settings.killSwitch.needsAdmin' })
+      } else {
+        try {
+          await onKillSwitchToggle(true)
+          mark('kill', 'done')
+        } catch (error) {
+          mark('kill', 'failed', { text: error instanceof Error ? error.message : undefined })
+        }
+      }
+    } finally {
+      setAiApplying(false)
+    }
+  }
+
   return (
     <div className="page-stack settings-page">
+      {/* ── Guided setup, first because it configures everything below ─── */}
+      <section className="panel-card guided-card">
+        <div className="guided-head">
+          <span className="guided-icon"><BrandIcon name="shield" size={22} /></span>
+          <div className="guided-title">
+            <span className="panel-kicker">{t('settings.ai.kicker')}</span>
+            <h3>{t('settings.ai.title')}</h3>
+          </div>
+          <span className={aiEnabled ? 'guided-badge guided-badge-on' : 'guided-badge'}>
+            {aiEnabled ? t('settings.ai.active') : t('settings.ai.inactive')}
+          </span>
+        </div>
+
+        <p className="guided-desc">{t('settings.ai.desc')}</p>
+
+        <ul className="guided-list">
+          <li>{t('settings.ai.item.killSwitch')}</li>
+          <li>{t('settings.ai.item.dns')}</li>
+          <li>{t('settings.ai.item.doh')}</li>
+          <li>{t('settings.ai.item.tls')}</li>
+        </ul>
+
+        <div className="guided-actions">
+          <button
+            className="guided-apply"
+            type="button"
+            disabled={aiApplying || standaloneDoHLoading}
+            onClick={() => void applyGuidedSetup()}
+          >
+            {aiApplying && <span className="connect-progress-spinner" aria-hidden="true" />}
+            <span>
+              {aiApplying
+                ? t('settings.ai.applying')
+                : aiEnabled
+                  ? t('settings.ai.reapply')
+                  : t('settings.ai.apply')}
+            </span>
+          </button>
+
+          {!killSwitchAvailable && (
+            <span className="guided-warn">{t('settings.killSwitch.needsAdmin')}</span>
+          )}
+        </div>
+
+        {aiSteps.length > 0 && (
+          <ol className="guided-steps" aria-live="polite">
+            {aiSteps.map((step) => (
+              <li key={step.key} className={`guided-step guided-step-${step.state}`}>
+                <span className="guided-step-mark" aria-hidden="true">
+                  {step.state === 'running'
+                    ? <span className="connect-progress-spinner" />
+                    : step.state === 'done'
+                      ? <BrandIcon name="check" size={14} />
+                      : step.state === 'failed'
+                        ? <BrandIcon name="close" size={14} />
+                        : '·'}
+                </span>
+                <span className="guided-step-body">
+                  <span className="guided-step-label">{t(step.labelKey)}</span>
+                  {(step.detailKey || step.detail) && (
+                    <span className="guided-step-detail">
+                      {step.detailKey ? t(step.detailKey) : step.detail}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
       {/* ── Connection routing ──────────────────────────────────────── */}
       <section className="panel-card">
         <div className="panel-heading">
@@ -7424,7 +7693,7 @@ function CfScannerSection() {
       {cachedIp && (
         <div className="cf-cached-ip">
           <span>IP فعلی: <strong>{cachedIp}</strong></span>
-          {cacheDate && <span className="cf-cache-date">{new Date(cacheDate).toLocaleString('fa-IR')}</span>}
+          {cacheDate && <span className="cf-cache-date">{new Date(cacheDate).toLocaleString(activeLocale())}</span>}
         </div>
       )}
       <div className="field-row">
